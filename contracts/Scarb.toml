@@ -1,0 +1,21 @@
+[package]
+name = "zkstark_amaci_contracts"
+version = "0.1.0"
+edition = "2024_07"
+
+[dependencies]
+starknet = ">=2.8.0"
+# Pin this before production use:
+# integrity = { git = "https://github.com/HerodotusDev/integrity.git" }
+
+[dev-dependencies]
+cairo_test = "2.18.0"
+snforge_std = "0.60.0"
+
+[scripts]
+test = "snforge test"
+
+[tool.scarb]
+allow-prebuilt-plugins = ["snforge_std"]
+
+[[target.starknet-contract]]

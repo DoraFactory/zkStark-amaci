@@ -1,0 +1,20 @@
+{
+  "name": "@dorafactory/zkstark-amaci",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent Stark/STARK proof-layer prototype for AMACI TallyVotes",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:cairo": "cd cairo && scarb test",
+    "test:contracts": "cd contracts && scarb test",
+    "prepare:tally": "node tools/prepare-tally-input.mjs ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json",
+    "prepare:cairo-input": "node tools/prepare-tally-input.mjs ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json --out /tmp/zkstark-amaci-prepared.json --cairo-input-out /tmp/zkstark-amaci-cairo-input.json",
+    "prepare:cairo-args": "node tools/prepare-tally-input.mjs ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json --out /tmp/zkstark-amaci-prepared.json --cairo-args-out /tmp/zkstark-amaci-cairo-args.json",
+    "prove:tally": "tools/run-cairo-proof.sh ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json",
+    "export:hash-vectors": "node tools/export-hash-vectors.mjs ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json",
+    "verify:hash-vectors": "node tools/verify-hash-vectors.mjs /tmp/zkstark-amaci-hash-vectors.json",
+    "generate:poseidon-cairo-constants": "node tools/generate-poseidon-cairo-constants.mjs cairo/src/poseidon_constants.cairo",
+    "verify:poseidon-cairo-constants": "node tools/verify-poseidon-cairo-constants.mjs cairo/src/poseidon_constants.cairo"
+  }
+}

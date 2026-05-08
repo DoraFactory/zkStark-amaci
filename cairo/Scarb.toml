@@ -1,0 +1,19 @@
+[package]
+name = "zkstark_amaci_tally"
+version = "0.1.0"
+edition = "2024_07"
+
+[cairo]
+enable-gas = false
+
+[dependencies]
+cairo_execute = "2.18.0"
+
+[dev-dependencies]
+cairo_test = "2.18.0"
+
+[lib]
+sierra = true
+casm = true
+
+[executable]
