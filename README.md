@@ -267,6 +267,52 @@ Recommended starting point:
 - `scarb execute`, `scarb prove`, and `scarb verify` available in the installed
   toolchain
 
+### CLI Toolchain Install
+
+The proof flow needs these command line tools:
+
+- `git`: clone the standalone repository.
+- `curl`, `ca-certificates`, `tar`, `unzip`: download and unpack toolchain
+  installers.
+- `build-essential`, `pkg-config`: baseline Linux build/runtime utilities used
+  by npm dependencies and optional local builds.
+- `node` and `npm`: run the JavaScript fixture/input/proof orchestration
+  tools.
+- `scarb`: compile, execute, prove, and verify the Cairo programs.
+
+On a fresh Ubuntu 22.04/24.04 amd64 machine, run:
+
+```sh
+git clone https://github.com/DoraFactory/zkStark-amaci.git
+cd zkStark-amaci
+tools/install-proof-toolchain.sh
+```
+
+The script installs Node.js `20.x`, Scarb/Cairo `2.18.0`, this repository's npm
+dependencies, and then checks:
+
+```sh
+scarb execute --help
+scarb prove --help
+scarb verify --help
+```
+
+Supported overrides:
+
+```sh
+NODE_MAJOR=22 tools/install-proof-toolchain.sh
+SCARB_VERSION=2.18.0 tools/install-proof-toolchain.sh
+tools/install-proof-toolchain.sh --skip-node
+tools/install-proof-toolchain.sh --skip-scarb
+tools/install-proof-toolchain.sh --skip-npm-install
+```
+
+If `scarb` is not visible in a new shell after installation, run:
+
+```sh
+source ~/.profile
+```
+
 Verify the toolchain before proving:
 
 ```sh
@@ -282,12 +328,17 @@ not sufficient for this proof path.
 
 ### Repository Setup
 
-Clone the standalone proof repo and install dependencies:
+If you already ran `tools/install-proof-toolchain.sh` from this repository, the
+npm dependencies are already installed and you can continue to the preflight
+checks below.
+
+If you installed the CLI tools manually, clone the standalone proof repo and
+install dependencies:
 
 ```sh
 git clone https://github.com/DoraFactory/zkStark-amaci.git
 cd zkStark-amaci
-npm install
+npm ci
 ```
 
 ### Tally Input
