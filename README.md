@@ -2,13 +2,17 @@
 
 Parallel Stark/STARK proof-layer prototype for AMACI.
 
-This directory is intentionally independent from the existing Circom,
-CosmWasm, SDK, and operator code. The first milestone targets only the
+This repository is intentionally independent from the existing Circom,
+CosmWasm, SDK, and operator code. The first completed milestone targets the
 `TallyVotes` relation for the small parameter set:
 
 - `stateTreeDepth = 2`
 - `intStateTreeDepth = 1`
 - `voteOptionTreeDepth = 1`
+
+The current work-in-progress target also covers the first
+`ProcessMessages(2, 1, 5)` and `ProcessDeactivateMessages(2, 5)` migration
+slices.
 
 The implementation keeps the existing AMACI public-input semantics:
 
@@ -24,7 +28,9 @@ The implementation keeps the existing AMACI public-input semantics:
 
 ## What is implemented
 
-- `spec/tally-votes-compat.md` documents the compatibility contract.
+- `spec/tally-votes-compat.md`, `spec/process-messages-compat.md`,
+  `spec/add-new-key-compat.md`, and `spec/process-deactivate-compat.md`
+  document the migrated AMACI compatibility contracts.
 - `src/` contains a deterministic JavaScript reference implementation for the
   `TallyVotes` relation and public-output encoding.
 - `src/compat/poseidon-bn254.mjs` contains a pure JavaScript implementation of
@@ -33,22 +39,167 @@ The implementation keeps the existing AMACI public-input semantics:
 - `tools/prepare-tally-input.mjs` validates an existing tally input JSON and
   emits canonical public output, fixed-size Cairo program input, plus optional
   Integrity fact hashes when a program hash is supplied.
-- `tests/` exercises valid and invalid tally inputs against existing AMACI
-  operator fixtures with 10-field state leaves.
+- `fixtures/tally-small/` vendors the small AMACI tally fixtures used for
+  standalone testing and proof generation.
+- `tests/` exercises valid and invalid tally inputs against those AMACI
+  fixtures with 10-field state leaves.
 - `cairo/` contains the first fixed-size `TallyVotes(2, 1, 1)` Cairo relation
   migration. It computes AMACI `Hasher10`, Circom-compatible BN254 Poseidon
   T3/T6, quinary tree hashes, and the SHA-256 `inputHash` inside Cairo, while
   retaining hash claims only as witness compatibility assertions against the
-  generated input.
+  generated input. It also contains the initial
+  `ProcessMessages(2, 1, 5)` public-boundary executable.
 - `contracts/` contains the Starknet target scaffolding for the Integrity
   wrapper.
+- `spec/process-messages-compat.md`, `src/msg/`, and the Cairo
+  `process_messages_boundary` executable start the next migration target by
+  pinning the `ProcessMessages(2, 1, 5)` public-input contract, packed values,
+  message hash chain, and canonical public output. They also include the first
+  `ProcessOne` migration slice: encrypted message binding,
+  Circom-compatible `PoseidonDecryptWithoutCheck(7)` over `msg[10]` and a
+  witness `sharedKey[2]`, decrypted-command field mapping, `packedCommand`
+  unpacking, deterministic `MessageValidator` constraints,
+  BabyJubJub signature binding, ElGamal active-state decrypt binding,
+  state-leaf inclusion, active-state inclusion, vote-option root update, and
+  new state-root derivation for the fixed
+  `(stateTreeDepth=2, voteOptionTreeDepth=1)` parameters. The
+  `process_messages_state_transition` executable chains five
+  `ProcessOne` witnesses in AMACI's reverse batch order into the
+  `ProcessMessages(2, 1, 5)` state-root transition, and
+  `process_messages_stateful` binds that transition back to the public
+  boundary and canonical public output, including empty-message handling,
+  boundary message matching, and boundary parameter matching for each
+  `ProcessOne` witness. The boundary now follows the current AMACI Circom
+  public hash shape:
+  message length `10`, message chain `Hasher13`, and
+  `Sha256Hasher(8)` with `expectedPollId`.
+- `src/compat/babyjub.mjs`, `tools/prepare-ecdh-input.mjs`, and the Cairo
+  `ecdh_shared_key` executable implement the first standalone ECDH migration
+  slice: BabyJubJub scalar multiplication is checked with a fixed 253-step
+  transcript, matching the existing `@zk-kit/baby-jubjub` result.
+- `tools/prepare-process-one-with-ecdh-input.mjs` and the Cairo
+  `process_one_with_ecdh` executable close the first single-message path:
+  ECDH transcript output must equal `ProcessOne.sharedKey`, then the same
+  shared key is used for Poseidon command decryption and the migrated
+  `ProcessOne` state transition.
+- `tools/prepare-process-messages-stateful-with-ecdh-input.mjs` and the Cairo
+  `process_messages_stateful_with_ecdh` executable wire that ECDH binding into
+  the fixed five-message batch: each non-empty boundary `encPubKey[2]` must be
+  the base point for an ECDH transcript using the same `coordPrivKey`, and the
+  transcript output must match the corresponding `ProcessOne.sharedKey`. The
+  same executable also proves
+  `PrivToPubKey(coordPrivKey) == coordPubKey` against the public boundary's
+  coordinator key.
+- `buildCairoBabyjubPoseidonSignatureInput` and the Cairo `verify_signature`
+  executable implement the standalone AMACI `VerifySignature` primitive:
+  `M = Poseidon(packedCommand[0..2])`, then
+  `S * Base8 == R8 + Poseidon(R8, A, M) * (8 * A)`.
+- `process_one_with_signature` and `process_one_with_ecdh_signature` wire that
+  signature result into one `ProcessOne` witness, so `isSignatureValid` can be
+  derived inside Cairo for a single decrypted message.
+- `process_messages_stateful_with_ecdh_signature` extends the five-message
+  stateful path with per-message signature witnesses, while keeping the
+  ECDH-only executable available for smaller compatibility checks.
+- `src/add-new-key/`, `tools/prepare-add-new-key-input.mjs`, and the Cairo
+  `add_new_key` executable start the next circuit migration target:
+  `AddNewKey(stateTreeDepth=2)`. The compatibility relation verifies the
+  round nullifier, ECDH-derived deactivate leaf, depth-4 deactivate tree
+  inclusion, ElGamal re-randomization, `Sha256Hasher(9)` input hash, and
+  canonical public output.
+- `src/deactivate/`, `tools/prepare-process-deactivate-one-input.mjs`,
+  `tools/prepare-process-deactivate-boundary-input.mjs`,
+  `tools/prepare-process-deactivate-stateful-input.mjs`, and the Cairo
+  `process_deactivate_one` / `process_deactivate_messages_boundary` /
+  `process_deactivate_messages_state_transition` /
+  `process_deactivate_messages_stateful`
+  executables start the `ProcessDeactivateMessages(2, 5)` migration target.
+  The single-message slice verifies EdDSA-Poseidon, ElGamal decrypt parity for
+  the current active flag and new deactivate ciphertext, state-root inclusion,
+  active-state root update, deactivate-tree insertion, ECDH-derived deactivate
+  leaf, and non-zero `newActiveState`. The boundary slice verifies
+  `Sha256Hasher(8)`, current deactivate commitment, canonical public output,
+  and the deactivate message hash chain where empty messages are detected by
+  `msg[0] == 0`. The stateful slice chains five `ProcessOne` witnesses in
+  forward order, binds `coordPrivKey` to the public `coordPubKey`, checks
+  final `newDeactivateRoot`, recomputes `newDeactivateCommitment`, and binds
+  every non-empty boundary encrypted message and `encPubKey` to its
+  `ProcessOne` command fields through ECDH and
+  `PoseidonDecryptWithoutCheck(7)`.
+- `src/fixtures/` and `tools/discover-amaci-fixtures.mjs` classify existing
+  AMACI operator JSON fixtures and report which ones are directly runnable by
+  the current small-parameter Cairo targets.
+- `tools/prepare-amaci-circuit-input.mjs` is the unified offline input
+  preparer for all currently migrated circuit slices. It emits evaluated public
+  fields, canonical public output, structured Cairo input, and
+  `scarb execute --arguments-file` JSON.
+- `src/wrapper/amaci-wrapper-model.mjs` models the intended Starknet wrapper
+  checks for all migrated circuit families: fixed program hash, canonical
+  public output, Integrity fact hash, optional verification hash, and wrapper
+  state updates for tally, process-message, deactivate, and add-new-key flows.
+
+## Fixture support status
+
+The repository includes the small AMACI tally fixtures used during the
+migration:
+
+```text
+fixtures/tally-small/000000.json
+fixtures/tally-small/000001.json
+fixtures/tally-small/000002.json
+```
+
+External operator fixtures are still supported as explicit input paths, but
+this standalone repo no longer assumes a sibling `amaci-operator` checkout.
+Production `msg_inputs/*.json` fixtures are discoverable and classified when
+you provide them, but they are not directly runnable yet because the current
+Cairo migration is fixed to `ProcessMessages(2, 1, 5)` /
+`ProcessDeactivateMessages(2, 5)` and expects prepared
+`processOneWitnesses`. The production operator message inputs use larger
+parameters and do not include those expanded witnesses in the shape needed by
+these small Cairo executables.
+
+Run fixture discovery with:
+
+```sh
+npm run discover:fixtures -- fixtures/tally-small --validate \
+  --out /tmp/zkstark-amaci-fixture-report.json
+```
+
+Prepare any supported circuit input through the unified CLI:
+
+```sh
+npm run prepare:circuit -- \
+  --circuit tally \
+  fixtures/tally-small/000000.json \
+  --out /tmp/zkstark-amaci-tally-prepared.json \
+  --cairo-args-out /tmp/zkstark-amaci-tally-args.json
+```
+
+Run small synthetic fixtures through the actual Cairo executables with:
+
+```sh
+npm run execute:circuit -- --circuit add-new-key
+npm run execute:circuit -- --circuit process-messages
+npm run execute:circuit -- --circuit process-deactivate
+```
+
+These commands generate the current small fixture when no input path is
+provided, prepare Cairo arguments, run `scarb execute`, and write metadata plus
+stdout/stderr under `target/cairo-execute/<circuit>/`.
+
+The corresponding execution test is intentionally opt-in because these paths
+are much heavier than normal unit tests:
+
+```sh
+npm run test:cairo-execute
+```
 
 ## Current proof status
 
 The local Cairo execution flow succeeds for the existing AMACI fixture:
 
 ```text
-../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json
+fixtures/tally-small/000000.json
 ```
 
 Execute locally with:
@@ -56,7 +207,10 @@ Execute locally with:
 ```sh
 npm run prepare:cairo-args
 cd cairo
-scarb execute --arguments-file /tmp/zkstark-amaci-cairo-args.json --print-program-output
+scarb execute \
+  --executable-name tally_votes \
+  --arguments-file /tmp/zkstark-amaci-cairo-args.json \
+  --print-program-output
 ```
 
 The current AMACI execution is intentionally small-parameter and expensive:
@@ -75,27 +229,37 @@ validated by execution and tests, but AMACI local proving needs a larger
 Linux/amd64 machine or CI runner. Integrity proof serialization, a pinned
 FactRegistry interface, and wrapper deployment/testing are still open.
 
-## Generating a proof on a high-performance machine
+## Generating Proofs On A High-Performance Machine
 
 This is the current end-to-end local proof validation path for the migrated
-AMACI `TallyVotes(2, 1, 1)` Cairo program. It does not submit anything to
-Starknet or Integrity yet. Success means:
+small-parameter AMACI Cairo programs:
 
-1. the existing AMACI tally input is converted into canonical Cairo arguments,
-2. `scarb prove --execute` generates a local STARK proof for the Cairo program,
-3. `scarb verify` verifies the generated proof locally.
+- `TallyVotes(2, 1, 1)` with the existing AMACI tally fixture.
+- `AddNewKey(stateTreeDepth=2)` with the current small synthetic fixture.
+- `ProcessMessages(2, 1, 5)` with the current full ECDH+signature synthetic
+  fixture.
+- `ProcessDeactivateMessages(2, 5)` with the current full stateful synthetic
+  fixture.
+
+This flow does not submit anything to Starknet or Integrity yet. Success means:
+
+1. each input is converted into canonical Cairo arguments,
+2. `scarb prove --execute` generates a local STARK proof for each Cairo
+   executable,
+3. `scarb verify` verifies every generated proof locally.
 
 ### Machine requirements
 
-Use Linux/amd64 for the first full proof run. The current macOS/arm64 machine
-can compile, test, and execute the program, but proof generation is killed by
-the OS before completion.
+Use Linux/amd64 for the full proof run. The current macOS/arm64 machine can
+compile, test, and execute the small programs, but proof generation has been
+killed by the OS before completion.
 
 Recommended starting point:
 
 - Ubuntu 22.04 or 24.04 on amd64
 - 16 or more CPU cores
-- 64 GB RAM minimum, 128 GB RAM preferred for the first proof attempt
+- 64 GB RAM minimum for `tally` / `add-new-key`
+- 128 GB RAM preferred for `process-messages` and `process-deactivate`
 - fast local SSD/NVMe storage
 - Node.js 20 or newer
 - Scarb/Cairo toolchain compatible with `cairo/Scarb.toml`
@@ -116,100 +280,134 @@ scarb verify --help
 If any of the three Scarb subcommands are missing, the installed toolchain is
 not sufficient for this proof path.
 
-### Input fixture
+### Repository Setup
 
-The proof script accepts any compatible AMACI `TallyVotes(2, 1, 1)` input JSON.
-The fixture used during this migration is:
-
-```text
-amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json
-```
-
-If the high-performance machine has the full parent repository layout, run from
-`maci/zkStark-amaci` and use the npm shortcut:
-
-```sh
-npm run prove:tally
-```
-
-If the machine only has this standalone repository, copy the input JSON to the
-machine and pass its absolute path:
+Clone the standalone proof repo and install dependencies:
 
 ```sh
 git clone https://github.com/DoraFactory/zkStark-amaci.git
 cd zkStark-amaci
+npm install
+```
 
-INPUT=/absolute/path/to/000000.json
+### Tally Input
+
+The tally proof needs a compatible AMACI `TallyVotes(2, 1, 1)` input JSON. The
+fixture used during this migration is:
+
+```text
+fixtures/tally-small/000000.json
+```
+
+You can either use that checked-in fixture or point to your own compatible
+tally input:
+
+```sh
+INPUT=fixtures/tally-small/000000.json
 OUT_DIR=/absolute/path/to/proof-output
-
-tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR"
 ```
 
 ### Preflight checks
 
-Run these before the expensive proof attempt:
+Run these before the expensive proof attempt. The execution test is optional
+but strongly recommended because it exercises the actual Cairo executables
+before proving.
 
 ```sh
 npm test
+npm run test:cairo-execute
 
 cd cairo
 scarb check
 scarb test
 scarb fmt --check
 cd ..
-
-node tools/prepare-tally-input.mjs \
-  "$INPUT" \
-  --out "$OUT_DIR/tally-prepared.json" \
-  --cairo-input-out "$OUT_DIR/tally-cairo-input.json" \
-  --cairo-args-out "$OUT_DIR/tally-cairo-args.json"
-
-cd cairo
-scarb execute \
-  --arguments-file "$OUT_DIR/tally-cairo-args.json" \
-  --print-program-output \
-  --print-resource-usage
-cd ..
 ```
 
-Expected execution characteristics for the current fixture:
+Expected small execution characteristics on the current local machine:
 
-- execution steps: `19,514,414`
-- max memory address: `27,947,371`
-- memory holes: `5,287,008`
-- range-check builtin uses: `5,139,640`
-- bitwise builtin uses: `2,880`
-- output builtin uses: `16`
+- `tally_votes`: about `19,514,414` steps, `16` output felts.
+- `add_new_key`: about `15,122,189` steps, `25` output felts.
+- `process_messages_stateful_with_ecdh_signature`: about `163,029,062`
+  steps, `24` output felts.
+- `process_deactivate_messages_stateful`: about `218,084,195` steps, `24`
+  output felts.
 
 If `scarb execute` fails, do not run the prover. Fix the input, toolchain, or
 Cairo build first.
 
-### Proof command
+### Run All Small Proofs
 
-Run the full local proof flow:
-
-```sh
-INPUT=/absolute/path/to/000000.json
-OUT_DIR=/absolute/path/to/proof-output
-
-tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR"
-```
-
-For memory diagnostics on Linux, this wrapper is useful:
+Run all four current small proof flows:
 
 ```sh
-/usr/bin/time -v tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR"
+INPUT=fixtures/tally-small/000000.json
+OUT_DIR=/absolute/path/to/zkstark-amaci-proofs
+
+/usr/bin/time -v tools/run-cairo-proof.sh \
+  --all \
+  --tally-input "$INPUT" \
+  --out-dir "$OUT_DIR"
 ```
 
-The script writes:
+The standalone npm shortcut uses the checked-in tally fixture:
 
-- `$OUT_DIR/tally-prepared.json`: parsed public fields, derived values, and
-  canonical public output
-- `$OUT_DIR/tally-cairo-input.json`: structured Cairo input
-- `$OUT_DIR/tally-cairo-args.json`: `scarb execute/prove` argument file
-- `$OUT_DIR/proof-run.json`: generated execution id and proof file path
+```sh
+npm run prove:all-small
+```
+
+The script runs these circuits in order:
+
+```text
+tally
+add-new-key
+process-messages
+process-deactivate
+```
+
+The non-tally inputs are generated from the current small synthetic fixtures.
+
+### Run One Proof
+
+Use these commands to isolate one circuit:
+
+```sh
+tools/run-cairo-proof.sh --circuit tally --input "$INPUT" --out-dir "$OUT_DIR/tally"
+tools/run-cairo-proof.sh --circuit add-new-key --out-dir "$OUT_DIR/add-new-key"
+tools/run-cairo-proof.sh --circuit process-messages --out-dir "$OUT_DIR/process-messages"
+tools/run-cairo-proof.sh --circuit process-deactivate --out-dir "$OUT_DIR/process-deactivate"
+```
+
+The legacy tally-only form is still supported:
+
+```sh
+tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR/tally"
+```
+
+For Linux memory diagnostics, wrap any command with `/usr/bin/time -v`.
+
+### Proof Outputs
+
+For each circuit, the script writes:
+
+- `<circuit>-prepared.json`: parsed public fields, derived values, and
+  canonical public output.
+- `<circuit>-cairo-input.json`: structured Cairo input.
+- `<circuit>-cairo-args.json`: `scarb prove --execute` argument file.
+- `<circuit>-prove.log`: prover stdout/stderr.
+- `<circuit>-verify.log`: verifier stdout/stderr.
+- `proof-run.json`: circuit metadata, execution id, proof path, and generated
+  input path when applicable.
 - `cairo/target/execute/zkstark_amaci_tally/execution<id>/proof/proof.json`:
-  generated local proof
+  generated local proof.
+
+For `--all`, the root output directory also contains:
+
+```text
+all-proofs.json
+```
+
+which points to every per-circuit `proof-run.json`.
 
 The final command inside the script is:
 
@@ -217,21 +415,25 @@ The final command inside the script is:
 scarb verify --execution-id <execution-id>
 ```
 
-A successful run must complete that verification step without error and write
-`proof-run.json`.
+A successful run must complete that verification step without error for every
+circuit.
 
 ### Useful result checks
 
 After a successful run:
 
 ```sh
-cat "$OUT_DIR/proof-run.json"
-node tools/prepare-tally-input.mjs "$INPUT" --out "$OUT_DIR/recheck.json"
+cat "$OUT_DIR/all-proofs.json"
+cat "$OUT_DIR/tally/proof-run.json"
+cat "$OUT_DIR/add-new-key/proof-run.json"
+cat "$OUT_DIR/process-messages/proof-run.json"
+cat "$OUT_DIR/process-deactivate/proof-run.json"
 ```
 
-The `publicOutput.felts` in `tally-prepared.json` is the canonical output that
-the Starknet wrapper will eventually bind to an Integrity fact. The current
-encoding is fixed as:
+The `publicOutput.felts` in each `*-prepared.json` is the canonical output that
+the Starknet wrapper will eventually bind to an Integrity fact.
+
+For tally, the encoding is:
 
 ```text
 magic, version, circuit_id,
@@ -245,8 +447,14 @@ input_hash_low128, input_hash_high128
 
 ### Known limits of this proof run
 
-- This validates the Cairo/STARK migration of AMACI `TallyVotes(2, 1, 1)` only.
-- It does not prove `ProcessMessages`.
+- This validates the current small-parameter PoC only.
+- `TallyVotes(2,1,1)` uses an existing AMACI operator fixture.
+- `AddNewKey(2)`, `ProcessMessages(2,1,5)`, and
+  `ProcessDeactivateMessages(2,5)` use synthetic fixtures that exercise the
+  full migrated Cairo relation for those small parameters.
+- Production-size `9-4-3-125` targets are not generated or proven by this
+  flow.
+- Real operator fixture cross-checking for non-tally circuits is still pending.
 - It does not replace AMACI's internal non-PQ cryptography yet.
 - It does not submit the proof to Integrity or Starknet.
 - It uses the current local Scarb/Stwo proof flow. Stone/Integrity proof
@@ -258,13 +466,79 @@ From this directory:
 
 ```sh
 npm test
+npm run test:msg
+node tools/prepare-ecdh-input.mjs \
+  <ecdh-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-ecdh-args.json
+cd cairo
+scarb execute \
+  --executable-name ecdh_shared_key \
+  --arguments-file /tmp/zkstark-amaci-ecdh-args.json \
+  --print-program-output
+cd ..
+node tools/prepare-process-one-with-ecdh-input.mjs \
+  <process-one-input.json> \
+  <ecdh-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-process-one-with-ecdh-args.json
+cd cairo
+scarb execute \
+  --executable-name process_one_with_ecdh \
+  --arguments-file /tmp/zkstark-amaci-process-one-with-ecdh-args.json \
+  --print-program-output
+cd ..
 node tools/prepare-tally-input.mjs \
-  ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json
+  fixtures/tally-small/000000.json
+node tools/prepare-process-messages-input.mjs <process-messages-input.json>
+node tools/prepare-process-messages-input.mjs \
+  <process-messages-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-msg-cairo-args.json
+cd cairo
+scarb execute \
+  --executable-name process_messages_boundary \
+  --arguments-file /tmp/zkstark-amaci-msg-cairo-args.json \
+  --print-program-output
+cd ..
+node tools/prepare-process-one-input.mjs \
+  <process-one-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-process-one-args.json
+cd cairo
+scarb execute \
+  --executable-name process_one_state_transition \
+  --arguments-file /tmp/zkstark-amaci-process-one-args.json \
+  --print-program-output
+cd ..
+node tools/prepare-process-messages-state-input.mjs \
+  <process-messages-state-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-process-messages-state-args.json
+cd cairo
+scarb execute \
+  --executable-name process_messages_state_transition \
+  --arguments-file /tmp/zkstark-amaci-process-messages-state-args.json \
+  --print-program-output
+cd ..
+node tools/prepare-process-messages-stateful-input.mjs \
+  <process-messages-stateful-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-process-messages-stateful-args.json
+cd cairo
+scarb execute \
+  --executable-name process_messages_stateful \
+  --arguments-file /tmp/zkstark-amaci-process-messages-stateful-args.json \
+  --print-program-output
+cd ..
+node tools/prepare-process-messages-stateful-with-ecdh-input.mjs \
+  <process-messages-stateful-ecdh-input.json> \
+  --cairo-args-out /tmp/zkstark-amaci-process-messages-stateful-ecdh-args.json
+cd cairo
+scarb execute \
+  --executable-name process_messages_stateful_with_ecdh \
+  --arguments-file /tmp/zkstark-amaci-process-messages-stateful-ecdh-args.json \
+  --print-program-output
+cd ..
 node tools/prepare-tally-input.mjs \
-  ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json \
+  fixtures/tally-small/000000.json \
   --cairo-input-out /tmp/zkstark-amaci-cairo-input.json
 node tools/export-hash-vectors.mjs \
-  ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json \
+  fixtures/tally-small/000000.json \
   --out /tmp/zkstark-amaci-hash-vectors.json
 node tools/verify-hash-vectors.mjs /tmp/zkstark-amaci-hash-vectors.json
 ```
@@ -273,7 +547,7 @@ With a compiled Cairo child program hash:
 
 ```sh
 node tools/prepare-tally-input.mjs \
-  ../amaci-operator/test-data/data/dora124w3vdmqtrjms9k4yhquqrd4r3qx5xww36ay5dg9wn8mnwe2e7dq5v8qfl/rust-inputgen/msg-tally/tally_inputs/000000.json \
+  fixtures/tally-small/000000.json \
   --program-hash 0x1234
 ```
 

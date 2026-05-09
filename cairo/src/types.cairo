@@ -1,4 +1,17 @@
 #[derive(Copy, Drop, Serde)]
+pub struct U256x2 {
+    pub v0: u256,
+    pub v1: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct U256x3 {
+    pub v0: u256,
+    pub v1: u256,
+    pub v2: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct U256x4 {
     pub v0: u256,
     pub v1: u256,
@@ -13,6 +26,42 @@ pub struct U256x5 {
     pub v2: u256,
     pub v3: u256,
     pub v4: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct U256x7 {
+    pub v0: u256,
+    pub v1: u256,
+    pub v2: u256,
+    pub v3: u256,
+    pub v4: u256,
+    pub v5: u256,
+    pub v6: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct U256x8 {
+    pub v0: u256,
+    pub v1: u256,
+    pub v2: u256,
+    pub v3: u256,
+    pub v4: u256,
+    pub v5: u256,
+    pub v6: u256,
+    pub v7: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct U256x9 {
+    pub v0: u256,
+    pub v1: u256,
+    pub v2: u256,
+    pub v3: u256,
+    pub v4: u256,
+    pub v5: u256,
+    pub v6: u256,
+    pub v7: u256,
+    pub v8: u256,
 }
 
 #[derive(Copy, Drop, Serde)]

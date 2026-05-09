@@ -1,7 +1,11 @@
 use crate::poseidon_bn254::{poseidon2_hash, poseidon5_hash};
-use crate::sha256_u256::compute_sha256_u256x4_mod_bn254;
+use crate::sha256_u256::{
+    compute_sha256_u256x4_mod_bn254, compute_sha256_u256x7_mod_bn254,
+    compute_sha256_u256x8_mod_bn254, compute_sha256_u256x9_mod_bn254,
+};
 use crate::types::{
-    U256x10, U256x4, U256x5, assert_u256_eq, is_zero, u256x10_first5, u256x10_second5,
+    U256x10, U256x4, U256x5, U256x7, U256x8, U256x9, assert_u256_eq, is_zero, u256x10_first5,
+    u256x10_second5,
 };
 
 #[derive(Copy, Drop, Serde)]
@@ -25,8 +29,33 @@ pub struct Hash10Claim {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct Hash13Claim {
+    pub first: Hash5Claim,
+    pub second: Hash5Claim,
+    pub out: Hash5Claim,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct Sha256U256x4Claim {
     pub inputs: U256x4,
+    pub out: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct Sha256U256x7Claim {
+    pub inputs: U256x7,
+    pub out: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct Sha256U256x8Claim {
+    pub inputs: U256x8,
+    pub out: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct Sha256U256x9Claim {
+    pub inputs: U256x9,
     pub out: u256,
 }
 
@@ -55,6 +84,21 @@ pub fn poseidon_hash10(claim: Hash10Claim, inputs: U256x10) -> u256 {
     let first = poseidon_hash5(claim.first, u256x10_first5(inputs));
     let second = poseidon_hash5(claim.second, u256x10_second5(inputs));
     poseidon_hash2(claim.out, first, second)
+}
+
+// AMACI MessageHasher / Hasher13:
+// Hasher5(Hasher5(inputs[0..4]), Hasher5(inputs[5..9]), inputs[10], inputs[11], inputs[12]).
+pub fn poseidon_hash13(
+    claim: Hash13Claim,
+    first_inputs: U256x5,
+    second_inputs: U256x5,
+    in10: u256,
+    in11: u256,
+    in12: u256,
+) -> u256 {
+    let first = poseidon_hash5(claim.first, first_inputs);
+    let second = poseidon_hash5(claim.second, second_inputs);
+    poseidon_hash5(claim.out, U256x5 { v0: first, v1: second, v2: in10, v3: in11, v4: in12 })
 }
 
 fn assert_poseidon5_preimage(claim: Hash5Claim, inputs: U256x5) {
@@ -116,6 +160,63 @@ pub fn sha256_u256x4_mod_bn254(claim: Sha256U256x4Claim, inputs: U256x4) -> u256
     assert_u256_eq(claim.inputs.v2, inputs.v2);
     assert_u256_eq(claim.inputs.v3, inputs.v3);
     let computed = compute_sha256_u256x4_mod_bn254(inputs);
+    assert_u256_eq(claim.out, computed);
+    computed
+}
+
+// Legacy ProcessMessages SHA-256 input hasher without poll id:
+// sha256([
+//   packedVals, coordPubKeyHash, batchStartHash, batchEndHash,
+//   currentStateCommitment, newStateCommitment, deactivateCommitment
+// ]) mod BN254 scalar field.
+pub fn sha256_u256x7_mod_bn254(claim: Sha256U256x7Claim, inputs: U256x7) -> u256 {
+    assert_u256_eq(claim.inputs.v0, inputs.v0);
+    assert_u256_eq(claim.inputs.v1, inputs.v1);
+    assert_u256_eq(claim.inputs.v2, inputs.v2);
+    assert_u256_eq(claim.inputs.v3, inputs.v3);
+    assert_u256_eq(claim.inputs.v4, inputs.v4);
+    assert_u256_eq(claim.inputs.v5, inputs.v5);
+    assert_u256_eq(claim.inputs.v6, inputs.v6);
+    let computed = compute_sha256_u256x7_mod_bn254(inputs);
+    assert_u256_eq(claim.out, computed);
+    computed
+}
+
+// Current AMACI ProcessMessages SHA-256 input hasher:
+// sha256([
+//   packedVals, coordPubKeyHash, batchStartHash, batchEndHash,
+//   currentStateCommitment, newStateCommitment, deactivateCommitment, expectedPollId
+// ]) mod BN254 scalar field.
+pub fn sha256_u256x8_mod_bn254(claim: Sha256U256x8Claim, inputs: U256x8) -> u256 {
+    assert_u256_eq(claim.inputs.v0, inputs.v0);
+    assert_u256_eq(claim.inputs.v1, inputs.v1);
+    assert_u256_eq(claim.inputs.v2, inputs.v2);
+    assert_u256_eq(claim.inputs.v3, inputs.v3);
+    assert_u256_eq(claim.inputs.v4, inputs.v4);
+    assert_u256_eq(claim.inputs.v5, inputs.v5);
+    assert_u256_eq(claim.inputs.v6, inputs.v6);
+    assert_u256_eq(claim.inputs.v7, inputs.v7);
+    let computed = compute_sha256_u256x8_mod_bn254(inputs);
+    assert_u256_eq(claim.out, computed);
+    computed
+}
+
+// AMACI AddNewKey SHA-256 input hasher:
+// sha256([
+//   deactivateRoot, coordPubKeyHash, nullifier, d1[0], d1[1],
+//   d2[0], d2[1], newPubKeyHash, pollId
+// ]) mod BN254 scalar field.
+pub fn sha256_u256x9_mod_bn254(claim: Sha256U256x9Claim, inputs: U256x9) -> u256 {
+    assert_u256_eq(claim.inputs.v0, inputs.v0);
+    assert_u256_eq(claim.inputs.v1, inputs.v1);
+    assert_u256_eq(claim.inputs.v2, inputs.v2);
+    assert_u256_eq(claim.inputs.v3, inputs.v3);
+    assert_u256_eq(claim.inputs.v4, inputs.v4);
+    assert_u256_eq(claim.inputs.v5, inputs.v5);
+    assert_u256_eq(claim.inputs.v6, inputs.v6);
+    assert_u256_eq(claim.inputs.v7, inputs.v7);
+    assert_u256_eq(claim.inputs.v8, inputs.v8);
+    let computed = compute_sha256_u256x9_mod_bn254(inputs);
     assert_u256_eq(claim.out, computed);
     computed
 }

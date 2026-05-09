@@ -16,6 +16,23 @@ export const SMALL_TALLY_PARAMS = Object.freeze({
   voteOptionTreeDepth: 1,
 });
 
+export const SMALL_PROCESS_MESSAGES_PARAMS = Object.freeze({
+  stateTreeDepth: 2,
+  voteOptionTreeDepth: 1,
+  messageBatchSize: 5,
+});
+
+export const SMALL_PROCESS_DEACTIVATE_PARAMS = Object.freeze({
+  stateTreeDepth: 2,
+  deactivateTreeDepth: 4,
+  messageBatchSize: 5,
+});
+
 export const PUBLIC_OUTPUT_MAGIC = 0x4d414349535441524bn; // MACISTARK
 export const PUBLIC_OUTPUT_VERSION = 1n;
 export const TALLY_VOTES_CIRCUIT_ID = 0x414d4143495f54414c4c595f564f544553n; // AMACI_TALLY_VOTES
+export const PROCESS_MESSAGES_CIRCUIT_ID =
+  0x414d4143495f50524f434553535f4d45535341474553n; // AMACI_PROCESS_MESSAGES
+export const ADD_NEW_KEY_CIRCUIT_ID = 0x414d4143495f4144445f4e45575f4b4559n; // AMACI_ADD_NEW_KEY
+export const PROCESS_DEACTIVATE_CIRCUIT_ID =
+  0x414d4143495f50524f434553535f44454143544956415445n; // AMACI_PROCESS_DEACTIVATE

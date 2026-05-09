@@ -1,3 +1,5 @@
+node_modules/
+target/
 cairo/target/
 contracts/target/
 contracts/.snfoundry_cache/

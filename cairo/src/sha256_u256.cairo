@@ -1,11 +1,14 @@
 use core::num::traits::WrappingAdd;
 use crate::poseidon_bn254::BN254_SCALAR_FIELD;
-use crate::types::U256x4;
+use crate::types::{U256x4, U256x7, U256x8, U256x9};
 
 pub const U128_TWO_POW_32: u128 = 0x100000000;
 pub const U128_TWO_POW_64: u128 = 0x10000000000000000;
 pub const U128_TWO_POW_96: u128 = 0x1000000000000000000000000;
-pub const SHA256_INPUT_BITS: u32 = 1024;
+pub const SHA256_U256X4_INPUT_BITS: u32 = 1024;
+pub const SHA256_U256X7_INPUT_BITS: u32 = 1792;
+pub const SHA256_U256X8_INPUT_BITS: u32 = 2048;
+pub const SHA256_U256X9_INPUT_BITS: u32 = 2304;
 
 #[derive(Copy, Drop)]
 struct Sha256State {
@@ -206,7 +209,7 @@ fn append_u256_be_words(ref words: Array<u32>, value: u256) {
     append_u128_be_words(ref words, value.low);
 }
 
-fn build_padded_words(inputs: U256x4) -> Array<u32> {
+fn build_padded_words_x4(inputs: U256x4) -> Array<u32> {
     let mut words = array![];
     append_u256_be_words(ref words, inputs.v0);
     append_u256_be_words(ref words, inputs.v1);
@@ -220,7 +223,73 @@ fn build_padded_words(inputs: U256x4) -> Array<u32> {
         padding_zeros += 1;
     }
 
-    words.append(SHA256_INPUT_BITS);
+    words.append(SHA256_U256X4_INPUT_BITS);
+    words
+}
+
+fn build_padded_words_x7(inputs: U256x7) -> Array<u32> {
+    let mut words = array![];
+    append_u256_be_words(ref words, inputs.v0);
+    append_u256_be_words(ref words, inputs.v1);
+    append_u256_be_words(ref words, inputs.v2);
+    append_u256_be_words(ref words, inputs.v3);
+    append_u256_be_words(ref words, inputs.v4);
+    append_u256_be_words(ref words, inputs.v5);
+    append_u256_be_words(ref words, inputs.v6);
+    words.append(0x80000000);
+
+    let mut padding_zeros: usize = 0;
+    while padding_zeros < 6 {
+        words.append(0);
+        padding_zeros += 1;
+    }
+
+    words.append(SHA256_U256X7_INPUT_BITS);
+    words
+}
+
+fn build_padded_words_x8(inputs: U256x8) -> Array<u32> {
+    let mut words = array![];
+    append_u256_be_words(ref words, inputs.v0);
+    append_u256_be_words(ref words, inputs.v1);
+    append_u256_be_words(ref words, inputs.v2);
+    append_u256_be_words(ref words, inputs.v3);
+    append_u256_be_words(ref words, inputs.v4);
+    append_u256_be_words(ref words, inputs.v5);
+    append_u256_be_words(ref words, inputs.v6);
+    append_u256_be_words(ref words, inputs.v7);
+    words.append(0x80000000);
+
+    let mut padding_zeros: usize = 0;
+    while padding_zeros < 14 {
+        words.append(0);
+        padding_zeros += 1;
+    }
+
+    words.append(SHA256_U256X8_INPUT_BITS);
+    words
+}
+
+fn build_padded_words_x9(inputs: U256x9) -> Array<u32> {
+    let mut words = array![];
+    append_u256_be_words(ref words, inputs.v0);
+    append_u256_be_words(ref words, inputs.v1);
+    append_u256_be_words(ref words, inputs.v2);
+    append_u256_be_words(ref words, inputs.v3);
+    append_u256_be_words(ref words, inputs.v4);
+    append_u256_be_words(ref words, inputs.v5);
+    append_u256_be_words(ref words, inputs.v6);
+    append_u256_be_words(ref words, inputs.v7);
+    append_u256_be_words(ref words, inputs.v8);
+    words.append(0x80000000);
+
+    let mut padding_zeros: usize = 0;
+    while padding_zeros < 6 {
+        words.append(0);
+        padding_zeros += 1;
+    }
+
+    words.append(SHA256_U256X9_INPUT_BITS);
     words
 }
 
@@ -268,17 +337,49 @@ fn reduce_bn254(value: u256) -> u256 {
 }
 
 pub fn compute_sha256_u256x4_mod_bn254(inputs: U256x4) -> u256 {
-    let words = build_padded_words(inputs);
+    let words = build_padded_words_x4(inputs);
     let state = compress_block(initial_state(), @words, 0);
     let state = compress_block(state, @words, 16);
     let state = compress_block(state, @words, 32);
     reduce_bn254(digest_to_u256(state))
 }
 
+pub fn compute_sha256_u256x7_mod_bn254(inputs: U256x7) -> u256 {
+    let words = build_padded_words_x7(inputs);
+    let state = compress_block(initial_state(), @words, 0);
+    let state = compress_block(state, @words, 16);
+    let state = compress_block(state, @words, 32);
+    let state = compress_block(state, @words, 48);
+    reduce_bn254(digest_to_u256(state))
+}
+
+pub fn compute_sha256_u256x8_mod_bn254(inputs: U256x8) -> u256 {
+    let words = build_padded_words_x8(inputs);
+    let state = compress_block(initial_state(), @words, 0);
+    let state = compress_block(state, @words, 16);
+    let state = compress_block(state, @words, 32);
+    let state = compress_block(state, @words, 48);
+    let state = compress_block(state, @words, 64);
+    reduce_bn254(digest_to_u256(state))
+}
+
+pub fn compute_sha256_u256x9_mod_bn254(inputs: U256x9) -> u256 {
+    let words = build_padded_words_x9(inputs);
+    let state = compress_block(initial_state(), @words, 0);
+    let state = compress_block(state, @words, 16);
+    let state = compress_block(state, @words, 32);
+    let state = compress_block(state, @words, 48);
+    let state = compress_block(state, @words, 64);
+    reduce_bn254(digest_to_u256(state))
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::types::U256x4;
-    use super::compute_sha256_u256x4_mod_bn254;
+    use crate::types::{U256x4, U256x7, U256x8, U256x9};
+    use super::{
+        compute_sha256_u256x4_mod_bn254, compute_sha256_u256x7_mod_bn254,
+        compute_sha256_u256x8_mod_bn254, compute_sha256_u256x9_mod_bn254,
+    };
 
     #[test]
     fn sha256_u256x4_mod_bn254_matches_js_vector() {
@@ -286,6 +387,39 @@ mod tests {
         assert(
             actual == 0x2561da7b644157407533e1abe2704eb69c60920d2ea96789914b3a88acb780a0,
             'SHA256_MOD_VECTOR_MISMATCH',
+        );
+    }
+
+    #[test]
+    fn sha256_u256x7_mod_bn254_matches_js_vector() {
+        let actual = compute_sha256_u256x7_mod_bn254(
+            U256x7 { v0: 5, v1: 6, v2: 7, v3: 8, v4: 9, v5: 10, v6: 11 },
+        );
+        assert(
+            actual == 0x1795a324a7038b468cc1f7fc3bf8e41187de0adeeffa83f63cfe9e79ba96490e,
+            'SHA256_X7_VECTOR_MISMATCH',
+        );
+    }
+
+    #[test]
+    fn sha256_u256x8_mod_bn254_matches_js_vector() {
+        let actual = compute_sha256_u256x8_mod_bn254(
+            U256x8 { v0: 5, v1: 6, v2: 7, v3: 8, v4: 9, v5: 10, v6: 11, v7: 12 },
+        );
+        assert(
+            actual == 0x251acb98f9ae4edb51928cb69c74ca6a5348026e965b7e7f7bff49cda99d51c3,
+            'SHA256_X8_VECTOR_MISMATCH',
+        );
+    }
+
+    #[test]
+    fn sha256_u256x9_mod_bn254_matches_js_vector() {
+        let actual = compute_sha256_u256x9_mod_bn254(
+            U256x9 { v0: 5, v1: 6, v2: 7, v3: 8, v4: 9, v5: 10, v6: 11, v7: 12, v8: 13 },
+        );
+        assert(
+            actual == 0x0695885c48fd459864236258fa4b6476f28b81d71e8d84a3e6c5356526275b07,
+            'SHA256_X9_VECTOR_MISMATCH',
         );
     }
 }

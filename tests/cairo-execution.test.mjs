@@ -1,0 +1,70 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+const runExecutionTests = process.env.RUN_CAIRO_EXECUTION_TESTS === '1';
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+
+function runCircuit(circuit) {
+  const outDir = mkdtempSync(join(tmpdir(), `zkstark-amaci-${circuit}-execute-`));
+  const result = spawnSync(
+    process.execPath,
+    [
+      'tools/run-cairo-execute.mjs',
+      '--circuit',
+      circuit,
+      '--out-dir',
+      outDir,
+      '--timeout-ms',
+      '600000',
+    ],
+    {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024 * 512,
+    },
+  );
+
+  if (result.status !== 0) {
+    process.stderr.write(result.stdout);
+    process.stderr.write(result.stderr);
+  }
+  assert.equal(result.status, 0);
+  const metadata = JSON.parse(result.stdout);
+  assert.equal(metadata.status, 0);
+  assert.equal(metadata.generatedInput, true);
+  assert.ok(metadata.expectedPublicOutputFelts > 0);
+  assert.match(readFileSync(metadata.stdoutPath, 'utf8'), /Program output|Run completed successfully/);
+  return metadata;
+}
+
+test(
+  'executes the small AddNewKey Cairo program with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const metadata = runCircuit('add-new-key');
+    assert.equal(metadata.executable, 'add_new_key');
+  },
+);
+
+test(
+  'executes the small ProcessMessages Cairo program with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const metadata = runCircuit('process-messages');
+    assert.equal(metadata.executable, 'process_messages_stateful_with_ecdh_signature');
+  },
+);
+
+test(
+  'executes the small ProcessDeactivateMessages Cairo program with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const metadata = runCircuit('process-deactivate');
+    assert.equal(metadata.executable, 'process_deactivate_messages_stateful');
+  },
+);

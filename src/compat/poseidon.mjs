@@ -10,18 +10,25 @@ function loadCircomPoseidon() {
   }
 
   try {
-    const requireFromCircuits = createRequire(
-      new URL('../../../packages/circuits/package.json', import.meta.url),
-    );
+    const requireFromCircuits = createRequire(new URL('../../package.json', import.meta.url));
     ({ poseidon: circomPoseidon } = requireFromCircuits('circom'));
   } catch (error) {
     throw new Error(
-      `Unable to load Circom-compatible Poseidon from packages/circuits. ` +
-        `Run pnpm install for the existing circuits package first. Cause: ${error.message}`,
+      `Unable to load optional circom Poseidon package. ` +
+        `The standalone implementation uses the pure JS BN254 Poseidon fallback. Cause: ${error.message}`,
     );
   }
 
   return circomPoseidon;
+}
+
+export function isCircomPoseidonAvailable() {
+  try {
+    loadCircomPoseidon();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function poseidonHash(inputs) {
@@ -49,4 +56,17 @@ export function hash10(values) {
     throw new Error('hash10 expects exactly ten values');
   }
   return hashLeftRight(hash5(values.slice(0, 5)), hash5(values.slice(5, 10)));
+}
+
+export function hash13(values) {
+  if (!Array.isArray(values) || values.length !== 13) {
+    throw new Error('hash13 expects exactly thirteen values');
+  }
+  return hash5([
+    hash5(values.slice(0, 5)),
+    hash5(values.slice(5, 10)),
+    values[10],
+    values[11],
+    values[12],
+  ]);
 }

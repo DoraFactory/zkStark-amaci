@@ -50,6 +50,80 @@ export function tallyInputHash(packedVals, stateCommitment, currentTallyCommitme
   );
 }
 
+export function processMessagesInputHash(
+  packedVals,
+  coordPubKeyHash,
+  batchStartHash,
+  batchEndHash,
+  currentStateCommitment,
+  newStateCommitment,
+  deactivateCommitment,
+  expectedPollId,
+) {
+  return (
+    sha256Uint256List([
+      packedVals,
+      coordPubKeyHash,
+      batchStartHash,
+      batchEndHash,
+      currentStateCommitment,
+      newStateCommitment,
+      deactivateCommitment,
+      expectedPollId,
+    ]) % BN254_SCALAR_FIELD
+  );
+}
+
+export function processDeactivateInputHash(
+  newDeactivateRoot,
+  coordPubKeyHash,
+  batchStartHash,
+  batchEndHash,
+  currentDeactivateCommitment,
+  newDeactivateCommitment,
+  currentStateRoot,
+  expectedPollId,
+) {
+  return (
+    sha256Uint256List([
+      newDeactivateRoot,
+      coordPubKeyHash,
+      batchStartHash,
+      batchEndHash,
+      currentDeactivateCommitment,
+      newDeactivateCommitment,
+      currentStateRoot,
+      expectedPollId,
+    ]) % BN254_SCALAR_FIELD
+  );
+}
+
+export function addNewKeyInputHash(
+  deactivateRoot,
+  coordPubKeyHash,
+  nullifier,
+  d1x,
+  d1y,
+  d2x,
+  d2y,
+  newPubKeyHash,
+  pollId,
+) {
+  return (
+    sha256Uint256List([
+      deactivateRoot,
+      coordPubKeyHash,
+      nullifier,
+      d1x,
+      d1y,
+      d2x,
+      d2y,
+      newPubKeyHash,
+      pollId,
+    ]) % BN254_SCALAR_FIELD
+  );
+}
+
 export function splitU256ToU128(value, label = 'value') {
   const n = assertUint256(value, label);
   return {
@@ -81,4 +155,3 @@ export function deepMapBigInt(value) {
   }
   return parseBigInt(value);
 }
-

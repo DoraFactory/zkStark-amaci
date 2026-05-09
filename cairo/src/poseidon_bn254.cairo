@@ -1,8 +1,8 @@
 use core::math::u256_mul_mod_n;
 use core::zeroable::NonZero;
 use crate::poseidon_constants::{
-    POSEIDON_T3_WIDTH, POSEIDON_T6_WIDTH, poseidon_t3_c, poseidon_t3_m, poseidon_t6_c,
-    poseidon_t6_m,
+    POSEIDON_T3_WIDTH, POSEIDON_T4_WIDTH, POSEIDON_T6_WIDTH, poseidon_t3_c, poseidon_t3_m,
+    poseidon_t4_c, poseidon_t4_m, poseidon_t6_c, poseidon_t6_m,
 };
 use crate::types::U256x5;
 
@@ -10,6 +10,7 @@ pub const BN254_SCALAR_FIELD: u256 =
     0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001;
 pub const POSEIDON_FULL_ROUNDS: u32 = 8;
 pub const POSEIDON_T3_PARTIAL_ROUNDS: u32 = 57;
+pub const POSEIDON_T4_PARTIAL_ROUNDS: u32 = 56;
 pub const POSEIDON_T6_PARTIAL_ROUNDS: u32 = 60;
 pub const POSEIDON5_ZERO_HASH: u256 =
     0x2066be41bebe6caf7e079360abe14fbf9118c62eabc42e2fe75e342b160a95bc;
@@ -21,6 +22,14 @@ pub struct PoseidonT3State {
     pub x0: u256,
     pub x1: u256,
     pub x2: u256,
+}
+
+#[derive(Copy, Drop)]
+pub struct PoseidonT4State {
+    pub x0: u256,
+    pub x1: u256,
+    pub x2: u256,
+    pub x3: u256,
 }
 
 #[derive(Copy, Drop)]
@@ -51,8 +60,16 @@ pub fn poseidon5_round_constant(idx: u32) -> u256 {
     poseidon_t6_c(idx)
 }
 
+pub fn poseidon4_round_constant(idx: u32) -> u256 {
+    poseidon_t4_c(idx)
+}
+
 pub fn poseidon2_mds(row: u32, col: u32) -> u256 {
     poseidon_t3_m(row, col)
+}
+
+pub fn poseidon4_mds(row: u32, col: u32) -> u256 {
+    poseidon_t4_m(row, col)
 }
 
 pub fn poseidon5_mds(row: u32, col: u32) -> u256 {
@@ -87,6 +104,22 @@ fn field_add(left: u256, right: u256) -> u256 {
 
 fn field_mul(left: u256, right: u256) -> u256 {
     u256_mul_mod_n(left, right, bn254_modulus())
+}
+
+pub fn field_add_mod(left: u256, right: u256) -> u256 {
+    field_add(left, right)
+}
+
+pub fn field_mul_mod(left: u256, right: u256) -> u256 {
+    field_mul(left, right)
+}
+
+pub fn field_sub_mod(left: u256, right: u256) -> u256 {
+    if field_ge(left, right) {
+        left - right
+    } else {
+        BN254_SCALAR_FIELD - (right - left)
+    }
 }
 
 fn field_pow5(value: u256) -> u256 {
@@ -157,6 +190,59 @@ pub fn poseidon2_permutation(state: PoseidonT3State) -> PoseidonT3State {
 
 pub fn poseidon2_hash(left: u256, right: u256) -> u256 {
     poseidon2_permutation(poseidon2_initial_state(left, right)).x0
+}
+
+fn poseidon4_add_constants(state: PoseidonT4State, round: u32) -> PoseidonT4State {
+    let offset = round * POSEIDON_T4_WIDTH;
+    PoseidonT4State {
+        x0: field_add(state.x0, poseidon4_round_constant(offset)),
+        x1: field_add(state.x1, poseidon4_round_constant(offset + 1)),
+        x2: field_add(state.x2, poseidon4_round_constant(offset + 2)),
+        x3: field_add(state.x3, poseidon4_round_constant(offset + 3)),
+    }
+}
+
+fn poseidon4_sbox(state: PoseidonT4State, round: u32) -> PoseidonT4State {
+    if poseidon_is_full_round(round, POSEIDON_T4_PARTIAL_ROUNDS) {
+        PoseidonT4State {
+            x0: field_pow5(state.x0),
+            x1: field_pow5(state.x1),
+            x2: field_pow5(state.x2),
+            x3: field_pow5(state.x3),
+        }
+    } else {
+        PoseidonT4State { x0: field_pow5(state.x0), x1: state.x1, x2: state.x2, x3: state.x3 }
+    }
+}
+
+fn poseidon4_row_mix(row: u32, x0: u256, x1: u256, x2: u256, x3: u256) -> u256 {
+    let acc = field_mul(poseidon4_mds(row, 0), x0);
+    let acc = field_add(acc, field_mul(poseidon4_mds(row, 1), x1));
+    let acc = field_add(acc, field_mul(poseidon4_mds(row, 2), x2));
+    field_add(acc, field_mul(poseidon4_mds(row, 3), x3))
+}
+
+fn poseidon4_mds_mix(state: PoseidonT4State) -> PoseidonT4State {
+    PoseidonT4State {
+        x0: poseidon4_row_mix(0, state.x0, state.x1, state.x2, state.x3),
+        x1: poseidon4_row_mix(1, state.x0, state.x1, state.x2, state.x3),
+        x2: poseidon4_row_mix(2, state.x0, state.x1, state.x2, state.x3),
+        x3: poseidon4_row_mix(3, state.x0, state.x1, state.x2, state.x3),
+    }
+}
+
+fn poseidon4_round(state: PoseidonT4State, round: u32) -> PoseidonT4State {
+    poseidon4_mds_mix(poseidon4_sbox(poseidon4_add_constants(state, round), round))
+}
+
+pub fn poseidon4_permutation(state: PoseidonT4State) -> PoseidonT4State {
+    let mut state = state;
+    let mut round = 0;
+    while round < POSEIDON_FULL_ROUNDS + POSEIDON_T4_PARTIAL_ROUNDS {
+        state = poseidon4_round(state, round);
+        round += 1;
+    }
+    state
 }
 
 fn poseidon5_add_constants(state: PoseidonT6State, round: u32) -> PoseidonT6State {
@@ -238,7 +324,9 @@ pub fn poseidon10_hash(first: U256x5, second: U256x5) -> u256 {
 #[cfg(test)]
 mod tests {
     use crate::types::U256x5;
-    use super::{poseidon10_hash, poseidon2_hash, poseidon5_hash};
+    use super::{
+        PoseidonT4State, poseidon10_hash, poseidon2_hash, poseidon4_permutation, poseidon5_hash,
+    };
 
     #[test]
     fn poseidon2_matches_js_vectors() {
@@ -281,6 +369,27 @@ mod tests {
                 U256x5 { v0: 0, v1: 6, v2: 4, v3: 0, v4: 0 },
             ) == 0x2ba1aa2c0bf80f573bd22203133e6f61f2c3a81d648a939d1706caf41cc82ee7,
             'POSEIDON5_VOTES_MISMATCH',
+        );
+    }
+
+    #[test]
+    fn poseidon4_permutation_matches_js_vectors() {
+        let state = poseidon4_permutation(PoseidonT4State { x0: 0, x1: 1, x2: 2, x3: 3 });
+        assert(
+            state.x0 == 0xe7732d89e6939c0ff03d5e58dab6302f3230e269dc5b968f725df34ab36d732,
+            'POSEIDON4_X0_MISMATCH',
+        );
+        assert(
+            state.x1 == 0x7b0b86b41ec7fdfe6c17ee6ccdddce4e47e748e493e542f9a435b0dde022a0d,
+            'POSEIDON4_X1_MISMATCH',
+        );
+        assert(
+            state.x2 == 0x4362e50fcc8be421898d47ace20eab18b0a6efab0e12ade49f2df609fec4209,
+            'POSEIDON4_X2_MISMATCH',
+        );
+        assert(
+            state.x3 == 0x1a779bd9781d3a8354eae5ed74e7fa44fa0e458e45a1407524bddf3b9f2bf2d7,
+            'POSEIDON4_X3_MISMATCH',
         );
     }
 
