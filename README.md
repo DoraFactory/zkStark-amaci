@@ -107,6 +107,14 @@ The implementation keeps the existing AMACI public-input semantics:
   carries the previous/next message hashes, previous/next state roots, and
   current/new state commitments so a wrapper or off-chain checker can chain
   five smaller proofs with one boundary proof.
+- The preferred ProcessMessages split path now uses smaller linked pieces:
+  `process_message_coord_key`, per-message `process_message_ecdh`,
+  per-message `process_message_signature`, and per-message
+  `process_message_step_core`. The core step no longer repeats coordinator
+  public-key derivation, ECDH, or EdDSA scalar multiplication; it exposes
+  hash links for `coordPrivKey`, `encPubKey`, shared key, signature pubkey,
+  `R8`, packed command, `S`, and `isSignatureValid`, so a wrapper can chain
+  the smaller facts.
 - `src/add-new-key/`, `tools/prepare-add-new-key-input.mjs`, and the Cairo
   `add_new_key` executable start the next circuit migration target:
   `AddNewKey(stateTreeDepth=2)`. The compatibility relation verifies the
@@ -391,6 +399,12 @@ Expected small execution characteristics on the current local machine:
 - `process_message_step_with_ecdh_signature`: one linked
   `ProcessMessages` message slot, `27` output felts. Use this when the dense
   five-message proof is too large for the current machine.
+- `process_message_coord_key`: coordinator key binding, `10` output felts.
+- `process_message_ecdh`: one message ECDH claim, `13` output felts.
+- `process_message_signature`: one message EdDSA-Poseidon claim, `17`
+  output felts.
+- `process_message_step_core`: one message hash/state transition without
+  repeated ECDH/signature scalar multiplication, `43` output felts.
 - `process_deactivate_messages_stateful`: about `218,084,195` steps, `24`
   output felts.
 - `process_deactivate_message_step`: one linked
@@ -449,6 +463,10 @@ tools/run-cairo-proof.sh --circuit add-new-key --out-dir "$OUT_DIR/add-new-key"
 tools/run-cairo-proof.sh --circuit process-messages --out-dir "$OUT_DIR/process-messages"
 tools/run-cairo-proof.sh --circuit process-messages-boundary --out-dir "$OUT_DIR/process-messages-boundary"
 tools/run-cairo-proof.sh --circuit process-message-step --message-index 0 --out-dir "$OUT_DIR/process-message-step-0"
+tools/run-cairo-proof.sh --circuit process-message-coord-key --out-dir "$OUT_DIR/process-message-coord-key"
+tools/run-cairo-proof.sh --circuit process-message-ecdh --message-index 0 --out-dir "$OUT_DIR/process-message-ecdh-0"
+tools/run-cairo-proof.sh --circuit process-message-signature --message-index 0 --out-dir "$OUT_DIR/process-message-signature-0"
+tools/run-cairo-proof.sh --circuit process-message-step-core --message-index 0 --out-dir "$OUT_DIR/process-message-step-core-0"
 tools/run-cairo-proof.sh --circuit process-deactivate --out-dir "$OUT_DIR/process-deactivate"
 tools/run-cairo-proof.sh --circuit process-deactivate-boundary --out-dir "$OUT_DIR/process-deactivate-boundary"
 tools/run-cairo-proof.sh --circuit process-deactivate-step --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-0"
@@ -476,21 +494,22 @@ This proves:
 
 ```text
 process-messages-boundary
-process-message-step --message-index 0
-process-message-step --message-index 1
-process-message-step --message-index 2
-process-message-step --message-index 3
-process-message-step --message-index 4
+process-message-coord-key
+process-message-ecdh --message-index 0..4
+process-message-signature --message-index 0..4
+process-message-step-core --message-index 0..4
 ```
 
-The split path is intended to lower peak prover memory by proving one message
-slot at a time. The public outputs are chainable: the boundary proof fixes the
-batch start/end hashes and state commitments, while each step proof exposes
+The deep split path lowers peak prover memory by moving the most expensive
+BabyJubJub work out of the state-transition proof. The public outputs are
+chainable: the boundary proof fixes the batch start/end hashes and state
+commitments; `coord-key` binds `coordPubKeyHash` to `coordPrivKeyHash`; each
+ECDH proof binds `coordPrivKeyHash + encPubKeyHash -> sharedKeyHash`; each
+signature proof binds `pubKeyHash + R8Hash + packedCommandHash + S` to
+`isSignatureValid`; and each core step exposes the same link hashes plus
 `previous_message_hash`, `next_message_hash`, `current_state_root`, and
-`new_state_root`, plus the current/new state commitments needed to bind the
-step chain back to the boundary output. Production wrapper logic still needs
-to check all six facts and enforce that the five step outputs form the same
-hash/root chain.
+`new_state_root`. Production wrapper logic still needs to check all facts and
+enforce that these public outputs form one consistent hash/root chain.
 
 ### Split ProcessDeactivate Proofs
 
@@ -628,9 +647,10 @@ input_hash_low128, input_hash_high128
   small synthetic `ProcessMessages` and `ProcessDeactivateMessages` fixtures
   currently use five non-empty messages, so this optimization affects sparse
   batches but does not reduce the dense five-message benchmark.
-- Dense `ProcessMessages(2,1,5)` now has a split proof path. It is suitable
-  for local prover feasibility checks, but Starknet wrapper support for
-  verifying and chaining the boundary fact plus five step facts is not yet
+- Dense `ProcessMessages(2,1,5)` now has a deep split proof path. It is
+  suitable for local prover feasibility checks, but Starknet wrapper support
+  for verifying and chaining the boundary fact, coord-key fact, five ECDH
+  facts, five signature facts, and five core-step facts is not yet
   implemented.
 - Dense `ProcessDeactivateMessages(2,5)` now has the same split proof path;
   wrapper support for checking the boundary fact plus five deactivate step

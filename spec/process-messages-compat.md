@@ -258,31 +258,48 @@ The intended proof composition is:
 
 ```text
 1 boundary proof
-5 process-message-step proofs
+1 process-message-coord-key proof
+5 process-message-ecdh proofs
+5 process-message-signature proofs
+5 process-message-step-core proofs
 ```
 
 A wrapper or off-chain checker must chain the public outputs:
 
 ```text
-boundary.batchStartHash == step0.previousMessageHash
-step0.nextMessageHash == step1.previousMessageHash
-...
-step4.nextMessageHash == boundary.batchEndHash
+coordKey.coordPubKeyHash == boundary.coordPubKeyHash
+coordKey.coordPrivKeyHash == core{i}.coordPrivKeyHash
 
-boundary.currentStateCommitment == step4.currentStateCommitment
-boundary.newStateCommitment == step0.newStateCommitment
+ecdh{i}.coordPrivKeyHash == coordKey.coordPrivKeyHash
+ecdh{i}.encPubKeyHash == core{i}.encPubKeyHash
+ecdh{i}.sharedKeyHash == core{i}.sharedKeyHash
 
-step4.newStateRoot == step3.currentStateRoot
+signature{i}.pubKeyHash == core{i}.signaturePubKeyHash
+signature{i}.r8Hash == core{i}.signatureR8Hash
+signature{i}.packedCommandHash == core{i}.packedCommandHash
+signature{i}.cmdSigS == core{i}.cmdSigS
+signature{i}.isSignatureValid == core{i}.isSignatureValid
+
+boundary.batchStartHash == core0.previousMessageHash
+core0.nextMessageHash == core1.previousMessageHash
 ...
-step1.newStateRoot == step0.currentStateRoot
+core4.nextMessageHash == boundary.batchEndHash
+
+boundary.currentStateCommitment == core4.currentStateCommitment
+boundary.newStateCommitment == core0.newStateCommitment
+
+core4.newStateRoot == core3.currentStateRoot
+...
+core1.newStateRoot == core0.currentStateRoot
 ```
 
-The final state endpoint is enforced by comparing `step0.newStateCommitment`
+The final state endpoint is enforced by comparing `core0.newStateCommitment`
 to the boundary output and relying on the step `0` commitment-opening proof.
 
-The split path lowers peak prover memory by proving one message slot at a time,
-but the Starknet wrapper that verifies all six facts and enforces this chaining
-is still pending.
+The deep split path lowers peak prover memory by moving coordinator key
+derivation, ECDH, and EdDSA-Poseidon signature verification out of the
+state-transition proof. The Starknet wrapper that verifies all linked facts
+and enforces this chaining is still pending.
 
 The migration also includes `process_messages_stateful_with_ecdh`, a
 five-message composition executable:

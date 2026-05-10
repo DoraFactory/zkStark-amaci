@@ -1,4 +1,5 @@
 import { bigintToHex, splitU256ToU128 } from '../compat/encoding.mjs';
+import { PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN } from '../constants.mjs';
 import {
   buildCairoBabyjubScalarMulInput,
   buildCairoEcdhSharedKeyInput,
@@ -6,7 +7,13 @@ import {
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8, buildElGamalDecryptWitness } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
-import { canonicalProcessMessageStepPublicOutput } from '../public-output.mjs';
+import {
+  canonicalProcessMessageCoordKeyPublicOutput,
+  canonicalProcessMessageEcdhPublicOutput,
+  canonicalProcessMessageSignaturePublicOutput,
+  canonicalProcessMessageStepCorePublicOutput,
+  canonicalProcessMessageStepPublicOutput,
+} from '../public-output.mjs';
 import {
   evaluateProcessMessagesStateful,
   evaluateProcessMessagesStateTransitions,
@@ -479,6 +486,14 @@ function assertMessageIndex(messageIndex) {
   }
 }
 
+function coordPrivKeyHash(coordPrivKey) {
+  return hashLeftRight(BigInt(coordPrivKey), PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN);
+}
+
+function packedCommandHash(packedCommand) {
+  return hash5([packedCommand[0], packedCommand[1], packedCommand[2], 0n, 0n]);
+}
+
 function buildCoordPubKeyScalarMulInput(rawInput) {
   if (rawInput.coordPrivKey === undefined) {
     throw new Error('coordPrivKey is required to build coordinator public-key witness input');
@@ -606,6 +621,362 @@ export function buildCairoProcessMessageStepWithEcdhSignatureInput(
       messageIndex,
       ecdh: ecdhCairoInput.full_witness,
       signature: signatureCairoInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessMessageCoordKeyInput(rawInput, evaluated) {
+  const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const coordPubKeyCairoInput = buildCoordPubKeyScalarMulInput(rawInput);
+  const publicFields = {
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    coordPrivKeyHash: coordPrivKeyHash(rawInput.coordPrivKey),
+  };
+  const fields = {
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+  };
+  const publicOutput = canonicalProcessMessageCoordKeyPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+        coord_pub_key_scalar_mul: coordPubKeyCairoInput.program_input.witness,
+        coord_pub_key_hash: hash2Claim(
+          rawInput.coordPubKey[0],
+          rawInput.coordPubKey[1],
+          publicFields.coordPubKeyHash,
+          'coordPubKeyHash',
+        ),
+        coord_priv_key_hash: hash2Claim(
+          rawInput.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+      },
+    },
+    full_witness: {
+      processMessages: rawInput,
+      coordPubKey: coordPubKeyCairoInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+function isEmptyMessage(rawInput, messageIndex) {
+  return BigInt(rawInput.encPubKeys[messageIndex][0]) === 0n;
+}
+
+function processMessageStepLinkFields(rawInput, messageIndex, result) {
+  const transition = result.state.transitions[messageIndex];
+  const sharedKey = transition.input.sharedKey;
+  const stateLeafPubKey = [transition.input.stateLeaf[0], transition.input.stateLeaf[1]];
+  const signatureR8 = transition.input.cmdSigR8;
+  const commandHash = packedCommandHash(transition.input.packedCommand);
+  return {
+    coordPrivKeyHash: coordPrivKeyHash(rawInput.coordPrivKey),
+    encPubKeyHash: hashLeftRight(rawInput.encPubKeys[messageIndex][0], rawInput.encPubKeys[messageIndex][1]),
+    sharedKeyHash: hashLeftRight(sharedKey[0], sharedKey[1]),
+    signaturePubKeyHash: hashLeftRight(stateLeafPubKey[0], stateLeafPubKey[1]),
+    signatureR8Hash: hashLeftRight(signatureR8[0], signatureR8[1]),
+    packedCommandHash: commandHash,
+    cmdSigS: transition.input.cmdSigS,
+    isSignatureValid: transition.input.isSignatureValid,
+  };
+}
+
+export function buildCairoProcessMessageEcdhInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build ECDH proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
+  const ecdhCairoInput = buildCairoEcdhSharedKeyInput(ecdhInputForMessage(rawInput, messageIndex));
+  const [expectedX, expectedY] = ecdhCairoInput.expected;
+  if (expectedX !== transition.input.sharedKey[0] || expectedY !== transition.input.sharedKey[1]) {
+    throw new Error(`ECDH shared key does not match ProcessOne ${messageIndex} sharedKey witness`);
+  }
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    coordPrivKeyHash: linkFields.coordPrivKeyHash,
+    encPubKeyHash: linkFields.encPubKeyHash,
+    sharedKeyHash: linkFields.sharedKeyHash,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+    enc_pub_key_hash: splitObject(publicFields.encPubKeyHash, 'encPubKeyHash'),
+    shared_key_hash: splitObject(publicFields.sharedKeyHash, 'sharedKeyHash'),
+  };
+  const publicOutput = canonicalProcessMessageEcdhPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        ecdh: ecdhCairoInput.program_input.witness,
+        coord_priv_key_hash: hash2Claim(
+          rawInput.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+        enc_pub_key_hash: hash2Claim(
+          rawInput.encPubKeys[messageIndex][0],
+          rawInput.encPubKeys[messageIndex][1],
+          publicFields.encPubKeyHash,
+          'encPubKeyHash',
+        ),
+        shared_key_hash: hash2Claim(
+          transition.input.sharedKey[0],
+          transition.input.sharedKey[1],
+          publicFields.sharedKeyHash,
+          'sharedKeyHash',
+        ),
+      },
+    },
+    full_witness: {
+      processMessages: rawInput,
+      messageIndex,
+      ecdh: ecdhCairoInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessMessageSignatureInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build signature proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const signatureCairoInput = buildProcessOneSignatureInputForTransition(transition, messageIndex);
+  const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    pubKeyHash: linkFields.signaturePubKeyHash,
+    r8Hash: linkFields.signatureR8Hash,
+    packedCommandHash: linkFields.packedCommandHash,
+    cmdSigS: linkFields.cmdSigS,
+    isSignatureValid: linkFields.isSignatureValid,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    pub_key_hash: splitObject(publicFields.pubKeyHash, 'pubKeyHash'),
+    r8_hash: splitObject(publicFields.r8Hash, 'r8Hash'),
+    packed_command_hash: splitObject(publicFields.packedCommandHash, 'packedCommandHash'),
+    cmd_sig_s: splitObject(publicFields.cmdSigS, 'cmdSigS'),
+    is_signature_valid: splitObject(publicFields.isSignatureValid, 'isSignatureValid'),
+  };
+  const packedHashInputs = [
+    transition.input.packedCommand[0],
+    transition.input.packedCommand[1],
+    transition.input.packedCommand[2],
+    0n,
+    0n,
+  ];
+  const publicOutput = canonicalProcessMessageSignaturePublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        pub_key: splitVector2([transition.input.stateLeaf[0], transition.input.stateLeaf[1]], 'pubKey'),
+        r8: splitVector2(transition.input.cmdSigR8, 'r8'),
+        s: splitObject(transition.input.cmdSigS, 's'),
+        packed_command: splitVector3(transition.input.packedCommand, 'packedCommand'),
+        signature: signatureCairoInput.program_input.witness,
+        pub_key_hash: hash2Claim(
+          transition.input.stateLeaf[0],
+          transition.input.stateLeaf[1],
+          publicFields.pubKeyHash,
+          'pubKeyHash',
+        ),
+        r8_hash: hash2Claim(
+          transition.input.cmdSigR8[0],
+          transition.input.cmdSigR8[1],
+          publicFields.r8Hash,
+          'r8Hash',
+        ),
+        packed_command_hash: hash5Claim(
+          packedHashInputs,
+          publicFields.packedCommandHash,
+          'packedCommandHash',
+        ),
+      },
+    },
+    full_witness: {
+      processMessages: rawInput,
+      messageIndex,
+      signature: signatureCairoInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessMessageStepCoreInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    packedVals: result.publicFields.packedVals,
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    coordPrivKeyHash: linkFields.coordPrivKeyHash,
+    previousMessageHash: result.derived.messageHashChain[messageIndex],
+    nextMessageHash: result.derived.messageHashChain[messageIndex + 1],
+    currentStateRoot: transition.input.currentStateRoot,
+    newStateRoot: transition.derived.newStateRoot,
+    currentStateCommitment: result.publicFields.currentStateCommitment,
+    newStateCommitment: result.publicFields.newStateCommitment,
+    activeStateRoot: result.state.derived.activeStateRoot,
+    expectedPollId: result.publicFields.expectedPollId,
+    encPubKeyHash: linkFields.encPubKeyHash,
+    sharedKeyHash: linkFields.sharedKeyHash,
+    signaturePubKeyHash: linkFields.signaturePubKeyHash,
+    signatureR8Hash: linkFields.signatureR8Hash,
+    packedCommandHash: linkFields.packedCommandHash,
+    cmdSigS: linkFields.cmdSigS,
+    isSignatureValid: linkFields.isSignatureValid,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    packed_vals: splitObject(publicFields.packedVals, 'packedVals'),
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+    previous_message_hash: splitObject(
+      publicFields.previousMessageHash,
+      'previousMessageHash',
+    ),
+    next_message_hash: splitObject(publicFields.nextMessageHash, 'nextMessageHash'),
+    current_state_root: splitObject(publicFields.currentStateRoot, 'currentStateRoot'),
+    new_state_root: splitObject(publicFields.newStateRoot, 'newStateRoot'),
+    current_state_commitment: splitObject(
+      publicFields.currentStateCommitment,
+      'currentStateCommitment',
+    ),
+    new_state_commitment: splitObject(publicFields.newStateCommitment, 'newStateCommitment'),
+    active_state_root: splitObject(publicFields.activeStateRoot, 'activeStateRoot'),
+    expected_poll_id: splitObject(publicFields.expectedPollId, 'expectedPollId'),
+    enc_pub_key_hash: splitObject(publicFields.encPubKeyHash, 'encPubKeyHash'),
+    shared_key_hash: splitObject(publicFields.sharedKeyHash, 'sharedKeyHash'),
+    signature_pub_key_hash: splitObject(publicFields.signaturePubKeyHash, 'signaturePubKeyHash'),
+    signature_r8_hash: splitObject(publicFields.signatureR8Hash, 'signatureR8Hash'),
+    packed_command_hash: splitObject(publicFields.packedCommandHash, 'packedCommandHash'),
+    cmd_sig_s: splitObject(publicFields.cmdSigS, 'cmdSigS'),
+    is_signature_valid: splitObject(publicFields.isSignatureValid, 'isSignatureValid'),
+  };
+  const packedHashInputs = [
+    transition.input.packedCommand[0],
+    transition.input.packedCommand[1],
+    transition.input.packedCommand[2],
+    0n,
+    0n,
+  ];
+  const publicOutput = canonicalProcessMessageStepCorePublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        is_quadratic_cost: splitObject(result.derived.isQuadraticCost, 'isQuadraticCost'),
+        num_signups: splitObject(result.derived.numSignUps, 'numSignUps'),
+        max_vote_options: splitObject(result.derived.maxVoteOptions, 'maxVoteOptions'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        msg: splitVector10(rawInput.msgs[messageIndex], 'msg'),
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        current_state_salt: splitObject(rawInput.currentStateSalt, 'currentStateSalt'),
+        new_state_salt: splitObject(rawInput.newStateSalt, 'newStateSalt'),
+        coord_priv_key_hash: hash2Claim(
+          rawInput.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+        current_state_commitment: hash2Claim(
+          rawInput.currentStateRoot,
+          rawInput.currentStateSalt,
+          publicFields.currentStateCommitment,
+          'currentStateCommitment',
+        ),
+        new_state_commitment: hash2Claim(
+          rawInput.newStateRoot,
+          rawInput.newStateSalt,
+          publicFields.newStateCommitment,
+          'newStateCommitment',
+        ),
+        enc_pub_key_hash: hash2Claim(
+          rawInput.encPubKeys[messageIndex][0],
+          rawInput.encPubKeys[messageIndex][1],
+          publicFields.encPubKeyHash,
+          'encPubKeyHash',
+        ),
+        shared_key_hash: hash2Claim(
+          transition.input.sharedKey[0],
+          transition.input.sharedKey[1],
+          publicFields.sharedKeyHash,
+          'sharedKeyHash',
+        ),
+        signature_pub_key_hash: hash2Claim(
+          transition.input.stateLeaf[0],
+          transition.input.stateLeaf[1],
+          publicFields.signaturePubKeyHash,
+          'signaturePubKeyHash',
+        ),
+        signature_r8_hash: hash2Claim(
+          transition.input.cmdSigR8[0],
+          transition.input.cmdSigR8[1],
+          publicFields.signatureR8Hash,
+          'signatureR8Hash',
+        ),
+        packed_command_hash: hash5Claim(
+          packedHashInputs,
+          publicFields.packedCommandHash,
+          'packedCommandHash',
+        ),
+        message_hash: hash13Claim(
+          messagePreimage(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          processMessageHash(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          `messageHash${messageIndex}`,
+        ),
+        state_decrypt: buildProcessOneStateDecryptWitness(transition, messageIndex),
+        process_one: buildProcessOneStateTransitionWitnessFromEvaluation(transition),
+      },
+    },
+    full_witness: {
+      processMessages: rawInput,
+      messageIndex,
     },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
@@ -900,6 +1271,49 @@ function pushProcessMessageStepFields(args, fields) {
   pushU256(args, fields.expected_poll_id);
 }
 
+function pushProcessMessageCoordKeyFields(args, fields) {
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.coord_priv_key_hash);
+}
+
+function pushProcessMessageEcdhFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.coord_priv_key_hash);
+  pushU256(args, fields.enc_pub_key_hash);
+  pushU256(args, fields.shared_key_hash);
+}
+
+function pushProcessMessageSignatureFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.pub_key_hash);
+  pushU256(args, fields.r8_hash);
+  pushU256(args, fields.packed_command_hash);
+  pushU256(args, fields.cmd_sig_s);
+  pushU256(args, fields.is_signature_valid);
+}
+
+function pushProcessMessageStepCoreFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.packed_vals);
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.coord_priv_key_hash);
+  pushU256(args, fields.previous_message_hash);
+  pushU256(args, fields.next_message_hash);
+  pushU256(args, fields.current_state_root);
+  pushU256(args, fields.new_state_root);
+  pushU256(args, fields.current_state_commitment);
+  pushU256(args, fields.new_state_commitment);
+  pushU256(args, fields.active_state_root);
+  pushU256(args, fields.expected_poll_id);
+  pushU256(args, fields.enc_pub_key_hash);
+  pushU256(args, fields.shared_key_hash);
+  pushU256(args, fields.signature_pub_key_hash);
+  pushU256(args, fields.signature_r8_hash);
+  pushU256(args, fields.packed_command_hash);
+  pushU256(args, fields.cmd_sig_s);
+  pushU256(args, fields.is_signature_valid);
+}
+
 function pushProcessMessagesWitness(args, witness) {
   pushU256(args, witness.is_quadratic_cost);
   pushU256(args, witness.num_signups);
@@ -1037,6 +1451,56 @@ function pushProcessMessageStepWithEcdhSignatureWitness(args, witness) {
   pushProcessOneStateTransitionWitness(args, witness.process_one);
 }
 
+function pushProcessMessageCoordKeyWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.coord_pub_key);
+  pushBabyjubScalarMulWitness(args, witness.coord_pub_key_scalar_mul);
+  pushHash2Claim(args, witness.coord_pub_key_hash);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+}
+
+function pushProcessMessageEcdhWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.enc_pub_key);
+  pushBabyjubScalarMulWitness(args, witness.ecdh);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+  pushHash2Claim(args, witness.enc_pub_key_hash);
+  pushHash2Claim(args, witness.shared_key_hash);
+}
+
+function pushProcessMessageSignatureWitness(args, witness) {
+  pushVector2(args, witness.pub_key);
+  pushVector2(args, witness.r8);
+  pushU256(args, witness.s);
+  pushVector3(args, witness.packed_command);
+  pushBabyjubPoseidonSignatureWitness(args, witness.signature);
+  pushHash2Claim(args, witness.pub_key_hash);
+  pushHash2Claim(args, witness.r8_hash);
+  pushHash5Claim(args, witness.packed_command_hash);
+}
+
+function pushProcessMessageStepCoreWitness(args, witness) {
+  pushU256(args, witness.is_quadratic_cost);
+  pushU256(args, witness.num_signups);
+  pushU256(args, witness.max_vote_options);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector10(args, witness.msg);
+  pushU256(args, witness.coord_priv_key);
+  pushU256(args, witness.current_state_salt);
+  pushU256(args, witness.new_state_salt);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+  pushHash2Claim(args, witness.current_state_commitment);
+  pushHash2Claim(args, witness.new_state_commitment);
+  pushHash2Claim(args, witness.enc_pub_key_hash);
+  pushHash2Claim(args, witness.shared_key_hash);
+  pushHash2Claim(args, witness.signature_pub_key_hash);
+  pushHash2Claim(args, witness.signature_r8_hash);
+  pushHash5Claim(args, witness.packed_command_hash);
+  pushHash13Claim(args, witness.message_hash);
+  pushElGamalDecryptWitness(args, witness.state_decrypt);
+  pushProcessOneStateTransitionWitness(args, witness.process_one);
+}
+
 function pushProcessMessagesStateTransitionWitness(args, witness) {
   pushU256(args, witness.current_state_root);
   pushU256(args, witness.new_state_root);
@@ -1115,6 +1579,34 @@ export function serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(
   const args = [];
   pushProcessMessageStepFields(args, cairoInput.program_input.fields);
   pushProcessMessageStepWithEcdhSignatureWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessMessageCoordKeyExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessMessageCoordKeyFields(args, cairoInput.program_input.fields);
+  pushProcessMessageCoordKeyWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessMessageEcdhExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessMessageEcdhFields(args, cairoInput.program_input.fields);
+  pushProcessMessageEcdhWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessMessageSignatureExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessMessageSignatureFields(args, cairoInput.program_input.fields);
+  pushProcessMessageSignatureWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessMessageStepCoreExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessMessageStepCoreFields(args, cairoInput.program_input.fields);
+  pushProcessMessageStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

@@ -16,6 +16,10 @@ Circuits:
   process-messages
   process-messages-boundary
   process-message-step
+  process-message-coord-key
+  process-message-ecdh
+  process-message-signature
+  process-message-step-core
   process-deactivate-boundary
   process-deactivate-step
   process-deactivate
@@ -24,9 +28,10 @@ Notes:
   - The legacy positional form runs only the tally proof.
   - tally requires an input JSON.
   - add-new-key, process-messages, process-messages-boundary,
-    process-message-step, and process-deactivate generate the current small
+    process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
-  - process-message-step and process-deactivate-step require --message-index
+  - process-message-step, process-message-ecdh, process-message-signature,
+    process-message-step-core, and process-deactivate-step require --message-index
     0..4 and prove one linked message step.
   - --all runs tally plus the three small synthetic circuit proofs.
 
@@ -55,6 +60,10 @@ prepare_circuit_name() {
     process-messages) echo "process-messages-stateful-ecdh-signature" ;;
     process-messages-boundary) echo "process-messages-boundary" ;;
     process-message-step) echo "process-message-step-ecdh-signature" ;;
+    process-message-coord-key) echo "process-message-coord-key" ;;
+    process-message-ecdh) echo "process-message-ecdh" ;;
+    process-message-signature) echo "process-message-signature" ;;
+    process-message-step-core) echo "process-message-step-core" ;;
     process-deactivate-boundary) echo "process-deactivate-boundary" ;;
     process-deactivate-step) echo "process-deactivate-step" ;;
     process-deactivate) echo "process-deactivate-stateful" ;;
@@ -69,6 +78,10 @@ executable_name() {
     process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
     process-messages-boundary) echo "process_messages_boundary" ;;
     process-message-step) echo "process_message_step_with_ecdh_signature" ;;
+    process-message-coord-key) echo "process_message_coord_key" ;;
+    process-message-ecdh) echo "process_message_ecdh" ;;
+    process-message-signature) echo "process_message_signature" ;;
+    process-message-step-core) echo "process_message_step_core" ;;
     process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
     process-deactivate-step) echo "process_deactivate_message_step" ;;
     process-deactivate) echo "process_deactivate_messages_stateful" ;;
@@ -78,7 +91,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|process-messages|process-messages-boundary|process-message-step|process-deactivate-boundary|process-deactivate-step|process-deactivate) return 0 ;;
+    add-new-key|process-messages|process-messages-boundary|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-step|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -144,7 +157,7 @@ run_one() {
     if can_generate_fixture "$circuit"; then
       input_path="$out_dir/$circuit-small-input.json"
       local fixture_circuit="$circuit"
-      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" ]]; then
+      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
         fixture_circuit="process-messages"
       elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" ]]; then
         fixture_circuit="process-deactivate"
@@ -166,7 +179,7 @@ run_one() {
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
 
-  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-deactivate-step" ]]; then
+  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-step-core" || "$circuit" == "process-deactivate-step" ]]; then
     if [[ -z "$message_index" ]]; then
       echo "$circuit requires --message-index" >&2
       exit 1

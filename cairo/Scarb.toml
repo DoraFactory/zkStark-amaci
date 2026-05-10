@@ -49,6 +49,22 @@ name = "process_message_step_with_ecdh_signature"
 function = "zkstark_amaci_tally::process_messages::process_message_step_with_ecdh_signature_main"
 
 [[target.executable]]
+name = "process_message_coord_key"
+function = "zkstark_amaci_tally::process_messages::process_message_coord_key_main"
+
+[[target.executable]]
+name = "process_message_ecdh"
+function = "zkstark_amaci_tally::process_messages::process_message_ecdh_main"
+
+[[target.executable]]
+name = "process_message_signature"
+function = "zkstark_amaci_tally::process_messages::process_message_signature_main"
+
+[[target.executable]]
+name = "process_message_step_core"
+function = "zkstark_amaci_tally::process_messages::process_message_step_core_main"
+
+[[target.executable]]
 name = "process_messages_state_transition"
 function = "zkstark_amaci_tally::process_messages::process_messages_state_transition_main"
 

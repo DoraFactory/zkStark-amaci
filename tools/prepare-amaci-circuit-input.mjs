@@ -6,10 +6,18 @@ import { evaluateTallyVotes } from '../src/tally/tally-votes.mjs';
 import { buildCairoTallyInput, serializeCairoExecutableArgs } from '../src/cairo-input.mjs';
 import {
   buildCairoProcessMessagesInput,
+  buildCairoProcessMessageCoordKeyInput,
+  buildCairoProcessMessageEcdhInput,
+  buildCairoProcessMessageSignatureInput,
+  buildCairoProcessMessageStepCoreInput,
   buildCairoProcessMessageStepWithEcdhSignatureInput,
   buildCairoProcessMessagesStatefulInput,
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
+  serializeCairoProcessMessageCoordKeyExecutableArgs,
+  serializeCairoProcessMessageEcdhExecutableArgs,
+  serializeCairoProcessMessageSignatureExecutableArgs,
+  serializeCairoProcessMessageStepCoreExecutableArgs,
   serializeCairoProcessMessagesExecutableArgs,
   serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
   serializeCairoProcessMessagesStatefulExecutableArgs,
@@ -79,6 +87,36 @@ const PREPARERS = {
         evaluated,
       ),
     serialize: serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-coord-key': {
+    executable: 'process_message_coord_key',
+    evaluate: evaluateProcessMessagesStateful,
+    build: buildCairoProcessMessageCoordKeyInput,
+    serialize: serializeCairoProcessMessageCoordKeyExecutableArgs,
+  },
+  'process-message-ecdh': {
+    executable: 'process_message_ecdh',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildCairoProcessMessageEcdhInput(input, options.messageIndex, evaluated),
+    serialize: serializeCairoProcessMessageEcdhExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-signature': {
+    executable: 'process_message_signature',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildCairoProcessMessageSignatureInput(input, options.messageIndex, evaluated),
+    serialize: serializeCairoProcessMessageSignatureExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-step-core': {
+    executable: 'process_message_step_core',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildCairoProcessMessageStepCoreInput(input, options.messageIndex, evaluated),
+    serialize: serializeCairoProcessMessageStepCoreExecutableArgs,
     requiresMessageIndex: true,
   },
   'add-new-key': {

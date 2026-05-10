@@ -2,7 +2,11 @@ import {
   ADD_NEW_KEY_CIRCUIT_ID,
   PROCESS_DEACTIVATE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
+  PROCESS_MESSAGE_COORD_KEY_CIRCUIT_ID,
+  PROCESS_MESSAGE_ECDH_CIRCUIT_ID,
+  PROCESS_MESSAGE_SIGNATURE_CIRCUIT_ID,
   PROCESS_MESSAGE_STEP_CIRCUIT_ID,
+  PROCESS_MESSAGE_STEP_CORE_CIRCUIT_ID,
   PROCESS_MESSAGES_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
   PUBLIC_OUTPUT_VERSION,
@@ -121,6 +125,156 @@ export function canonicalProcessMessageStepPublicOutput(
   pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
   pushU256(output, labels, 'active_state_root', fields.activeStateRoot);
   pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalProcessMessageCoordKeyPublicOutput(
+  fields,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'vote_option_tree_depth',
+    'message_batch_size',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_MESSAGE_COORD_KEY_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    BigInt(params.messageBatchSize),
+  ];
+
+  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
+  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalProcessMessageEcdhPublicOutput(
+  fields,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'vote_option_tree_depth',
+    'message_batch_size',
+    'message_index',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_MESSAGE_ECDH_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    BigInt(params.messageBatchSize),
+    BigInt(fields.messageIndex),
+  ];
+
+  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
+  pushU256(output, labels, 'enc_pub_key_hash', fields.encPubKeyHash);
+  pushU256(output, labels, 'shared_key_hash', fields.sharedKeyHash);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalProcessMessageSignaturePublicOutput(
+  fields,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'vote_option_tree_depth',
+    'message_batch_size',
+    'message_index',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_MESSAGE_SIGNATURE_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    BigInt(params.messageBatchSize),
+    BigInt(fields.messageIndex),
+  ];
+
+  pushU256(output, labels, 'pub_key_hash', fields.pubKeyHash);
+  pushU256(output, labels, 'r8_hash', fields.r8Hash);
+  pushU256(output, labels, 'packed_command_hash', fields.packedCommandHash);
+  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
+  pushU256(output, labels, 'is_signature_valid', fields.isSignatureValid);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalProcessMessageStepCorePublicOutput(
+  fields,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'vote_option_tree_depth',
+    'message_batch_size',
+    'message_index',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_MESSAGE_STEP_CORE_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    BigInt(params.messageBatchSize),
+    BigInt(fields.messageIndex),
+  ];
+
+  pushU256(output, labels, 'packed_vals', fields.packedVals);
+  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
+  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
+  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
+  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
+  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
+  pushU256(output, labels, 'new_state_root', fields.newStateRoot);
+  pushU256(output, labels, 'current_state_commitment', fields.currentStateCommitment);
+  pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
+  pushU256(output, labels, 'active_state_root', fields.activeStateRoot);
+  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
+  pushU256(output, labels, 'enc_pub_key_hash', fields.encPubKeyHash);
+  pushU256(output, labels, 'shared_key_hash', fields.sharedKeyHash);
+  pushU256(output, labels, 'signature_pub_key_hash', fields.signaturePubKeyHash);
+  pushU256(output, labels, 'signature_r8_hash', fields.signatureR8Hash);
+  pushU256(output, labels, 'packed_command_hash', fields.packedCommandHash);
+  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
+  pushU256(output, labels, 'is_signature_valid', fields.isSignatureValid);
 
   return {
     labels,

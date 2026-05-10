@@ -4,11 +4,19 @@ import { TREE_ARITY } from '../src/constants.mjs';
 import { joinU128Pair, processMessagesInputHash } from '../src/compat/encoding.mjs';
 import { hash5, hash10, hashLeftRight } from '../src/compat/poseidon.mjs';
 import {
+  buildCairoProcessMessageCoordKeyInput,
+  buildCairoProcessMessageEcdhInput,
+  buildCairoProcessMessageSignatureInput,
+  buildCairoProcessMessageStepCoreInput,
   buildCairoProcessMessageStepWithEcdhSignatureInput,
   buildCairoProcessMessagesStateTransitionInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulInput,
+  serializeCairoProcessMessageCoordKeyExecutableArgs,
+  serializeCairoProcessMessageEcdhExecutableArgs,
+  serializeCairoProcessMessageSignatureExecutableArgs,
+  serializeCairoProcessMessageStepCoreExecutableArgs,
   serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
   serializeCairoProcessMessagesStateTransitionExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
@@ -445,6 +453,41 @@ test('builds Cairo executable arguments for linked ProcessMessages step proof', 
   assert.equal(cairoInput.publicFields.newStateCommitment, evaluated.publicFields.newStateCommitment);
   assert.ok(args.length > 10000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('builds Cairo executable arguments for deeply split ProcessMessages proofs', () => {
+  const input = buildStatefulEcdhSignatureFixture();
+  const evaluated = evaluateProcessMessagesStateful(input);
+  const coordKey = buildCairoProcessMessageCoordKeyInput(input, evaluated);
+  const ecdh = buildCairoProcessMessageEcdhInput(input, 3, evaluated);
+  const signature = buildCairoProcessMessageSignatureInput(input, 3, evaluated);
+  const core = buildCairoProcessMessageStepCoreInput(input, 3, evaluated);
+  const coordArgs = serializeCairoProcessMessageCoordKeyExecutableArgs(coordKey);
+  const ecdhArgs = serializeCairoProcessMessageEcdhExecutableArgs(ecdh);
+  const signatureArgs = serializeCairoProcessMessageSignatureExecutableArgs(signature);
+  const coreArgs = serializeCairoProcessMessageStepCoreExecutableArgs(core);
+
+  assert.equal(coordKey.public_output.length, 10);
+  assert.equal(ecdh.public_output.length, 13);
+  assert.equal(signature.public_output.length, 17);
+  assert.equal(core.public_output.length, 43);
+  assert.equal(ecdh.publicFields.messageIndex, 3n);
+  assert.equal(signature.publicFields.messageIndex, 3n);
+  assert.equal(core.publicFields.messageIndex, 3n);
+  assert.equal(coordKey.publicFields.coordPrivKeyHash, ecdh.publicFields.coordPrivKeyHash);
+  assert.equal(coordKey.publicFields.coordPrivKeyHash, core.publicFields.coordPrivKeyHash);
+  assert.equal(ecdh.publicFields.encPubKeyHash, core.publicFields.encPubKeyHash);
+  assert.equal(ecdh.publicFields.sharedKeyHash, core.publicFields.sharedKeyHash);
+  assert.equal(signature.publicFields.pubKeyHash, core.publicFields.signaturePubKeyHash);
+  assert.equal(signature.publicFields.r8Hash, core.publicFields.signatureR8Hash);
+  assert.equal(signature.publicFields.packedCommandHash, core.publicFields.packedCommandHash);
+  assert.equal(signature.publicFields.cmdSigS, core.publicFields.cmdSigS);
+  assert.equal(signature.publicFields.isSignatureValid, core.publicFields.isSignatureValid);
+  assert.ok(coordArgs.length < ecdhArgs.length);
+  assert.ok(coreArgs.length < serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(
+    buildCairoProcessMessageStepWithEcdhSignatureInput(input, 3, evaluated),
+  ).length);
+  assert.ok([...coordArgs, ...ecdhArgs, ...signatureArgs, ...coreArgs].every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
 test('rejects a stateful ProcessMessages signature witness that does not match isSignatureValid', () => {

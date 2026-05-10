@@ -29,6 +29,29 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-coord-key': {
+    prepareCircuit: 'process-message-coord-key',
+    executable: 'process_message_coord_key',
+    synthetic: true,
+  },
+  'process-message-ecdh': {
+    prepareCircuit: 'process-message-ecdh',
+    executable: 'process_message_ecdh',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-message-signature': {
+    prepareCircuit: 'process-message-signature',
+    executable: 'process_message_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-message-step-core': {
+    prepareCircuit: 'process-message-step-core',
+    executable: 'process_message_step_core',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate': {
     prepareCircuit: 'process-deactivate-stateful',
     executable: 'process_deactivate_messages_stateful',
@@ -52,7 +75,7 @@ Circuits:
 Options:
   --out-dir <path>      Directory for generated input, Cairo args, stdout, and metadata.
   --timeout-ms <n>      scarb execute timeout in milliseconds. Default: 300000.
-  --message-index <n>   Message index for process-message-step or process-deactivate-step. Default: 0.
+  --message-index <n>   Message index for process-message-* or process-deactivate-step. Default: 0.
   --no-resource-usage   Do not pass --print-resource-usage to scarb execute.
 
 If input.json is omitted for add-new-key, process-messages, or process-deactivate,
@@ -127,7 +150,7 @@ function ensureInput(args, circuit, outDir) {
     throw new Error(`input.json is required for ${args.circuit}`);
   }
   const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
-  const syntheticCircuit = args.circuit === 'process-message-step'
+  const syntheticCircuit = args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
     ? 'process-messages'
     : args.circuit === 'process-deactivate-step'
       ? 'process-deactivate'

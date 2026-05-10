@@ -3,16 +3,22 @@ use crate::babyjub::{
     babyjub_base8, verify_babyjub_poseidon_signature, verify_babyjub_scalar_mul,
 };
 use crate::hash_gates::{
-    Hash13Claim, Hash2Claim, Sha256U256x8Claim, poseidon_hash13, poseidon_hash2,
-    sha256_u256x8_mod_bn254,
+    Hash13Claim, Hash2Claim, Hash5Claim, Sha256U256x8Claim, poseidon_hash13, poseidon_hash2,
+    poseidon_hash5, sha256_u256x8_mod_bn254,
 };
 use crate::poseidon_bn254::{
     POSEIDON5_ZERO_HASH, PoseidonT4State, field_sub_mod, poseidon2_hash, poseidon4_permutation,
     poseidon5_hash,
 };
 use crate::public_output::{
+    ProcessMessageCoordKeyPublicFields, ProcessMessageCoordKeyPublicOutput,
+    ProcessMessageEcdhPublicFields, ProcessMessageEcdhPublicOutput,
+    ProcessMessageSignaturePublicFields, ProcessMessageSignaturePublicOutput,
+    ProcessMessageStepCorePublicFields, ProcessMessageStepCorePublicOutput,
     ProcessMessageStepPublicFields, ProcessMessageStepPublicOutput, ProcessMessagesPublicFields,
-    ProcessMessagesPublicOutput, build_process_message_step_public_output,
+    ProcessMessagesPublicOutput, build_process_message_coord_key_public_output,
+    build_process_message_ecdh_public_output, build_process_message_signature_public_output,
+    build_process_message_step_core_public_output, build_process_message_step_public_output,
     build_process_messages_public_output,
 };
 use crate::types::{
@@ -31,6 +37,7 @@ pub const MAX_VOTE_OPTIONS: u256 = 5;
 pub const MAX_SIGNUPS: u256 = 25;
 pub const MAX_STATE_INDEX: u256 = 24;
 pub const MAX_VALID_VOTE_WEIGHT: u256 = 147946756881789319005730692170996259609;
+pub const COORD_PRIV_KEY_HASH_DOMAIN: u256 = 0x414d4143495f434f4f52445f50524956;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessMessagesHashTranscript {
@@ -176,6 +183,60 @@ pub struct ProcessMessageStepWithEcdhSignatureWitness {
     pub state_decrypt: ElGamalDecryptWitness,
     pub ecdh: BabyJubJubScalarMulWitness,
     pub signature: BabyJubJubPoseidonSignatureWitness,
+    pub process_one: ProcessOneStateTransitionWitness,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessMessageCoordKeyWitness {
+    pub coord_priv_key: u256,
+    pub coord_pub_key: U256x2,
+    pub coord_pub_key_scalar_mul: BabyJubJubScalarMulWitness,
+    pub coord_pub_key_hash: Hash2Claim,
+    pub coord_priv_key_hash: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessMessageEcdhWitness {
+    pub coord_priv_key: u256,
+    pub enc_pub_key: U256x2,
+    pub ecdh: BabyJubJubScalarMulWitness,
+    pub coord_priv_key_hash: Hash2Claim,
+    pub enc_pub_key_hash: Hash2Claim,
+    pub shared_key_hash: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessMessageSignatureWitness {
+    pub pub_key: U256x2,
+    pub r8: U256x2,
+    pub s: u256,
+    pub packed_command: U256x3,
+    pub signature: BabyJubJubPoseidonSignatureWitness,
+    pub pub_key_hash: Hash2Claim,
+    pub r8_hash: Hash2Claim,
+    pub packed_command_hash: Hash5Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessMessageStepCoreWitness {
+    pub is_quadratic_cost: u256,
+    pub num_signups: u256,
+    pub max_vote_options: u256,
+    pub enc_pub_key: U256x2,
+    pub msg: U256x10,
+    pub coord_priv_key: u256,
+    pub current_state_salt: u256,
+    pub new_state_salt: u256,
+    pub coord_priv_key_hash: Hash2Claim,
+    pub current_state_commitment: Hash2Claim,
+    pub new_state_commitment: Hash2Claim,
+    pub enc_pub_key_hash: Hash2Claim,
+    pub shared_key_hash: Hash2Claim,
+    pub signature_pub_key_hash: Hash2Claim,
+    pub signature_r8_hash: Hash2Claim,
+    pub packed_command_hash: Hash5Claim,
+    pub message_hash: Hash13Claim,
+    pub state_decrypt: ElGamalDecryptWitness,
     pub process_one: ProcessOneStateTransitionWitness,
 }
 
@@ -651,6 +712,185 @@ fn verify_process_message_step_with_ecdh_signature(
             witness.process_one.packed_command,
             witness.process_one.is_signature_valid,
         );
+        let new_state_root = process_one_chain_step(
+            fields.current_state_root,
+            witness.coord_priv_key,
+            fields.active_state_root,
+            witness.state_decrypt,
+            witness.process_one,
+        );
+        assert_u256_eq(new_state_root, fields.new_state_root);
+    }
+}
+
+fn coord_priv_key_hash(claim: Hash2Claim, coord_priv_key: u256) -> u256 {
+    poseidon_hash2(claim, coord_priv_key, COORD_PRIV_KEY_HASH_DOMAIN)
+}
+
+fn packed_command_hash(claim: Hash5Claim, packed_command: U256x3) -> u256 {
+    poseidon_hash5(
+        claim,
+        U256x5 {
+            v0: packed_command.v0,
+            v1: packed_command.v1,
+            v2: packed_command.v2,
+            v3: zero_u256(),
+            v4: zero_u256(),
+        },
+    )
+}
+
+fn verify_process_message_coord_key(
+    fields: ProcessMessageCoordKeyPublicFields, witness: ProcessMessageCoordKeyWitness,
+) {
+    assert_coord_pub_key_matches_private_key(
+        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
+    );
+    let coord_pub_key_hash = poseidon_hash2(
+        witness.coord_pub_key_hash, witness.coord_pub_key.v0, witness.coord_pub_key.v1,
+    );
+    assert_u256_eq(coord_pub_key_hash, fields.coord_pub_key_hash);
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+}
+
+fn verify_process_message_ecdh(
+    fields: ProcessMessageEcdhPublicFields, witness: ProcessMessageEcdhWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+    let enc_pub_key_hash = poseidon_hash2(
+        witness.enc_pub_key_hash, witness.enc_pub_key.v0, witness.enc_pub_key.v1,
+    );
+    assert_u256_eq(enc_pub_key_hash, fields.enc_pub_key_hash);
+
+    assert_u256_eq(witness.ecdh.scalar, witness.coord_priv_key);
+    assert_u256_eq(witness.ecdh.base.v0, witness.enc_pub_key.v0);
+    assert_u256_eq(witness.ecdh.base.v1, witness.enc_pub_key.v1);
+    let shared_key = verify_babyjub_scalar_mul(witness.ecdh);
+    let shared_key_hash = poseidon_hash2(witness.shared_key_hash, shared_key.v0, shared_key.v1);
+    assert_u256_eq(shared_key_hash, fields.shared_key_hash);
+}
+
+fn verify_process_message_signature(
+    fields: ProcessMessageSignaturePublicFields, witness: ProcessMessageSignatureWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    assert_bool_u256(fields.is_signature_valid);
+    let pub_key_hash = poseidon_hash2(witness.pub_key_hash, witness.pub_key.v0, witness.pub_key.v1);
+    assert_u256_eq(pub_key_hash, fields.pub_key_hash);
+    let r8_hash = poseidon_hash2(witness.r8_hash, witness.r8.v0, witness.r8.v1);
+    assert_u256_eq(r8_hash, fields.r8_hash);
+    let command_hash = packed_command_hash(witness.packed_command_hash, witness.packed_command);
+    assert_u256_eq(command_hash, fields.packed_command_hash);
+    assert_u256_eq(witness.s, fields.cmd_sig_s);
+    let valid = verify_babyjub_poseidon_signature(
+        witness.pub_key, witness.r8, witness.s, witness.packed_command, witness.signature,
+    );
+    assert_u256_eq(valid, fields.is_signature_valid);
+}
+
+fn assert_packed_core_vals(
+    fields: ProcessMessageStepCorePublicFields,
+    is_quadratic_cost: u256,
+    num_signups: u256,
+    max_vote_options: u256,
+) {
+    assert_bool_u256(is_quadratic_cost);
+    assert_u32(num_signups);
+    assert_u32(max_vote_options);
+    assert(max_vote_options <= MAX_VOTE_OPTIONS, 'BAD_MAX_VO');
+    assert(num_signups <= MAX_SIGNUPS, 'BAD_NUM_SIGNUPS');
+
+    let packed_vals = is_quadratic_cost * TWO_POW_64 + num_signups * TWO_POW_32 + max_vote_options;
+    assert_u256_eq(packed_vals, fields.packed_vals);
+}
+
+fn assert_process_message_step_core_claims(
+    fields: ProcessMessageStepCorePublicFields,
+    coord_priv_key: u256,
+    coord_priv_key_hash_claim: Hash2Claim,
+    enc_pub_key: U256x2,
+    enc_pub_key_hash_claim: Hash2Claim,
+    shared_key_hash_claim: Hash2Claim,
+    signature_pub_key_hash_claim: Hash2Claim,
+    signature_r8_hash_claim: Hash2Claim,
+    packed_command_hash_claim: Hash5Claim,
+    process_one: ProcessOneStateTransitionWitness,
+) {
+    let private_hash = coord_priv_key_hash(coord_priv_key_hash_claim, coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+    let enc_pub_key_hash = poseidon_hash2(enc_pub_key_hash_claim, enc_pub_key.v0, enc_pub_key.v1);
+    assert_u256_eq(enc_pub_key_hash, fields.enc_pub_key_hash);
+    let shared_key_hash = poseidon_hash2(
+        shared_key_hash_claim, process_one.shared_key.v0, process_one.shared_key.v1,
+    );
+    assert_u256_eq(shared_key_hash, fields.shared_key_hash);
+    let signature_pub_key_hash = poseidon_hash2(
+        signature_pub_key_hash_claim, process_one.state_leaf.v0, process_one.state_leaf.v1,
+    );
+    assert_u256_eq(signature_pub_key_hash, fields.signature_pub_key_hash);
+    let signature_r8_hash = poseidon_hash2(
+        signature_r8_hash_claim, process_one.cmd_sig_r8.v0, process_one.cmd_sig_r8.v1,
+    );
+    assert_u256_eq(signature_r8_hash, fields.signature_r8_hash);
+    let command_hash = packed_command_hash(packed_command_hash_claim, process_one.packed_command);
+    assert_u256_eq(command_hash, fields.packed_command_hash);
+    assert_u256_eq(process_one.cmd_sig_s, fields.cmd_sig_s);
+    assert_u256_eq(process_one.is_signature_valid, fields.is_signature_valid);
+}
+
+fn verify_process_message_step_core(
+    fields: ProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    assert_packed_core_vals(
+        fields, witness.is_quadratic_cost, witness.num_signups, witness.max_vote_options,
+    );
+    assert_process_message_step_core_claims(
+        fields,
+        witness.coord_priv_key,
+        witness.coord_priv_key_hash,
+        witness.enc_pub_key,
+        witness.enc_pub_key_hash,
+        witness.shared_key_hash,
+        witness.signature_pub_key_hash,
+        witness.signature_r8_hash,
+        witness.packed_command_hash,
+        witness.process_one,
+    );
+
+    if fields.message_index == 4 {
+        let current_state_commitment = poseidon_hash2(
+            witness.current_state_commitment, fields.current_state_root, witness.current_state_salt,
+        );
+        assert_u256_eq(current_state_commitment, fields.current_state_commitment);
+    }
+    if fields.message_index == 0 {
+        let new_state_commitment = poseidon_hash2(
+            witness.new_state_commitment, fields.new_state_root, witness.new_state_salt,
+        );
+        assert_u256_eq(new_state_commitment, fields.new_state_commitment);
+    }
+
+    assert_u256_eq(witness.process_one.current_state_root, fields.current_state_root);
+    assert_u256_eq(witness.process_one.active_state_root, fields.active_state_root);
+    assert_u256_eq(witness.process_one.is_quadratic_cost, witness.is_quadratic_cost);
+    assert_u256_eq(witness.process_one.num_signups, witness.num_signups);
+    assert_u256_eq(witness.process_one.max_vote_options, witness.max_vote_options);
+    assert_u256_eq(witness.process_one.expected_poll_id, fields.expected_poll_id);
+    assert_message_matches(witness.msg, witness.process_one.msg);
+
+    let next_message_hash = message_hash_or_empty(
+        witness.message_hash, witness.msg, witness.enc_pub_key, fields.previous_message_hash,
+    );
+    assert_u256_eq(next_message_hash, fields.next_message_hash);
+
+    if is_zero(witness.enc_pub_key.v0) {
+        assert_u256_eq(witness.process_one.is_valid, zero_u256());
+        assert_u256_eq(fields.current_state_root, fields.new_state_root);
+    } else {
         let new_state_root = process_one_chain_step(
             fields.current_state_root,
             witness.coord_priv_key,
@@ -1360,6 +1600,38 @@ pub fn process_message_step_with_ecdh_signature_main(
 ) -> ProcessMessageStepPublicOutput {
     verify_process_message_step_with_ecdh_signature(fields, witness);
     build_process_message_step_public_output(fields)
+}
+
+#[executable]
+pub fn process_message_coord_key_main(
+    fields: ProcessMessageCoordKeyPublicFields, witness: ProcessMessageCoordKeyWitness,
+) -> ProcessMessageCoordKeyPublicOutput {
+    verify_process_message_coord_key(fields, witness);
+    build_process_message_coord_key_public_output(fields)
+}
+
+#[executable]
+pub fn process_message_ecdh_main(
+    fields: ProcessMessageEcdhPublicFields, witness: ProcessMessageEcdhWitness,
+) -> ProcessMessageEcdhPublicOutput {
+    verify_process_message_ecdh(fields, witness);
+    build_process_message_ecdh_public_output(fields)
+}
+
+#[executable]
+pub fn process_message_signature_main(
+    fields: ProcessMessageSignaturePublicFields, witness: ProcessMessageSignatureWitness,
+) -> ProcessMessageSignaturePublicOutput {
+    verify_process_message_signature(fields, witness);
+    build_process_message_signature_public_output(fields)
+}
+
+#[executable]
+pub fn process_message_step_core_main(
+    fields: ProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+) -> ProcessMessageStepCorePublicOutput {
+    verify_process_message_step_core(fields, witness);
+    build_process_message_step_core_public_output(fields)
 }
 
 #[executable]

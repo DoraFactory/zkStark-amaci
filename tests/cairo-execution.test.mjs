@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 const runExecutionTests = process.env.RUN_CAIRO_EXECUTION_TESTS === '1';
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
-function runCircuit(circuit) {
+function runCircuit(circuit, options = {}) {
   const outDir = mkdtempSync(join(tmpdir(), `zkstark-amaci-${circuit}-execute-`));
   const result = spawnSync(
     process.execPath,
@@ -21,6 +21,7 @@ function runCircuit(circuit) {
       outDir,
       '--timeout-ms',
       '600000',
+      ...(options.messageIndex === undefined ? [] : ['--message-index', String(options.messageIndex)]),
     ],
     {
       cwd: projectRoot,
@@ -48,6 +49,21 @@ test(
   () => {
     const metadata = runCircuit('add-new-key');
     assert.equal(metadata.executable, 'add_new_key');
+  },
+);
+
+test(
+  'executes deeply split ProcessMessages Cairo programs with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const coordKey = runCircuit('process-message-coord-key');
+    const ecdh = runCircuit('process-message-ecdh', { messageIndex: 3 });
+    const signature = runCircuit('process-message-signature', { messageIndex: 3 });
+    const core = runCircuit('process-message-step-core', { messageIndex: 3 });
+    assert.equal(coordKey.executable, 'process_message_coord_key');
+    assert.equal(ecdh.executable, 'process_message_ecdh');
+    assert.equal(signature.executable, 'process_message_signature');
+    assert.equal(core.executable, 'process_message_step_core');
   },
 );
 
