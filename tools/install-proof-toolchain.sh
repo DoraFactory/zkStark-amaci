@@ -235,7 +235,7 @@ Toolchain installation complete.
 Next commands:
   npm test
   npm run test:cairo-execute
-  npm run prove:all-small
+  npm run prove:all-split-small
 
 If scarb is not found in a new shell, run:
   source ~/.profile

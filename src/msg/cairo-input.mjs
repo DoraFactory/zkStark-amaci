@@ -6,6 +6,7 @@ import {
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8, buildElGamalDecryptWitness } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
+import { canonicalProcessMessageStepPublicOutput } from '../public-output.mjs';
 import {
   evaluateProcessMessagesStateful,
   evaluateProcessMessagesStateTransitions,
@@ -472,6 +473,145 @@ export function buildCairoProcessOneWithEcdhSignatureInput(rawInput, ecdhInput, 
   };
 }
 
+function assertMessageIndex(messageIndex) {
+  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= 5) {
+    throw new Error('messageIndex must be an integer in [0, 4]');
+  }
+}
+
+function buildCoordPubKeyScalarMulInput(rawInput) {
+  if (rawInput.coordPrivKey === undefined) {
+    throw new Error('coordPrivKey is required to build coordinator public-key witness input');
+  }
+  const coordPubKeyCairoInput = buildCairoBabyjubScalarMulInput({
+    scalar: rawInput.coordPrivKey,
+    base: BABYJUB_BASE8.map((value) => value.toString()),
+  });
+  const [coordPubKeyX, coordPubKeyY] = coordPubKeyCairoInput.expected;
+  if (
+    coordPubKeyX !== BigInt(rawInput.coordPubKey[0]) ||
+    coordPubKeyY !== BigInt(rawInput.coordPubKey[1])
+  ) {
+    throw new Error('coordPrivKey does not match coordPubKey');
+  }
+  return coordPubKeyCairoInput;
+}
+
+export function buildCairoProcessMessageStepWithEcdhSignatureInput(
+  rawInput,
+  messageIndex,
+  evaluated,
+) {
+  assertMessageIndex(messageIndex);
+  const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    packedVals: result.publicFields.packedVals,
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    previousMessageHash: result.derived.messageHashChain[messageIndex],
+    nextMessageHash: result.derived.messageHashChain[messageIndex + 1],
+    currentStateRoot: transition.input.currentStateRoot,
+    newStateRoot: transition.derived.newStateRoot,
+    currentStateCommitment: result.publicFields.currentStateCommitment,
+    newStateCommitment: result.publicFields.newStateCommitment,
+    activeStateRoot: result.state.derived.activeStateRoot,
+    expectedPollId: result.publicFields.expectedPollId,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    packed_vals: splitObject(publicFields.packedVals, 'packedVals'),
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    previous_message_hash: splitObject(
+      publicFields.previousMessageHash,
+      'previousMessageHash',
+    ),
+    next_message_hash: splitObject(publicFields.nextMessageHash, 'nextMessageHash'),
+    current_state_root: splitObject(publicFields.currentStateRoot, 'currentStateRoot'),
+    new_state_root: splitObject(publicFields.newStateRoot, 'newStateRoot'),
+    current_state_commitment: splitObject(
+      publicFields.currentStateCommitment,
+      'currentStateCommitment',
+    ),
+    new_state_commitment: splitObject(publicFields.newStateCommitment, 'newStateCommitment'),
+    active_state_root: splitObject(publicFields.activeStateRoot, 'activeStateRoot'),
+    expected_poll_id: splitObject(publicFields.expectedPollId, 'expectedPollId'),
+  };
+  const coordPubKeyCairoInput = buildCoordPubKeyScalarMulInput(rawInput);
+  const ecdhCairoInput = buildCairoEcdhSharedKeyInput(ecdhInputForMessage(rawInput, messageIndex));
+  if (BigInt(rawInput.encPubKeys[messageIndex][0]) !== 0n) {
+    const [expectedX, expectedY] = ecdhCairoInput.expected;
+    if (expectedX !== transition.input.sharedKey[0] || expectedY !== transition.input.sharedKey[1]) {
+      throw new Error(`ECDH shared key does not match ProcessOne ${messageIndex} sharedKey witness`);
+    }
+  }
+  const signatureCairoInput = buildProcessOneSignatureInputForTransition(transition, messageIndex);
+  const publicOutput = canonicalProcessMessageStepPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        is_quadratic_cost: splitObject(result.derived.isQuadraticCost, 'isQuadraticCost'),
+        num_signups: splitObject(result.derived.numSignUps, 'numSignUps'),
+        max_vote_options: splitObject(result.derived.maxVoteOptions, 'maxVoteOptions'),
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        msg: splitVector10(rawInput.msgs[messageIndex], 'msg'),
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        current_state_salt: splitObject(rawInput.currentStateSalt, 'currentStateSalt'),
+        new_state_salt: splitObject(rawInput.newStateSalt, 'newStateSalt'),
+        coord_pub_key_scalar_mul: coordPubKeyCairoInput.program_input.witness,
+        coord_pub_key_hash: hash2Claim(
+          rawInput.coordPubKey[0],
+          rawInput.coordPubKey[1],
+          publicFields.coordPubKeyHash,
+          'coordPubKeyHash',
+        ),
+        current_state_commitment: hash2Claim(
+          rawInput.currentStateRoot,
+          rawInput.currentStateSalt,
+          publicFields.currentStateCommitment,
+          'currentStateCommitment',
+        ),
+        new_state_commitment: hash2Claim(
+          rawInput.newStateRoot,
+          rawInput.newStateSalt,
+          publicFields.newStateCommitment,
+          'newStateCommitment',
+        ),
+        message_hash: hash13Claim(
+          messagePreimage(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          processMessageHash(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          `messageHash${messageIndex}`,
+        ),
+        state_decrypt: buildProcessOneStateDecryptWitness(transition, messageIndex),
+        ecdh: ecdhCairoInput.program_input.witness,
+        signature: signatureCairoInput.program_input.witness,
+        process_one: buildProcessOneStateTransitionWitnessFromEvaluation(transition),
+      },
+    },
+    full_witness: {
+      processMessages: rawInput,
+      messageIndex,
+      ecdh: ecdhCairoInput.full_witness,
+      signature: signatureCairoInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
 export function buildCairoProcessMessagesStateTransitionInput(rawInput, evaluated) {
   const result = evaluated ?? evaluateProcessMessagesStateTransitions(rawInput);
   const witness = {
@@ -746,6 +886,20 @@ function pushProcessMessagesFields(args, fields) {
   pushU256(args, fields.input_hash);
 }
 
+function pushProcessMessageStepFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.packed_vals);
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.previous_message_hash);
+  pushU256(args, fields.next_message_hash);
+  pushU256(args, fields.current_state_root);
+  pushU256(args, fields.new_state_root);
+  pushU256(args, fields.current_state_commitment);
+  pushU256(args, fields.new_state_commitment);
+  pushU256(args, fields.active_state_root);
+  pushU256(args, fields.expected_poll_id);
+}
+
 function pushProcessMessagesWitness(args, witness) {
   pushU256(args, witness.is_quadratic_cost);
   pushU256(args, witness.num_signups);
@@ -862,6 +1016,27 @@ function pushProcessOneWithEcdhSignatureWitness(args, witness) {
   pushProcessOneStateTransitionWitness(args, witness.process_one);
 }
 
+function pushProcessMessageStepWithEcdhSignatureWitness(args, witness) {
+  pushU256(args, witness.is_quadratic_cost);
+  pushU256(args, witness.num_signups);
+  pushU256(args, witness.max_vote_options);
+  pushVector2(args, witness.coord_pub_key);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector10(args, witness.msg);
+  pushU256(args, witness.coord_priv_key);
+  pushU256(args, witness.current_state_salt);
+  pushU256(args, witness.new_state_salt);
+  pushBabyjubScalarMulWitness(args, witness.coord_pub_key_scalar_mul);
+  pushHash2Claim(args, witness.coord_pub_key_hash);
+  pushHash2Claim(args, witness.current_state_commitment);
+  pushHash2Claim(args, witness.new_state_commitment);
+  pushHash13Claim(args, witness.message_hash);
+  pushElGamalDecryptWitness(args, witness.state_decrypt);
+  pushBabyjubScalarMulWitness(args, witness.ecdh);
+  pushBabyjubPoseidonSignatureWitness(args, witness.signature);
+  pushProcessOneStateTransitionWitness(args, witness.process_one);
+}
+
 function pushProcessMessagesStateTransitionWitness(args, witness) {
   pushU256(args, witness.current_state_root);
   pushU256(args, witness.new_state_root);
@@ -933,6 +1108,13 @@ export function serializeCairoProcessOneWithSignatureExecutableArgs(cairoInput) 
 export function serializeCairoProcessOneWithEcdhSignatureExecutableArgs(cairoInput) {
   const args = [];
   pushProcessOneWithEcdhSignatureWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessMessageStepFields(args, cairoInput.program_input.fields);
+  pushProcessMessageStepWithEcdhSignatureWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

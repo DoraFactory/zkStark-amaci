@@ -6,10 +6,12 @@ import { evaluateTallyVotes } from '../src/tally/tally-votes.mjs';
 import { buildCairoTallyInput, serializeCairoExecutableArgs } from '../src/cairo-input.mjs';
 import {
   buildCairoProcessMessagesInput,
+  buildCairoProcessMessageStepWithEcdhSignatureInput,
   buildCairoProcessMessagesStatefulInput,
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
   serializeCairoProcessMessagesExecutableArgs,
+  serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
   serializeCairoProcessMessagesStatefulExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
@@ -25,8 +27,10 @@ import {
 } from '../src/add-new-key/cairo-input.mjs';
 import {
   buildCairoProcessDeactivateMessagesBoundaryInput,
+  buildCairoProcessDeactivateMessageStepInput,
   buildCairoProcessDeactivateMessagesStatefulInput,
   serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs,
+  serializeCairoProcessDeactivateMessageStepExecutableArgs,
   serializeCairoProcessDeactivateMessagesStatefulExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
@@ -65,6 +69,18 @@ const PREPARERS = {
     build: buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
     serialize: serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
   },
+  'process-message-step-ecdh-signature': {
+    executable: 'process_message_step_with_ecdh_signature',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildCairoProcessMessageStepWithEcdhSignatureInput(
+        input,
+        options.messageIndex,
+        evaluated,
+      ),
+    serialize: serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
+    requiresMessageIndex: true,
+  },
   'add-new-key': {
     executable: 'add_new_key',
     evaluate: evaluateAddNewKey,
@@ -76,6 +92,14 @@ const PREPARERS = {
     evaluate: evaluateProcessDeactivateMessages,
     build: buildCairoProcessDeactivateMessagesBoundaryInput,
     serialize: serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs,
+  },
+  'process-deactivate-step': {
+    executable: 'process_deactivate_message_step',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildCairoProcessDeactivateMessageStepInput(input, options.messageIndex, evaluated),
+    serialize: serializeCairoProcessDeactivateMessageStepExecutableArgs,
+    requiresMessageIndex: true,
   },
   'process-deactivate-stateful': {
     executable: 'process_deactivate_messages_stateful',
@@ -96,11 +120,19 @@ Options:
   --out <path>             Write JSON output to a file.
   --cairo-input-out <path> Write Cairo runner input JSON to a file.
   --cairo-args-out <path>  Write scarb execute --arguments-file JSON.
+  --message-index <n>      Message index for process-message-step-* circuits.
 `;
 }
 
 function parseArgs(argv) {
-  const args = { circuit: undefined, inputPath: undefined, out: undefined, cairoInputOut: undefined, cairoArgsOut: undefined };
+  const args = {
+    circuit: undefined,
+    inputPath: undefined,
+    out: undefined,
+    cairoInputOut: undefined,
+    cairoArgsOut: undefined,
+    messageIndex: undefined,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
@@ -114,6 +146,8 @@ function parseArgs(argv) {
       args.cairoInputOut = argv[++i];
     } else if (arg === '--cairo-args-out') {
       args.cairoArgsOut = argv[++i];
+    } else if (arg === '--message-index') {
+      args.messageIndex = Number(argv[++i]);
     } else if (!args.inputPath) {
       args.inputPath = arg;
     } else {
@@ -125,6 +159,12 @@ function parseArgs(argv) {
   }
   if (!args.inputPath) {
     throw new Error(`missing input path\n\n${usage()}`);
+  }
+  const preparer = PREPARERS[args.circuit];
+  if (preparer.requiresMessageIndex) {
+    if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex >= 5) {
+      throw new Error('--message-index must be an integer in [0, 4]');
+    }
   }
   return args;
 }
@@ -151,28 +191,42 @@ function hexFields(fields) {
   }));
 }
 
+function outputFromCairoInput(cairoInput, evaluated) {
+  if (cairoInput.public_output_labels && cairoInput.public_output) {
+    const felts = cairoInput.public_output.map((value) => BigInt(value));
+    return {
+      labels: cairoInput.public_output_labels,
+      felts: felts.map(decimalize),
+      hexFelts: felts.map(bigintToHex),
+    };
+  }
+  if (evaluated.publicOutput === undefined) {
+    return undefined;
+  }
+  return {
+    labels: evaluated.publicOutput.labels,
+    felts: evaluated.publicOutput.decimalFelts,
+    hexFelts: evaluated.publicOutput.felts.map(bigintToHex),
+  };
+}
+
 const args = parseArgs(process.argv.slice(2));
 const preparer = PREPARERS[args.circuit];
 const inputPath = resolve(args.inputPath);
 const input = JSON.parse(readFileSync(inputPath, 'utf8'));
 const evaluated = preparer.evaluate(input);
-const cairoInput = preparer.build(input, evaluated);
+const cairoInput = preparer.build(input, evaluated, { messageIndex: args.messageIndex });
 const cairoExecutableArgs = preparer.serialize(cairoInput);
 
 const output = {
   circuit: args.circuit,
   executable: preparer.executable,
   inputPath,
+  messageIndex: args.messageIndex,
   params: evaluated.params,
   publicFields: serializeBigInts(evaluated.publicFields ?? {}),
   publicFieldsHex: hexFields(evaluated.publicFields ?? {}),
-  publicOutput: evaluated.publicOutput === undefined
-    ? undefined
-    : {
-      labels: evaluated.publicOutput.labels,
-      felts: evaluated.publicOutput.decimalFelts,
-      hexFelts: evaluated.publicOutput.felts.map(bigintToHex),
-    },
+  publicOutput: outputFromCairoInput(cairoInput, evaluated),
   cairoInput,
   cairoExecutableArgs,
   derived: serializeBigInts(evaluated.derived ?? {}),
@@ -186,9 +240,12 @@ if (args.out) {
 }
 
 if (args.cairoInputOut) {
-  writeFileSync(resolve(args.cairoInputOut), `${JSON.stringify(cairoInput, null, 2)}\n`);
+  writeFileSync(resolve(args.cairoInputOut), `${JSON.stringify(serializeBigInts(cairoInput), null, 2)}\n`);
 }
 
 if (args.cairoArgsOut) {
-  writeFileSync(resolve(args.cairoArgsOut), `${JSON.stringify(cairoExecutableArgs, null, 2)}\n`);
+  writeFileSync(
+    resolve(args.cairoArgsOut),
+    `${JSON.stringify(serializeBigInts(cairoExecutableArgs), null, 2)}\n`,
+  );
 }

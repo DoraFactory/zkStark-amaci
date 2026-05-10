@@ -11,7 +11,9 @@ use crate::poseidon_bn254::{
     poseidon5_hash,
 };
 use crate::public_output::{
-    ProcessMessagesPublicFields, ProcessMessagesPublicOutput, build_process_messages_public_output,
+    ProcessMessageStepPublicFields, ProcessMessageStepPublicOutput, ProcessMessagesPublicFields,
+    ProcessMessagesPublicOutput, build_process_message_step_public_output,
+    build_process_messages_public_output,
 };
 use crate::types::{
     U256x10, U256x2, U256x3, U256x4, U256x5, U256x7, U256x8, assert_u256_eq, is_zero,
@@ -150,6 +152,28 @@ pub struct ProcessOneWithSignatureWitness {
 
 #[derive(Drop, Serde)]
 pub struct ProcessOneWithEcdhSignatureWitness {
+    pub ecdh: BabyJubJubScalarMulWitness,
+    pub signature: BabyJubJubPoseidonSignatureWitness,
+    pub process_one: ProcessOneStateTransitionWitness,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessMessageStepWithEcdhSignatureWitness {
+    pub is_quadratic_cost: u256,
+    pub num_signups: u256,
+    pub max_vote_options: u256,
+    pub coord_pub_key: U256x2,
+    pub enc_pub_key: U256x2,
+    pub msg: U256x10,
+    pub coord_priv_key: u256,
+    pub current_state_salt: u256,
+    pub new_state_salt: u256,
+    pub coord_pub_key_scalar_mul: BabyJubJubScalarMulWitness,
+    pub coord_pub_key_hash: Hash2Claim,
+    pub current_state_commitment: Hash2Claim,
+    pub new_state_commitment: Hash2Claim,
+    pub message_hash: Hash13Claim,
+    pub state_decrypt: ElGamalDecryptWitness,
     pub ecdh: BabyJubJubScalarMulWitness,
     pub signature: BabyJubJubPoseidonSignatureWitness,
     pub process_one: ProcessOneStateTransitionWitness,
@@ -524,6 +548,22 @@ fn assert_signature_matches_process_one(
     assert_u256_eq(is_signature_valid, signature_valid);
 }
 
+fn assert_signature_matches_process_one_if_nonempty(
+    enc_pub_key: U256x2,
+    signature: BabyJubJubPoseidonSignatureWitness,
+    pub_key: U256x2,
+    cmd_sig_r8: U256x2,
+    cmd_sig_s: u256,
+    packed_command: U256x3,
+    is_signature_valid: u256,
+) {
+    if !is_zero(enc_pub_key.v0) {
+        assert_signature_matches_process_one(
+            signature, pub_key, cmd_sig_r8, cmd_sig_s, packed_command, is_signature_valid,
+        );
+    }
+}
+
 fn process_one_with_signature(witness: ProcessOneWithSignatureWitness) -> u256 {
     let process_one = witness.process_one;
     assert_signature_matches_process_one(
@@ -551,6 +591,75 @@ fn process_one_with_ecdh_signature(witness: ProcessOneWithEcdhSignatureWitness) 
         process_one.is_signature_valid,
     );
     process_one_state_transition(process_one)
+}
+
+fn verify_process_message_step_with_ecdh_signature(
+    fields: ProcessMessageStepPublicFields, witness: ProcessMessageStepWithEcdhSignatureWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    assert_packed_step_vals(
+        fields, witness.is_quadratic_cost, witness.num_signups, witness.max_vote_options,
+    );
+    assert_coord_pub_key_matches_private_key(
+        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
+    );
+    let coord_pub_key_hash = poseidon_hash2(
+        witness.coord_pub_key_hash, witness.coord_pub_key.v0, witness.coord_pub_key.v1,
+    );
+    assert_u256_eq(coord_pub_key_hash, fields.coord_pub_key_hash);
+    if fields.message_index == 4 {
+        let current_state_commitment = poseidon_hash2(
+            witness.current_state_commitment, fields.current_state_root, witness.current_state_salt,
+        );
+        assert_u256_eq(current_state_commitment, fields.current_state_commitment);
+    }
+    if fields.message_index == 0 {
+        let new_state_commitment = poseidon_hash2(
+            witness.new_state_commitment, fields.new_state_root, witness.new_state_salt,
+        );
+        assert_u256_eq(new_state_commitment, fields.new_state_commitment);
+    }
+
+    assert_u256_eq(witness.process_one.current_state_root, fields.current_state_root);
+    assert_u256_eq(witness.process_one.active_state_root, fields.active_state_root);
+    assert_u256_eq(witness.process_one.is_quadratic_cost, witness.is_quadratic_cost);
+    assert_u256_eq(witness.process_one.num_signups, witness.num_signups);
+    assert_u256_eq(witness.process_one.max_vote_options, witness.max_vote_options);
+    assert_u256_eq(witness.process_one.expected_poll_id, fields.expected_poll_id);
+    assert_message_matches(witness.msg, witness.process_one.msg);
+
+    let next_message_hash = message_hash_or_empty(
+        witness.message_hash, witness.msg, witness.enc_pub_key, fields.previous_message_hash,
+    );
+    assert_u256_eq(next_message_hash, fields.next_message_hash);
+
+    if is_zero(witness.enc_pub_key.v0) {
+        assert_u256_eq(witness.process_one.is_valid, zero_u256());
+        assert_u256_eq(fields.current_state_root, fields.new_state_root);
+    } else {
+        assert_ecdh_matches_process_one(
+            witness.coord_priv_key,
+            witness.enc_pub_key,
+            witness.ecdh,
+            witness.process_one.shared_key,
+        );
+        assert_signature_matches_process_one(
+            witness.signature,
+            U256x2 { v0: witness.process_one.state_leaf.v0, v1: witness.process_one.state_leaf.v1 },
+            witness.process_one.cmd_sig_r8,
+            witness.process_one.cmd_sig_s,
+            witness.process_one.packed_command,
+            witness.process_one.is_signature_valid,
+        );
+        let new_state_root = process_one_chain_step(
+            fields.current_state_root,
+            witness.coord_priv_key,
+            fields.active_state_root,
+            witness.state_decrypt,
+            witness.process_one,
+        );
+        assert_u256_eq(new_state_root, fields.new_state_root);
+    }
 }
 
 fn assert_ecdh_matches_process_one(
@@ -600,6 +709,31 @@ fn process_one_chain_step(
     process_one_state_transition(process_one)
 }
 
+fn process_one_bound_chain_step(
+    current_state_root: u256,
+    coord_priv_key: u256,
+    active_state_root: u256,
+    state_decrypt: ElGamalDecryptWitness,
+    process_one: ProcessOneStateTransitionWitness,
+    enc_pub_key: U256x2,
+) -> u256 {
+    assert_u256_eq(process_one.current_state_root, current_state_root);
+    assert_u256_eq(process_one.active_state_root, active_state_root);
+    if is_zero(enc_pub_key.v0) {
+        assert_u256_eq(process_one.is_valid, zero_u256());
+        current_state_root
+    } else {
+        let decryption_is_odd = assert_elgamal_decrypt(
+            state_decrypt,
+            coord_priv_key,
+            U256x2 { v0: process_one.state_leaf.v5, v1: process_one.state_leaf.v6 },
+            U256x2 { v0: process_one.state_leaf.v7, v1: process_one.state_leaf.v8 },
+        );
+        assert_u256_eq(process_one.is_decryption_active, bool_to_u256(!decryption_is_odd));
+        process_one_state_transition(process_one)
+    }
+}
+
 fn process_messages_state_transition(witness: ProcessMessagesStateTransitionWitness) -> u256 {
     let root_4 = process_one_chain_step(
         witness.current_state_root,
@@ -635,6 +769,53 @@ fn process_messages_state_transition(witness: ProcessMessagesStateTransitionWitn
         witness.active_state_root,
         witness.state_decrypt_0,
         witness.process_one_0,
+    );
+    assert_u256_eq(root_0, witness.new_state_root);
+    root_0
+}
+
+fn process_messages_bound_state_transition(
+    boundary: ProcessMessagesBoundaryWitness, witness: ProcessMessagesStateTransitionWitness,
+) -> u256 {
+    let root_4 = process_one_bound_chain_step(
+        witness.current_state_root,
+        witness.coord_priv_key,
+        witness.active_state_root,
+        witness.state_decrypt_4,
+        witness.process_one_4,
+        boundary.enc_pub_key_4,
+    );
+    let root_3 = process_one_bound_chain_step(
+        root_4,
+        witness.coord_priv_key,
+        witness.active_state_root,
+        witness.state_decrypt_3,
+        witness.process_one_3,
+        boundary.enc_pub_key_3,
+    );
+    let root_2 = process_one_bound_chain_step(
+        root_3,
+        witness.coord_priv_key,
+        witness.active_state_root,
+        witness.state_decrypt_2,
+        witness.process_one_2,
+        boundary.enc_pub_key_2,
+    );
+    let root_1 = process_one_bound_chain_step(
+        root_2,
+        witness.coord_priv_key,
+        witness.active_state_root,
+        witness.state_decrypt_1,
+        witness.process_one_1,
+        boundary.enc_pub_key_1,
+    );
+    let root_0 = process_one_bound_chain_step(
+        root_1,
+        witness.coord_priv_key,
+        witness.active_state_root,
+        witness.state_decrypt_0,
+        witness.process_one_0,
+        boundary.enc_pub_key_0,
     );
     assert_u256_eq(root_0, witness.new_state_root);
     root_0
@@ -692,15 +873,47 @@ fn assert_packed_vals(
     assert_u256_eq(packed_vals, fields.packed_vals);
 }
 
+fn assert_packed_step_vals(
+    fields: ProcessMessageStepPublicFields,
+    is_quadratic_cost: u256,
+    num_signups: u256,
+    max_vote_options: u256,
+) {
+    assert_bool_u256(is_quadratic_cost);
+    assert_u32(num_signups);
+    assert_u32(max_vote_options);
+    assert(max_vote_options <= MAX_VOTE_OPTIONS, 'BAD_MAX_VO');
+    assert(num_signups <= MAX_SIGNUPS, 'BAD_NUM_SIGNUPS');
+
+    let packed_vals = is_quadratic_cost * TWO_POW_64 + num_signups * TWO_POW_32 + max_vote_options;
+    assert_u256_eq(packed_vals, fields.packed_vals);
+}
+
+fn assert_valid_message_index(message_index: felt252) {
+    assert(
+        message_index == 0
+            || message_index == 1
+            || message_index == 2
+            || message_index == 3
+            || message_index == 4,
+        'BAD_MSG_INDEX',
+    );
+}
+
 fn message_hash_or_empty(
     claim: Hash13Claim, msg: U256x10, enc_pub_key: U256x2, prev_hash: u256,
 ) -> u256 {
-    let message_hash = poseidon_hash13(
-        claim, u256x10_first5(msg), u256x10_second5(msg), enc_pub_key.v0, enc_pub_key.v1, prev_hash,
-    );
     if is_zero(enc_pub_key.v0) {
         prev_hash
     } else {
+        let message_hash = poseidon_hash13(
+            claim,
+            u256x10_first5(msg),
+            u256x10_second5(msg),
+            enc_pub_key.v0,
+            enc_pub_key.v1,
+            prev_hash,
+        );
         message_hash
     }
 }
@@ -833,7 +1046,9 @@ fn verify_process_messages_stateful(
         witness.state_transition.process_one_4.max_vote_options,
         witness.state_transition.process_one_4.expected_poll_id,
     );
-    let new_state_root = process_messages_state_transition(witness.state_transition);
+    let new_state_root = process_messages_bound_state_transition(
+        witness.boundary, witness.state_transition,
+    );
     assert_u256_eq(new_state_root, witness.boundary.new_state_root);
 }
 
@@ -940,7 +1155,7 @@ fn verify_process_messages_stateful_with_ecdh(
         state_transition.process_one_4.shared_key,
     );
 
-    let new_state_root = process_messages_state_transition(state_transition);
+    let new_state_root = process_messages_bound_state_transition(boundary, state_transition);
     assert_u256_eq(new_state_root, boundary.new_state_root);
 }
 
@@ -974,7 +1189,8 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         witness.ecdh_0,
         state_transition.process_one_0.shared_key,
     );
-    assert_signature_matches_process_one(
+    assert_signature_matches_process_one_if_nonempty(
+        boundary.enc_pub_key_0,
         witness.signature_0,
         U256x2 {
             v0: state_transition.process_one_0.state_leaf.v0,
@@ -1003,7 +1219,8 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         witness.ecdh_1,
         state_transition.process_one_1.shared_key,
     );
-    assert_signature_matches_process_one(
+    assert_signature_matches_process_one_if_nonempty(
+        boundary.enc_pub_key_1,
         witness.signature_1,
         U256x2 {
             v0: state_transition.process_one_1.state_leaf.v0,
@@ -1032,7 +1249,8 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         witness.ecdh_2,
         state_transition.process_one_2.shared_key,
     );
-    assert_signature_matches_process_one(
+    assert_signature_matches_process_one_if_nonempty(
+        boundary.enc_pub_key_2,
         witness.signature_2,
         U256x2 {
             v0: state_transition.process_one_2.state_leaf.v0,
@@ -1061,7 +1279,8 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         witness.ecdh_3,
         state_transition.process_one_3.shared_key,
     );
-    assert_signature_matches_process_one(
+    assert_signature_matches_process_one_if_nonempty(
+        boundary.enc_pub_key_3,
         witness.signature_3,
         U256x2 {
             v0: state_transition.process_one_3.state_leaf.v0,
@@ -1090,7 +1309,8 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         witness.ecdh_4,
         state_transition.process_one_4.shared_key,
     );
-    assert_signature_matches_process_one(
+    assert_signature_matches_process_one_if_nonempty(
+        boundary.enc_pub_key_4,
         witness.signature_4,
         U256x2 {
             v0: state_transition.process_one_4.state_leaf.v0,
@@ -1102,7 +1322,7 @@ fn verify_process_messages_stateful_with_ecdh_signature(
         state_transition.process_one_4.is_signature_valid,
     );
 
-    let new_state_root = process_messages_state_transition(state_transition);
+    let new_state_root = process_messages_bound_state_transition(boundary, state_transition);
     assert_u256_eq(new_state_root, boundary.new_state_root);
 }
 
@@ -1132,6 +1352,14 @@ pub fn process_one_with_signature_main(witness: ProcessOneWithSignatureWitness) 
 #[executable]
 pub fn process_one_with_ecdh_signature_main(witness: ProcessOneWithEcdhSignatureWitness) -> u256 {
     process_one_with_ecdh_signature(witness)
+}
+
+#[executable]
+pub fn process_message_step_with_ecdh_signature_main(
+    fields: ProcessMessageStepPublicFields, witness: ProcessMessageStepWithEcdhSignatureWitness,
+) -> ProcessMessageStepPublicOutput {
+    verify_process_message_step_with_ecdh_signature(fields, witness);
+    build_process_message_step_public_output(fields)
 }
 
 #[executable]

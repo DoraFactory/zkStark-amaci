@@ -8,8 +8,9 @@ use crate::hash_gates::{
 };
 use crate::poseidon_bn254::{PoseidonT4State, field_sub_mod, poseidon4_permutation, poseidon5_hash};
 use crate::public_output::{
-    ProcessDeactivatePublicFields, ProcessDeactivatePublicOutput,
-    build_process_deactivate_public_output,
+    ProcessDeactivatePublicFields, ProcessDeactivatePublicOutput, ProcessDeactivateStepPublicFields,
+    ProcessDeactivateStepPublicOutput, build_process_deactivate_public_output,
+    build_process_deactivate_step_public_output,
 };
 use crate::types::{
     U256x10, U256x2, U256x3, U256x4, U256x5, U256x7, U256x8, assert_u256_eq, is_zero,
@@ -91,6 +92,21 @@ pub struct ProcessDeactivateMessagesStatefulWitness {
     pub command_2: ProcessDeactivateMessageCommandWitness,
     pub command_3: ProcessDeactivateMessageCommandWitness,
     pub command_4: ProcessDeactivateMessageCommandWitness,
+    pub new_deactivate_commitment: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessDeactivateMessageStepWitness {
+    pub coord_pub_key: U256x2,
+    pub msg: U256x10,
+    pub enc_pub_key: U256x2,
+    pub coord_priv_key: u256,
+    pub coord_pub_key_scalar_mul: BabyJubJubScalarMulWitness,
+    pub coord_pub_key_hash: Hash2Claim,
+    pub message_hash: Hash13Claim,
+    pub command: ProcessDeactivateMessageCommandWitness,
+    pub process_one: ProcessDeactivateOneWitness,
+    pub current_deactivate_commitment: Hash2Claim,
     pub new_deactivate_commitment: Hash2Claim,
 }
 
@@ -339,10 +355,10 @@ fn process_deactivate_message_hash(
 fn process_deactivate_message_hash_chain_step(
     msg: U256x10, enc_pub_key: U256x2, prev_hash: u256, claim: Hash13Claim,
 ) -> u256 {
-    let message_hash = process_deactivate_message_hash(claim, msg, enc_pub_key, prev_hash);
     if is_zero(msg.v0) {
         prev_hash
     } else {
+        let message_hash = process_deactivate_message_hash(claim, msg, enc_pub_key, prev_hash);
         message_hash
     }
 }
@@ -529,7 +545,14 @@ fn process_deactivate_messages_bound_chain_step(
 ) -> ProcessDeactivateOneOutput {
     let empty = is_zero(msg.v0);
     assert_u256_eq(process_one.is_empty_msg, bool_to_u256(empty));
-    if !empty {
+    if empty {
+        assert_u256_eq(process_one.current_active_state_root, expected_active_state_root);
+        assert_u256_eq(process_one.current_deactivate_root, expected_deactivate_root);
+        ProcessDeactivateOneOutput {
+            new_active_state_root: expected_active_state_root,
+            new_deactivate_root: expected_deactivate_root,
+        }
+    } else {
         assert_u256_eq(command.ecdh.scalar, expected_coord_priv_key);
         assert_u256_eq(command.ecdh.base.v0, enc_pub_key.v0);
         assert_u256_eq(command.ecdh.base.v1, enc_pub_key.v1);
@@ -544,16 +567,16 @@ fn process_deactivate_messages_bound_chain_step(
         let unpacked = unpack_command_data(process_one.packed_cmd.v0);
         assert_u256_eq(process_one.cmd_poll_id, unpacked.v0);
         assert_u256_eq(process_one.cmd_state_index, unpacked.v5);
+        process_deactivate_messages_chain_step(
+            process_one,
+            expected_coord_priv_key,
+            expected_current_state_root,
+            expected_active_state_root,
+            expected_deactivate_root,
+            expected_poll_id,
+            expected_deactivate_index,
+        )
     }
-    process_deactivate_messages_chain_step(
-        process_one,
-        expected_coord_priv_key,
-        expected_current_state_root,
-        expected_active_state_root,
-        expected_deactivate_root,
-        expected_poll_id,
-        expected_deactivate_index,
-    )
 }
 
 fn process_deactivate_messages_state_transition(
@@ -685,6 +708,70 @@ fn process_deactivate_messages_bound_state_transition(
     }
 }
 
+fn assert_valid_deactivate_message_index(message_index: felt252) {
+    assert(
+        message_index == 0
+            || message_index == 1
+            || message_index == 2
+            || message_index == 3
+            || message_index == 4,
+        'BAD_DEACT_MSG_INDEX',
+    );
+}
+
+fn verify_process_deactivate_message_step(
+    fields: ProcessDeactivateStepPublicFields, witness: ProcessDeactivateMessageStepWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    assert_deactivate_index(fields.deactivate_index);
+    assert_coord_pub_key_matches_private_key(
+        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
+    );
+    let coord_pub_key_hash = poseidon_hash2(
+        witness.coord_pub_key_hash, witness.coord_pub_key.v0, witness.coord_pub_key.v1,
+    );
+    assert_u256_eq(coord_pub_key_hash, fields.coord_pub_key_hash);
+
+    let next_message_hash = process_deactivate_message_hash_chain_step(
+        witness.msg, witness.enc_pub_key, fields.previous_message_hash, witness.message_hash,
+    );
+    assert_u256_eq(next_message_hash, fields.next_message_hash);
+
+    assert_u256_eq(witness.process_one.coord_priv_key, witness.coord_priv_key);
+    assert_u256_eq(witness.process_one.current_state_root, fields.current_state_root);
+    assert_u256_eq(witness.process_one.current_active_state_root, fields.current_active_state_root);
+    assert_u256_eq(witness.process_one.current_deactivate_root, fields.current_deactivate_root);
+    assert_u256_eq(witness.process_one.expected_poll_id, fields.expected_poll_id);
+    assert_u256_eq(witness.process_one.deactivate_index, fields.deactivate_index);
+
+    let current_deactivate_commitment = poseidon_hash2(
+        witness.current_deactivate_commitment,
+        fields.current_active_state_root,
+        fields.current_deactivate_root,
+    );
+    assert_u256_eq(current_deactivate_commitment, fields.current_deactivate_commitment);
+
+    let output = process_deactivate_messages_bound_chain_step(
+        witness.msg,
+        witness.enc_pub_key,
+        witness.command,
+        witness.process_one,
+        witness.coord_priv_key,
+        fields.current_state_root,
+        fields.current_active_state_root,
+        fields.current_deactivate_root,
+        fields.expected_poll_id,
+        fields.deactivate_index,
+    );
+    assert_u256_eq(output.new_active_state_root, fields.new_active_state_root);
+    assert_u256_eq(output.new_deactivate_root, fields.new_deactivate_root);
+
+    let new_deactivate_commitment = poseidon_hash2(
+        witness.new_deactivate_commitment, output.new_active_state_root, output.new_deactivate_root,
+    );
+    assert_u256_eq(new_deactivate_commitment, fields.new_deactivate_commitment);
+}
+
 #[executable]
 pub fn process_deactivate_one_main(
     witness: ProcessDeactivateOneWitness,
@@ -698,6 +785,14 @@ pub fn process_deactivate_messages_boundary_main(
 ) -> ProcessDeactivatePublicOutput {
     verify_process_deactivate_boundary(fields, witness);
     build_process_deactivate_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_message_step_main(
+    fields: ProcessDeactivateStepPublicFields, witness: ProcessDeactivateMessageStepWitness,
+) -> ProcessDeactivateStepPublicOutput {
+    verify_process_deactivate_message_step(fields, witness);
+    build_process_deactivate_step_public_output(fields)
 }
 
 #[executable]

@@ -7,20 +7,27 @@ usage() {
   cat <<'EOF'
 Usage:
   tools/run-cairo-proof.sh <tally-input.json> [out-dir]
-  tools/run-cairo-proof.sh --circuit <name> [--input <input.json>] [--out-dir <dir>]
+  tools/run-cairo-proof.sh --circuit <name> [--input <input.json>] [--out-dir <dir>] [--message-index <n>]
   tools/run-cairo-proof.sh --all --tally-input <tally-input.json> [--out-dir <dir>]
 
 Circuits:
   tally
   add-new-key
   process-messages
+  process-messages-boundary
+  process-message-step
+  process-deactivate-boundary
+  process-deactivate-step
   process-deactivate
 
 Notes:
   - The legacy positional form runs only the tally proof.
   - tally requires an input JSON.
-  - add-new-key, process-messages, and process-deactivate generate the current
-    small synthetic fixture when --input is omitted.
+  - add-new-key, process-messages, process-messages-boundary,
+    process-message-step, and process-deactivate generate the current small
+    synthetic fixture when --input is omitted.
+  - process-message-step and process-deactivate-step require --message-index
+    0..4 and prove one linked message step.
   - --all runs tally plus the three small synthetic circuit proofs.
 
 Flow per circuit:
@@ -46,6 +53,10 @@ prepare_circuit_name() {
     tally) echo "tally" ;;
     add-new-key) echo "add-new-key" ;;
     process-messages) echo "process-messages-stateful-ecdh-signature" ;;
+    process-messages-boundary) echo "process-messages-boundary" ;;
+    process-message-step) echo "process-message-step-ecdh-signature" ;;
+    process-deactivate-boundary) echo "process-deactivate-boundary" ;;
+    process-deactivate-step) echo "process-deactivate-step" ;;
     process-deactivate) echo "process-deactivate-stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -56,6 +67,10 @@ executable_name() {
     tally) echo "tally_votes" ;;
     add-new-key) echo "add_new_key" ;;
     process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
+    process-messages-boundary) echo "process_messages_boundary" ;;
+    process-message-step) echo "process_message_step_with_ecdh_signature" ;;
+    process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
+    process-deactivate-step) echo "process_deactivate_message_step" ;;
     process-deactivate) echo "process_deactivate_messages_stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -63,7 +78,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|process-messages|process-deactivate) return 0 ;;
+    add-new-key|process-messages|process-messages-boundary|process-message-step|process-deactivate-boundary|process-deactivate-step|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -89,12 +104,16 @@ write_metadata() {
   local cairo_args_json="${11}"
   local prove_log="${12}"
   local verify_log="${13}"
+  local message_index="${14}"
 
   printf '{\n' > "$metadata_json"
   printf '  "circuit": "%s",\n' "$circuit" >> "$metadata_json"
   printf '  "prepareCircuit": "%s",\n' "$prepare_circuit" >> "$metadata_json"
   printf '  "executable": "%s",\n' "$executable" >> "$metadata_json"
   printf '  "generatedInput": %s,\n' "$generated_input" >> "$metadata_json"
+  if [[ -n "$message_index" ]]; then
+    printf '  "messageIndex": %s,\n' "$message_index" >> "$metadata_json"
+  fi
   printf '  "inputPath": "%s",\n' "$input_path" >> "$metadata_json"
   printf '  "executionId": "%s",\n' "$execution_id" >> "$metadata_json"
   printf '  "proofJson": "%s",\n' "$proof_json" >> "$metadata_json"
@@ -110,6 +129,7 @@ run_one() {
   local circuit="$1"
   local input_path="$2"
   local out_dir="$3"
+  local message_index="${4:-}"
 
   local prepare_circuit
   local executable
@@ -123,7 +143,13 @@ run_one() {
   if [[ -z "$input_path" ]]; then
     if can_generate_fixture "$circuit"; then
       input_path="$out_dir/$circuit-small-input.json"
-      node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$circuit" --out "$input_path"
+      local fixture_circuit="$circuit"
+      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" ]]; then
+        fixture_circuit="process-messages"
+      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" ]]; then
+        fixture_circuit="process-deactivate"
+      fi
+      node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$fixture_circuit" --out "$input_path"
       generated_input=true
     else
       echo "$circuit requires --input" >&2
@@ -140,13 +166,30 @@ run_one() {
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
 
+  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-deactivate-step" ]]; then
+    if [[ -z "$message_index" ]]; then
+      echo "$circuit requires --message-index" >&2
+      exit 1
+    fi
+    if ! [[ "$message_index" =~ ^[0-4]$ ]]; then
+      echo "--message-index must be an integer in [0, 4]" >&2
+      exit 1
+    fi
+  fi
+
   echo "==> Preparing $circuit"
-  node "$ROOT_DIR/tools/prepare-amaci-circuit-input.mjs" \
-    --circuit "$prepare_circuit" \
-    "$input_path" \
-    --out "$prepared_json" \
-    --cairo-input-out "$cairo_input_json" \
+  local prepare_args=(
+    "$ROOT_DIR/tools/prepare-amaci-circuit-input.mjs"
+    --circuit "$prepare_circuit"
+    "$input_path"
+    --out "$prepared_json"
+    --cairo-input-out "$cairo_input_json"
     --cairo-args-out "$cairo_args_json"
+  )
+  if [[ -n "$message_index" ]]; then
+    prepare_args+=(--message-index "$message_index")
+  fi
+  node "${prepare_args[@]}"
 
   echo "==> Proving $circuit with executable $executable"
   (
@@ -182,7 +225,8 @@ run_one() {
       "$cairo_input_json" \
       "$cairo_args_json" \
       "$prove_log" \
-      "$verify_log"
+      "$verify_log" \
+      "$message_index"
   )
 
   echo "Proof metadata written to: $metadata_json"
@@ -210,6 +254,7 @@ CIRCUIT=""
 INPUT_PATH=""
 TALLY_INPUT=""
 OUT_DIR=""
+MESSAGE_INDEX=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -231,6 +276,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       OUT_DIR="${2:-}"
+      shift 2
+      ;;
+    --message-index)
+      MESSAGE_INDEX="${2:-}"
       shift 2
       ;;
     *)
@@ -272,4 +321,4 @@ if [[ -z "$CIRCUIT" ]]; then
   exit 1
 fi
 
-run_one "$CIRCUIT" "$INPUT_PATH" "${OUT_DIR:-$ROOT_DIR/target/cairo-proof/$CIRCUIT}"
+run_one "$CIRCUIT" "$INPUT_PATH" "${OUT_DIR:-$ROOT_DIR/target/cairo-proof/$CIRCUIT}" "$MESSAGE_INDEX"

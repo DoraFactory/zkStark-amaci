@@ -4,10 +4,12 @@ import { TREE_ARITY } from '../src/constants.mjs';
 import { joinU128Pair, processMessagesInputHash } from '../src/compat/encoding.mjs';
 import { hash5, hash10, hashLeftRight } from '../src/compat/poseidon.mjs';
 import {
+  buildCairoProcessMessageStepWithEcdhSignatureInput,
   buildCairoProcessMessagesStateTransitionInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulInput,
+  serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs,
   serializeCairoProcessMessagesStateTransitionExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhExecutableArgs,
@@ -423,6 +425,25 @@ test('builds Cairo executable arguments for stateful ProcessMessages with ECDH a
   assert.equal(args.length, 75937);
   assert.equal(evaluated.publicOutput.felts.length, 24);
   assert.equal(evaluated.derived.stateTransitionNewStateRoot.toString(), input.newStateRoot);
+  assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('builds Cairo executable arguments for linked ProcessMessages step proof', () => {
+  const input = buildStatefulEcdhSignatureFixture();
+  const evaluated = evaluateProcessMessagesStateful(input);
+  const cairoInput = buildCairoProcessMessageStepWithEcdhSignatureInput(input, 3, evaluated);
+  const args = serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(cairoInput);
+  const transition = evaluated.state.transitions[3];
+
+  assert.equal(cairoInput.public_output.length, 27);
+  assert.equal(cairoInput.publicFields.messageIndex, 3n);
+  assert.equal(cairoInput.publicFields.previousMessageHash, evaluated.derived.messageHashChain[3]);
+  assert.equal(cairoInput.publicFields.nextMessageHash, evaluated.derived.messageHashChain[4]);
+  assert.equal(cairoInput.publicFields.currentStateRoot, transition.input.currentStateRoot);
+  assert.equal(cairoInput.publicFields.newStateRoot, transition.derived.newStateRoot);
+  assert.equal(cairoInput.publicFields.currentStateCommitment, evaluated.publicFields.currentStateCommitment);
+  assert.equal(cairoInput.publicFields.newStateCommitment, evaluated.publicFields.newStateCommitment);
+  assert.ok(args.length > 10000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 

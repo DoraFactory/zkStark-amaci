@@ -136,6 +136,75 @@ The final `deactivateRoot_5` must equal public `newDeactivateRoot`, and
 `Poseidon(activeRoot_5, deactivateRoot_5)` must equal
 `newDeactivateCommitment`.
 
+## Split Proof Path
+
+For dense batches, the migration also exposes
+`process_deactivate_message_step`. This executable proves one deactivate
+message slot with public output containing:
+
+- `messageIndex`
+- `deactivateIndex`
+- `coordPubKeyHash`
+- `previousMessageHash`
+- `nextMessageHash`
+- `currentActiveStateRoot`
+- `currentDeactivateRoot`
+- `newActiveStateRoot`
+- `newDeactivateRoot`
+- `currentDeactivateCommitment`
+- `newDeactivateCommitment`
+- `currentStateRoot`
+- `expectedPollId`
+
+The relation checks:
+
+- `coordPrivKey` derives the boundary `coordPubKey`, and
+  `coordPubKeyHash == Poseidon(coordPubKey[0], coordPubKey[1])`.
+- The supplied `msg[10]` and `encPubKey[2]` advance
+  `previousMessageHash -> nextMessageHash` with the same empty-message rule as
+  the boundary.
+- Non-empty messages decrypt with the ECDH shared key and match the
+  `ProcessDeactivateOne` command fields.
+- `ProcessDeactivateOne` maps
+  `(currentActiveStateRoot, currentDeactivateRoot)` to
+  `(newActiveStateRoot, newDeactivateRoot)` at the public `deactivateIndex`.
+- `currentDeactivateCommitment` opens to the current active/deactivate roots,
+  and `newDeactivateCommitment` opens to the new active/deactivate roots.
+
+The intended proof composition is:
+
+```text
+1 boundary proof
+5 process-deactivate-step proofs
+```
+
+A wrapper or off-chain checker must chain the public outputs:
+
+```text
+boundary.batchStartHash == step0.previousMessageHash
+step0.nextMessageHash == step1.previousMessageHash
+...
+step4.nextMessageHash == boundary.batchEndHash
+
+boundary.currentDeactivateCommitment == step0.currentDeactivateCommitment
+boundary.newDeactivateCommitment == step4.newDeactivateCommitment
+boundary.newDeactivateRoot == step4.newDeactivateRoot
+
+step0.newActiveStateRoot == step1.currentActiveStateRoot
+step0.newDeactivateRoot == step1.currentDeactivateRoot
+...
+step3.newActiveStateRoot == step4.currentActiveStateRoot
+step3.newDeactivateRoot == step4.currentDeactivateRoot
+
+step1.deactivateIndex == step0.deactivateIndex + 1
+...
+step4.deactivateIndex == step3.deactivateIndex + 1
+```
+
+The split path lowers peak prover memory by proving one deactivate slot at a
+time, but the Starknet wrapper that verifies all six facts and enforces this
+chaining is still pending.
+
 ## Empty Slots
 
 For deactivate batches, empty slots are keyed by `msg[0] == 0`. The stateful

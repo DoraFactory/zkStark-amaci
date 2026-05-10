@@ -7,9 +7,11 @@ import { BABYJUB_BASE8, babyjubScalarMul, poseidonSignatureMessage } from '../sr
 import { packCommandData, poseidonEncryptWithoutCheck7 } from '../src/msg/process-one.mjs';
 import {
   buildCairoProcessDeactivateMessagesBoundaryInput,
+  buildCairoProcessDeactivateMessageStepInput,
   buildCairoProcessDeactivateMessagesStateTransitionInput,
   buildCairoProcessDeactivateMessagesStatefulInput,
   serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs,
+  serializeCairoProcessDeactivateMessageStepExecutableArgs,
   serializeCairoProcessDeactivateMessagesStateTransitionExecutableArgs,
   serializeCairoProcessDeactivateMessagesStatefulExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
@@ -387,6 +389,25 @@ test('builds Cairo executable arguments for stateful ProcessDeactivateMessages',
   assert.ok(args.length > 91000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.deepEqual(cairoInput.public_output, evaluated.publicOutput.decimalFelts);
+});
+
+test('builds Cairo executable arguments for linked ProcessDeactivateMessages step proof', () => {
+  const input = getStatefulFixture();
+  const evaluated = evaluateProcessDeactivateMessagesStateful(input);
+  const cairoInput = buildCairoProcessDeactivateMessageStepInput(input, 2, evaluated);
+  const args = serializeCairoProcessDeactivateMessageStepExecutableArgs(cairoInput);
+  const transition = evaluated.state.transitions[2];
+
+  assert.equal(cairoInput.public_output.length, 31);
+  assert.equal(cairoInput.publicFields.messageIndex, 2n);
+  assert.equal(cairoInput.publicFields.previousMessageHash, evaluated.boundary.derived.messageHashChain[2]);
+  assert.equal(cairoInput.publicFields.nextMessageHash, evaluated.boundary.derived.messageHashChain[3]);
+  assert.equal(cairoInput.publicFields.currentActiveStateRoot, transition.input.currentActiveStateRoot);
+  assert.equal(cairoInput.publicFields.currentDeactivateRoot, transition.input.currentDeactivateRoot);
+  assert.equal(cairoInput.publicFields.newActiveStateRoot, transition.derived.newActiveStateRoot);
+  assert.equal(cairoInput.publicFields.newDeactivateRoot, transition.derived.newDeactivateRoot);
+  assert.ok(args.length > 22000);
+  assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
 test('rejects tampered ProcessDeactivateMessages batch end hash', () => {

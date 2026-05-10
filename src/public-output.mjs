@@ -1,6 +1,8 @@
 import {
   ADD_NEW_KEY_CIRCUIT_ID,
   PROCESS_DEACTIVATE_CIRCUIT_ID,
+  PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
+  PROCESS_MESSAGE_STEP_CIRCUIT_ID,
   PROCESS_MESSAGES_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
   PUBLIC_OUTPUT_VERSION,
@@ -86,6 +88,47 @@ export function canonicalProcessMessagesPublicOutput(
   };
 }
 
+export function canonicalProcessMessageStepPublicOutput(
+  fields,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'vote_option_tree_depth',
+    'message_batch_size',
+    'message_index',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_MESSAGE_STEP_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    BigInt(params.messageBatchSize),
+    BigInt(fields.messageIndex),
+  ];
+
+  pushU256(output, labels, 'packed_vals', fields.packedVals);
+  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
+  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
+  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
+  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
+  pushU256(output, labels, 'new_state_root', fields.newStateRoot);
+  pushU256(output, labels, 'current_state_commitment', fields.currentStateCommitment);
+  pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
+  pushU256(output, labels, 'active_state_root', fields.activeStateRoot);
+  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
 export function canonicalAddNewKeyPublicOutput(fields, params = { stateTreeDepth: 2 }) {
   const labels = [
     'magic',
@@ -150,6 +193,49 @@ export function canonicalProcessDeactivatePublicOutput(
   pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
   pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
   pushU256(output, labels, 'input_hash', fields.inputHash);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalProcessDeactivateStepPublicOutput(
+  fields,
+  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
+) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'state_tree_depth',
+    'deactivate_tree_depth',
+    'message_batch_size',
+    'message_index',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    PUBLIC_OUTPUT_VERSION,
+    PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.deactivateTreeDepth),
+    BigInt(params.messageBatchSize),
+    BigInt(fields.messageIndex),
+  ];
+
+  pushU256(output, labels, 'deactivate_index', fields.deactivateIndex);
+  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
+  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
+  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
+  pushU256(output, labels, 'current_active_state_root', fields.currentActiveStateRoot);
+  pushU256(output, labels, 'current_deactivate_root', fields.currentDeactivateRoot);
+  pushU256(output, labels, 'new_active_state_root', fields.newActiveStateRoot);
+  pushU256(output, labels, 'new_deactivate_root', fields.newDeactivateRoot);
+  pushU256(output, labels, 'current_deactivate_commitment', fields.currentDeactivateCommitment);
+  pushU256(output, labels, 'new_deactivate_commitment', fields.newDeactivateCommitment);
+  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
+  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
 
   return {
     labels,

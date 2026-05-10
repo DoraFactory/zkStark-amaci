@@ -23,10 +23,22 @@ const CIRCUITS = Object.freeze({
     executable: 'process_messages_stateful_with_ecdh_signature',
     synthetic: true,
   },
+  'process-message-step': {
+    prepareCircuit: 'process-message-step-ecdh-signature',
+    executable: 'process_message_step_with_ecdh_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate': {
     prepareCircuit: 'process-deactivate-stateful',
     executable: 'process_deactivate_messages_stateful',
     synthetic: true,
+  },
+  'process-deactivate-step': {
+    prepareCircuit: 'process-deactivate-step',
+    executable: 'process_deactivate_message_step',
+    synthetic: true,
+    requiresMessageIndex: true,
   },
 });
 
@@ -40,6 +52,7 @@ Circuits:
 Options:
   --out-dir <path>      Directory for generated input, Cairo args, stdout, and metadata.
   --timeout-ms <n>      scarb execute timeout in milliseconds. Default: 300000.
+  --message-index <n>   Message index for process-message-step or process-deactivate-step. Default: 0.
   --no-resource-usage   Do not pass --print-resource-usage to scarb execute.
 
 If input.json is omitted for add-new-key, process-messages, or process-deactivate,
@@ -54,6 +67,7 @@ function parseArgs(argv) {
     outDir: undefined,
     timeoutMs: 300000,
     resourceUsage: true,
+    messageIndex: 0,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -66,6 +80,8 @@ function parseArgs(argv) {
       args.outDir = argv[++i];
     } else if (arg === '--timeout-ms') {
       args.timeoutMs = Number(argv[++i]);
+    } else if (arg === '--message-index') {
+      args.messageIndex = Number(argv[++i]);
     } else if (arg === '--no-resource-usage') {
       args.resourceUsage = false;
     } else if (!args.inputPath) {
@@ -79,6 +95,9 @@ function parseArgs(argv) {
   }
   if (!Number.isSafeInteger(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error('--timeout-ms must be a positive safe integer');
+  }
+  if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex >= 5) {
+    throw new Error('--message-index must be an integer in [0, 4]');
   }
   return args;
 }
@@ -108,7 +127,12 @@ function ensureInput(args, circuit, outDir) {
     throw new Error(`input.json is required for ${args.circuit}`);
   }
   const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
-  writeFileSync(inputPath, `${JSON.stringify(buildSmallSyntheticFixture(args.circuit), null, 2)}\n`);
+  const syntheticCircuit = args.circuit === 'process-message-step'
+    ? 'process-messages'
+    : args.circuit === 'process-deactivate-step'
+      ? 'process-deactivate'
+      : args.circuit;
+  writeFileSync(inputPath, `${JSON.stringify(buildSmallSyntheticFixture(syntheticCircuit), null, 2)}\n`);
   return { inputPath, generatedInput: true };
 }
 
@@ -138,6 +162,7 @@ const prepareResult = run(
     cairoInputJson,
     '--cairo-args-out',
     cairoArgsJson,
+    ...(circuit.requiresMessageIndex ? ['--message-index', String(args.messageIndex)] : []),
   ],
   { cwd: ROOT_DIR, timeoutMs: args.timeoutMs },
 );
@@ -171,6 +196,7 @@ const metadata = {
   circuit: args.circuit,
   prepareCircuit: circuit.prepareCircuit,
   executable: circuit.executable,
+  messageIndex: circuit.requiresMessageIndex ? args.messageIndex : undefined,
   generatedInput,
   inputPath,
   preparedJson,

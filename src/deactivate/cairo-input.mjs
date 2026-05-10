@@ -5,6 +5,7 @@ import {
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8 } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
+import { canonicalProcessDeactivateStepPublicOutput } from '../public-output.mjs';
 import {
   evaluateProcessDeactivateMessages,
   evaluateProcessDeactivateMessagesStateTransition,
@@ -503,6 +504,137 @@ export function buildCairoProcessDeactivateMessagesStatefulInput(rawInput, evalu
   };
 }
 
+function assertMessageIndex(messageIndex) {
+  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= 5) {
+    throw new Error('messageIndex must be an integer in [0, 4]');
+  }
+}
+
+export function buildCairoProcessDeactivateMessageStepInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const currentDeactivateCommitment = hashLeftRight(
+    transition.input.currentActiveStateRoot,
+    transition.input.currentDeactivateRoot,
+  );
+  const newDeactivateCommitment = hashLeftRight(
+    transition.derived.newActiveStateRoot,
+    transition.derived.newDeactivateRoot,
+  );
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    deactivateIndex: transition.input.deactivateIndex,
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    previousMessageHash: result.boundary.derived.messageHashChain[messageIndex],
+    nextMessageHash: result.boundary.derived.messageHashChain[messageIndex + 1],
+    currentActiveStateRoot: transition.input.currentActiveStateRoot,
+    currentDeactivateRoot: transition.input.currentDeactivateRoot,
+    newActiveStateRoot: transition.derived.newActiveStateRoot,
+    newDeactivateRoot: transition.derived.newDeactivateRoot,
+    currentDeactivateCommitment,
+    newDeactivateCommitment,
+    currentStateRoot: result.publicFields.currentStateRoot,
+    expectedPollId: result.publicFields.expectedPollId,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    deactivate_index: splitObject(publicFields.deactivateIndex, 'deactivateIndex'),
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    previous_message_hash: splitObject(
+      publicFields.previousMessageHash,
+      'previousMessageHash',
+    ),
+    next_message_hash: splitObject(publicFields.nextMessageHash, 'nextMessageHash'),
+    current_active_state_root: splitObject(
+      publicFields.currentActiveStateRoot,
+      'currentActiveStateRoot',
+    ),
+    current_deactivate_root: splitObject(
+      publicFields.currentDeactivateRoot,
+      'currentDeactivateRoot',
+    ),
+    new_active_state_root: splitObject(publicFields.newActiveStateRoot, 'newActiveStateRoot'),
+    new_deactivate_root: splitObject(publicFields.newDeactivateRoot, 'newDeactivateRoot'),
+    current_deactivate_commitment: splitObject(
+      publicFields.currentDeactivateCommitment,
+      'currentDeactivateCommitment',
+    ),
+    new_deactivate_commitment: splitObject(
+      publicFields.newDeactivateCommitment,
+      'newDeactivateCommitment',
+    ),
+    current_state_root: splitObject(publicFields.currentStateRoot, 'currentStateRoot'),
+    expected_poll_id: splitObject(publicFields.expectedPollId, 'expectedPollId'),
+  };
+  const coordPubKeyInput = buildCairoBabyjubScalarMulInput({
+    scalar: result.state.input.coordPrivKey,
+    base: BABYJUB_BASE8.map((value) => value.toString()),
+  });
+  if (!pointsEqual(coordPubKeyInput.expected, rawInput.coordPubKey.map(BigInt))) {
+    throw new Error('coordPrivKey does not match ProcessDeactivate coordPubKey');
+  }
+  const publicOutput = canonicalProcessDeactivateStepPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+        msg: splitVector10(rawInput.msgs[messageIndex], 'msg'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        coord_pub_key_scalar_mul: coordPubKeyInput.program_input.witness,
+        coord_pub_key_hash: hash2Claim(
+          rawInput.coordPubKey[0],
+          rawInput.coordPubKey[1],
+          publicFields.coordPubKeyHash,
+          'coordPubKeyHash',
+        ),
+        message_hash: hash13Claim(
+          deactivateMessagePreimage(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          processDeactivateMessageHash(
+            rawInput.msgs[messageIndex],
+            rawInput.encPubKeys[messageIndex],
+            publicFields.previousMessageHash,
+          ),
+          `deactivateMessageHash${messageIndex}`,
+        ),
+        command: buildCairoProcessDeactivateMessageCommandWitness(
+          rawInput,
+          result.state,
+          messageIndex,
+        ),
+        process_one: buildProcessDeactivateOneWitness(transition),
+        current_deactivate_commitment: hash2Claim(
+          publicFields.currentActiveStateRoot,
+          publicFields.currentDeactivateRoot,
+          publicFields.currentDeactivateCommitment,
+          'currentDeactivateCommitment',
+        ),
+        new_deactivate_commitment: hash2Claim(
+          publicFields.newActiveStateRoot,
+          publicFields.newDeactivateRoot,
+          publicFields.newDeactivateCommitment,
+          'newDeactivateCommitment',
+        ),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
 function pushU256(args, value) {
   args.push(value.low, value.high);
 }
@@ -678,6 +810,22 @@ function pushProcessDeactivateMessagesFields(args, fields) {
   pushU256(args, fields.input_hash);
 }
 
+function pushProcessDeactivateStepFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.deactivate_index);
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.previous_message_hash);
+  pushU256(args, fields.next_message_hash);
+  pushU256(args, fields.current_active_state_root);
+  pushU256(args, fields.current_deactivate_root);
+  pushU256(args, fields.new_active_state_root);
+  pushU256(args, fields.new_deactivate_root);
+  pushU256(args, fields.current_deactivate_commitment);
+  pushU256(args, fields.new_deactivate_commitment);
+  pushU256(args, fields.current_state_root);
+  pushU256(args, fields.expected_poll_id);
+}
+
 function pushProcessDeactivateMessagesBoundaryWitness(args, witness) {
   pushVector2(args, witness.coord_pub_key);
   pushU256(args, witness.current_active_state_root);
@@ -732,6 +880,20 @@ function pushProcessDeactivateMessagesStatefulWitness(args, witness) {
   pushHash2Claim(args, witness.new_deactivate_commitment);
 }
 
+function pushProcessDeactivateMessageStepWitness(args, witness) {
+  pushVector2(args, witness.coord_pub_key);
+  pushVector10(args, witness.msg);
+  pushVector2(args, witness.enc_pub_key);
+  pushU256(args, witness.coord_priv_key);
+  pushBabyjubScalarMulWitness(args, witness.coord_pub_key_scalar_mul);
+  pushHash2Claim(args, witness.coord_pub_key_hash);
+  pushHash13Claim(args, witness.message_hash);
+  pushProcessDeactivateMessageCommandWitness(args, witness.command);
+  pushProcessDeactivateOneWitness(args, witness.process_one);
+  pushHash2Claim(args, witness.current_deactivate_commitment);
+  pushHash2Claim(args, witness.new_deactivate_commitment);
+}
+
 export function serializeCairoProcessDeactivateOneExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateOneWitness(args, cairoInput.program_input.witness);
@@ -742,6 +904,13 @@ export function serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs(ca
   const args = [];
   pushProcessDeactivateMessagesFields(args, cairoInput.program_input.fields);
   pushProcessDeactivateMessagesBoundaryWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateMessageStepExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateStepFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateMessageStepWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

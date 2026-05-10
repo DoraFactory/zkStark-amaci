@@ -1,4 +1,5 @@
 node_modules/
+logs/
 target/
 cairo/target/
 contracts/target/

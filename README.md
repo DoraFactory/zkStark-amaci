@@ -100,6 +100,13 @@ The implementation keeps the existing AMACI public-input semantics:
 - `process_messages_stateful_with_ecdh_signature` extends the five-message
   stateful path with per-message signature witnesses, while keeping the
   ECDH-only executable available for smaller compatibility checks.
+- `process_message_step_with_ecdh_signature` exposes a linked single-message
+  proof path for dense-batch debugging: each step proves one message hash
+  transition, coordinator key binding, ECDH shared key, signature check,
+  active-state decrypt parity, and state-root update. Its public output
+  carries the previous/next message hashes, previous/next state roots, and
+  current/new state commitments so a wrapper or off-chain checker can chain
+  five smaller proofs with one boundary proof.
 - `src/add-new-key/`, `tools/prepare-add-new-key-input.mjs`, and the Cairo
   `add_new_key` executable start the next circuit migration target:
   `AddNewKey(stateTreeDepth=2)`. The compatibility relation verifies the
@@ -381,8 +388,15 @@ Expected small execution characteristics on the current local machine:
 - `add_new_key`: about `15,122,189` steps, `25` output felts.
 - `process_messages_stateful_with_ecdh_signature`: about `163,029,062`
   steps, `24` output felts.
+- `process_message_step_with_ecdh_signature`: one linked
+  `ProcessMessages` message slot, `27` output felts. Use this when the dense
+  five-message proof is too large for the current machine.
 - `process_deactivate_messages_stateful`: about `218,084,195` steps, `24`
   output felts.
+- `process_deactivate_message_step`: one linked
+  `ProcessDeactivateMessages` message slot, `31` output felts. Use this when
+  the dense five-message deactivate proof is too large for the current
+  machine.
 
 If `scarb execute` fails, do not run the prover. Fix the input, toolchain, or
 Cairo build first.
@@ -407,6 +421,13 @@ The standalone npm shortcut uses the checked-in tally fixture:
 npm run prove:all-small
 ```
 
+For the optimized split path, prefer:
+
+```sh
+/usr/bin/time -v npm run prove:all-split-small -- \
+  --out-dir "$OUT_DIR/all-split"
+```
+
 The script runs these circuits in order:
 
 ```text
@@ -426,7 +447,11 @@ Use these commands to isolate one circuit:
 tools/run-cairo-proof.sh --circuit tally --input "$INPUT" --out-dir "$OUT_DIR/tally"
 tools/run-cairo-proof.sh --circuit add-new-key --out-dir "$OUT_DIR/add-new-key"
 tools/run-cairo-proof.sh --circuit process-messages --out-dir "$OUT_DIR/process-messages"
+tools/run-cairo-proof.sh --circuit process-messages-boundary --out-dir "$OUT_DIR/process-messages-boundary"
+tools/run-cairo-proof.sh --circuit process-message-step --message-index 0 --out-dir "$OUT_DIR/process-message-step-0"
 tools/run-cairo-proof.sh --circuit process-deactivate --out-dir "$OUT_DIR/process-deactivate"
+tools/run-cairo-proof.sh --circuit process-deactivate-boundary --out-dir "$OUT_DIR/process-deactivate-boundary"
+tools/run-cairo-proof.sh --circuit process-deactivate-step --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-0"
 ```
 
 The legacy tally-only form is still supported:
@@ -436,6 +461,85 @@ tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR/tally"
 ```
 
 For Linux memory diagnostics, wrap any command with `/usr/bin/time -v`.
+
+### Split ProcessMessages Proofs
+
+If the dense `process-messages` proof is killed by memory pressure, run the
+split path first:
+
+```sh
+/usr/bin/time -v npm run prove:process-messages-split -- \
+  --out-dir "$OUT_DIR/process-messages-split"
+```
+
+This proves:
+
+```text
+process-messages-boundary
+process-message-step --message-index 0
+process-message-step --message-index 1
+process-message-step --message-index 2
+process-message-step --message-index 3
+process-message-step --message-index 4
+```
+
+The split path is intended to lower peak prover memory by proving one message
+slot at a time. The public outputs are chainable: the boundary proof fixes the
+batch start/end hashes and state commitments, while each step proof exposes
+`previous_message_hash`, `next_message_hash`, `current_state_root`, and
+`new_state_root`, plus the current/new state commitments needed to bind the
+step chain back to the boundary output. Production wrapper logic still needs
+to check all six facts and enforce that the five step outputs form the same
+hash/root chain.
+
+### Split ProcessDeactivate Proofs
+
+If the dense `process-deactivate` proof is killed by memory pressure, run:
+
+```sh
+/usr/bin/time -v npm run prove:process-deactivate-split -- \
+  --out-dir "$OUT_DIR/process-deactivate-split"
+```
+
+This proves:
+
+```text
+process-deactivate-boundary
+process-deactivate-step --message-index 0
+process-deactivate-step --message-index 1
+process-deactivate-step --message-index 2
+process-deactivate-step --message-index 3
+process-deactivate-step --message-index 4
+```
+
+Each step proof exposes the previous/next message hashes, previous/next
+active-state roots, previous/next deactivate roots, per-step deactivate
+commitments, `deactivateIndex`, `currentStateRoot`, and `expectedPollId`.
+Production wrapper logic still needs to check all six facts, enforce hash/root
+chain continuity, enforce `deactivateIndex` increments by one, and bind
+`step0.current_deactivate_commitment` / `step4.new_deactivate_commitment` to
+the boundary output.
+
+### Summarize Results
+
+After execution or proof runs, summarize generated metadata with:
+
+```sh
+npm run summarize:proofs
+```
+
+For a custom output directory:
+
+```sh
+node tools/summarize-proof-results.mjs /absolute/path/to/proof-output --text
+node tools/summarize-proof-results.mjs /absolute/path/to/proof-output \
+  --out /tmp/zkstark-amaci-proof-summary.json
+```
+
+This reports discovered `proof-run.json` files, proof sizes, execution ids,
+public output sizes, and any saved `scarb execute --print-resource-usage`
+metadata. For full prover memory, keep wrapping proof commands with
+`/usr/bin/time -v` because peak RSS is reported by the OS, not by Scarb.
 
 ### Proof Outputs
 
@@ -459,6 +563,15 @@ all-proofs.json
 ```
 
 which points to every per-circuit `proof-run.json`.
+
+For `prove:all-split-small`, the root output directory contains:
+
+```text
+all-split-proofs.json
+```
+
+which points to the tally proof, add-new-key proof, ProcessMessages split
+metadata, and ProcessDeactivate split metadata.
 
 The final command inside the script is:
 
@@ -510,6 +623,18 @@ input_hash_low128, input_hash_high128
 - It does not submit the proof to Integrity or Starknet.
 - It uses the current local Scarb/Stwo proof flow. Stone/Integrity proof
   serialization remains a separate integration step.
+- The stateful Cairo paths now short-circuit empty message slots at runtime, so
+  empty slots skip ECDH/signature/decrypt/state-update work. The checked-in
+  small synthetic `ProcessMessages` and `ProcessDeactivateMessages` fixtures
+  currently use five non-empty messages, so this optimization affects sparse
+  batches but does not reduce the dense five-message benchmark.
+- Dense `ProcessMessages(2,1,5)` now has a split proof path. It is suitable
+  for local prover feasibility checks, but Starknet wrapper support for
+  verifying and chaining the boundary fact plus five step facts is not yet
+  implemented.
+- Dense `ProcessDeactivateMessages(2,5)` now has the same split proof path;
+  wrapper support for checking the boundary fact plus five deactivate step
+  facts is still pending.
 
 ## Commands
 

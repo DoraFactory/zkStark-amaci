@@ -218,9 +218,71 @@ verify PoseidonDecryptWithoutCheck(7)
 verify ProcessOne state transition
 ```
 
-This closes the local relation from ECDH-derived shared key to command
-decryption and state update for one message. It intentionally does not yet bind
-the transcript base to a public `ProcessMessages` boundary message slot.
+## Split Proof Path
+
+For dense batches, the migration now also exposes
+`process_message_step_with_ecdh_signature`. This executable proves one message
+slot with public output containing:
+
+- `messageIndex`
+- `packedVals`
+- `coordPubKeyHash`
+- `previousMessageHash`
+- `nextMessageHash`
+- `currentStateRoot`
+- `newStateRoot`
+- `currentStateCommitment`
+- `newStateCommitment`
+- `activeStateRoot`
+- `expectedPollId`
+
+The relation checks:
+
+- `packedVals` matches `isQuadraticCost`, `numSignUps`, and `maxVoteOptions`.
+- `coordPrivKey` derives the boundary `coordPubKey`, and
+  `coordPubKeyHash == Poseidon(coordPubKey[0], coordPubKey[1])`.
+- The supplied `msg[10]` and `encPubKey[2]` advance
+  `previousMessageHash -> nextMessageHash` with the same empty-message rule as
+  the batch boundary.
+- The ECDH transcript derives `ProcessOne.sharedKey` from the same
+  `coordPrivKey` and `encPubKey`.
+- The BabyJubJub Poseidon signature witness derives `isSignatureValid`.
+- The active-state ElGamal decrypt transcript derives `isDecryptionActive`.
+- The `ProcessOne` state transition maps
+  `currentStateRoot -> newStateRoot`.
+- Step `4` proves `currentStateCommitment` opens to `currentStateRoot` with
+  the boundary `currentStateSalt`; step `0` proves `newStateCommitment` opens
+  to `newStateRoot` with the boundary `newStateSalt`.
+
+The intended proof composition is:
+
+```text
+1 boundary proof
+5 process-message-step proofs
+```
+
+A wrapper or off-chain checker must chain the public outputs:
+
+```text
+boundary.batchStartHash == step0.previousMessageHash
+step0.nextMessageHash == step1.previousMessageHash
+...
+step4.nextMessageHash == boundary.batchEndHash
+
+boundary.currentStateCommitment == step4.currentStateCommitment
+boundary.newStateCommitment == step0.newStateCommitment
+
+step4.newStateRoot == step3.currentStateRoot
+...
+step1.newStateRoot == step0.currentStateRoot
+```
+
+The final state endpoint is enforced by comparing `step0.newStateCommitment`
+to the boundary output and relying on the step `0` commitment-opening proof.
+
+The split path lowers peak prover memory by proving one message slot at a time,
+but the Starknet wrapper that verifies all six facts and enforces this chaining
+is still pending.
 
 The migration also includes `process_messages_stateful_with_ecdh`, a
 five-message composition executable:

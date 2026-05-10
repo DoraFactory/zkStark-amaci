@@ -4,9 +4,13 @@ pub const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 pub const PUBLIC_OUTPUT_VERSION: felt252 = 1;
 pub const TALLY_VOTES_CIRCUIT_ID: felt252 = 0x414d4143495f54414c4c595f564f544553;
 pub const PROCESS_MESSAGES_CIRCUIT_ID: felt252 = 0x414d4143495f50524f434553535f4d45535341474553;
+pub const PROCESS_MESSAGE_STEP_CIRCUIT_ID: felt252 =
+    0x414d4143495f50524f434553535f4d4553534147455f53544550;
 pub const ADD_NEW_KEY_CIRCUIT_ID: felt252 = 0x414d4143495f4144445f4e45575f4b4559;
 pub const PROCESS_DEACTIVATE_CIRCUIT_ID: felt252 =
     0x414d4143495f50524f434553535f44454143544956415445;
+pub const PROCESS_DEACTIVATE_STEP_CIRCUIT_ID: felt252 =
+    0x414d4143495f50524f434553535f444541435449564154455f53544550;
 
 #[derive(Copy, Drop, Serde)]
 pub struct U256Split {
@@ -37,6 +41,21 @@ pub struct ProcessMessagesPublicFields {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct ProcessMessageStepPublicFields {
+    pub message_index: felt252,
+    pub packed_vals: u256,
+    pub coord_pub_key_hash: u256,
+    pub previous_message_hash: u256,
+    pub next_message_hash: u256,
+    pub current_state_root: u256,
+    pub new_state_root: u256,
+    pub current_state_commitment: u256,
+    pub new_state_commitment: u256,
+    pub active_state_root: u256,
+    pub expected_poll_id: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct AddNewKeyPublicFields {
     pub deactivate_root: u256,
     pub coord_pub_key_hash: u256,
@@ -59,6 +78,23 @@ pub struct ProcessDeactivatePublicFields {
     pub current_state_root: u256,
     pub expected_poll_id: u256,
     pub input_hash: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateStepPublicFields {
+    pub message_index: felt252,
+    pub deactivate_index: u256,
+    pub coord_pub_key_hash: u256,
+    pub previous_message_hash: u256,
+    pub next_message_hash: u256,
+    pub current_active_state_root: u256,
+    pub current_deactivate_root: u256,
+    pub new_active_state_root: u256,
+    pub new_deactivate_root: u256,
+    pub current_deactivate_commitment: u256,
+    pub new_deactivate_commitment: u256,
+    pub current_state_root: u256,
+    pub expected_poll_id: u256,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -107,6 +143,37 @@ pub struct ProcessMessagesPublicOutput {
     pub expected_poll_id_high128: felt252,
     pub input_hash_low128: felt252,
     pub input_hash_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessMessageStepPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub vote_option_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub packed_vals_low128: felt252,
+    pub packed_vals_high128: felt252,
+    pub coord_pub_key_hash_low128: felt252,
+    pub coord_pub_key_hash_high128: felt252,
+    pub previous_message_hash_low128: felt252,
+    pub previous_message_hash_high128: felt252,
+    pub next_message_hash_low128: felt252,
+    pub next_message_hash_high128: felt252,
+    pub current_state_root_low128: felt252,
+    pub current_state_root_high128: felt252,
+    pub new_state_root_low128: felt252,
+    pub new_state_root_high128: felt252,
+    pub current_state_commitment_low128: felt252,
+    pub current_state_commitment_high128: felt252,
+    pub new_state_commitment_low128: felt252,
+    pub new_state_commitment_high128: felt252,
+    pub active_state_root_low128: felt252,
+    pub active_state_root_high128: felt252,
+    pub expected_poll_id_low128: felt252,
+    pub expected_poll_id_high128: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -164,6 +231,41 @@ pub struct ProcessDeactivatePublicOutput {
     pub expected_poll_id_high128: felt252,
     pub input_hash_low128: felt252,
     pub input_hash_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateStepPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub deactivate_index_low128: felt252,
+    pub deactivate_index_high128: felt252,
+    pub coord_pub_key_hash_low128: felt252,
+    pub coord_pub_key_hash_high128: felt252,
+    pub previous_message_hash_low128: felt252,
+    pub previous_message_hash_high128: felt252,
+    pub next_message_hash_low128: felt252,
+    pub next_message_hash_high128: felt252,
+    pub current_active_state_root_low128: felt252,
+    pub current_active_state_root_high128: felt252,
+    pub current_deactivate_root_low128: felt252,
+    pub current_deactivate_root_high128: felt252,
+    pub new_active_state_root_low128: felt252,
+    pub new_active_state_root_high128: felt252,
+    pub new_deactivate_root_low128: felt252,
+    pub new_deactivate_root_high128: felt252,
+    pub current_deactivate_commitment_low128: felt252,
+    pub current_deactivate_commitment_high128: felt252,
+    pub new_deactivate_commitment_low128: felt252,
+    pub new_deactivate_commitment_high128: felt252,
+    pub current_state_root_low128: felt252,
+    pub current_state_root_high128: felt252,
+    pub expected_poll_id_low128: felt252,
+    pub expected_poll_id_high128: felt252,
 }
 
 pub fn split_u256(value: u256) -> U256Split {
@@ -235,6 +337,51 @@ pub fn build_process_messages_public_output(
         expected_poll_id_high128: expected_poll_id.high.into(),
         input_hash_low128: input_hash.low.into(),
         input_hash_high128: input_hash.high.into(),
+    }
+}
+
+pub fn build_process_message_step_public_output(
+    fields: ProcessMessageStepPublicFields,
+) -> ProcessMessageStepPublicOutput {
+    let packed_vals = split_u256(fields.packed_vals);
+    let coord_pub_key_hash = split_u256(fields.coord_pub_key_hash);
+    let previous_message_hash = split_u256(fields.previous_message_hash);
+    let next_message_hash = split_u256(fields.next_message_hash);
+    let current_state_root = split_u256(fields.current_state_root);
+    let new_state_root = split_u256(fields.new_state_root);
+    let current_state_commitment = split_u256(fields.current_state_commitment);
+    let new_state_commitment = split_u256(fields.new_state_commitment);
+    let active_state_root = split_u256(fields.active_state_root);
+    let expected_poll_id = split_u256(fields.expected_poll_id);
+
+    ProcessMessageStepPublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_MESSAGE_STEP_CIRCUIT_ID,
+        state_tree_depth: 2,
+        vote_option_tree_depth: 1,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        packed_vals_low128: packed_vals.low.into(),
+        packed_vals_high128: packed_vals.high.into(),
+        coord_pub_key_hash_low128: coord_pub_key_hash.low.into(),
+        coord_pub_key_hash_high128: coord_pub_key_hash.high.into(),
+        previous_message_hash_low128: previous_message_hash.low.into(),
+        previous_message_hash_high128: previous_message_hash.high.into(),
+        next_message_hash_low128: next_message_hash.low.into(),
+        next_message_hash_high128: next_message_hash.high.into(),
+        current_state_root_low128: current_state_root.low.into(),
+        current_state_root_high128: current_state_root.high.into(),
+        new_state_root_low128: new_state_root.low.into(),
+        new_state_root_high128: new_state_root.high.into(),
+        current_state_commitment_low128: current_state_commitment.low.into(),
+        current_state_commitment_high128: current_state_commitment.high.into(),
+        new_state_commitment_low128: new_state_commitment.low.into(),
+        new_state_commitment_high128: new_state_commitment.high.into(),
+        active_state_root_low128: active_state_root.low.into(),
+        active_state_root_high128: active_state_root.high.into(),
+        expected_poll_id_low128: expected_poll_id.low.into(),
+        expected_poll_id_high128: expected_poll_id.high.into(),
     }
 }
 
@@ -317,5 +464,56 @@ pub fn build_process_deactivate_public_output(
         expected_poll_id_high128: expected_poll_id.high.into(),
         input_hash_low128: input_hash.low.into(),
         input_hash_high128: input_hash.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_step_public_output(
+    fields: ProcessDeactivateStepPublicFields,
+) -> ProcessDeactivateStepPublicOutput {
+    let deactivate_index = split_u256(fields.deactivate_index);
+    let coord_pub_key_hash = split_u256(fields.coord_pub_key_hash);
+    let previous_message_hash = split_u256(fields.previous_message_hash);
+    let next_message_hash = split_u256(fields.next_message_hash);
+    let current_active_state_root = split_u256(fields.current_active_state_root);
+    let current_deactivate_root = split_u256(fields.current_deactivate_root);
+    let new_active_state_root = split_u256(fields.new_active_state_root);
+    let new_deactivate_root = split_u256(fields.new_deactivate_root);
+    let current_deactivate_commitment = split_u256(fields.current_deactivate_commitment);
+    let new_deactivate_commitment = split_u256(fields.new_deactivate_commitment);
+    let current_state_root = split_u256(fields.current_state_root);
+    let expected_poll_id = split_u256(fields.expected_poll_id);
+
+    ProcessDeactivateStepPublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        deactivate_index_low128: deactivate_index.low.into(),
+        deactivate_index_high128: deactivate_index.high.into(),
+        coord_pub_key_hash_low128: coord_pub_key_hash.low.into(),
+        coord_pub_key_hash_high128: coord_pub_key_hash.high.into(),
+        previous_message_hash_low128: previous_message_hash.low.into(),
+        previous_message_hash_high128: previous_message_hash.high.into(),
+        next_message_hash_low128: next_message_hash.low.into(),
+        next_message_hash_high128: next_message_hash.high.into(),
+        current_active_state_root_low128: current_active_state_root.low.into(),
+        current_active_state_root_high128: current_active_state_root.high.into(),
+        current_deactivate_root_low128: current_deactivate_root.low.into(),
+        current_deactivate_root_high128: current_deactivate_root.high.into(),
+        new_active_state_root_low128: new_active_state_root.low.into(),
+        new_active_state_root_high128: new_active_state_root.high.into(),
+        new_deactivate_root_low128: new_deactivate_root.low.into(),
+        new_deactivate_root_high128: new_deactivate_root.high.into(),
+        current_deactivate_commitment_low128: current_deactivate_commitment.low.into(),
+        current_deactivate_commitment_high128: current_deactivate_commitment.high.into(),
+        new_deactivate_commitment_low128: new_deactivate_commitment.low.into(),
+        new_deactivate_commitment_high128: new_deactivate_commitment.high.into(),
+        current_state_root_low128: current_state_root.low.into(),
+        current_state_root_high128: current_state_root.high.into(),
+        expected_poll_id_low128: expected_poll_id.low.into(),
+        expected_poll_id_high128: expected_poll_id.high.into(),
     }
 }
