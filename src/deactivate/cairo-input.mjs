@@ -1,11 +1,19 @@
 import { bigintToHex, splitU256ToU128 } from '../compat/encoding.mjs';
+import { PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN } from '../constants.mjs';
 import {
   buildCairoBabyjubPoseidonSignatureInput,
   buildCairoBabyjubScalarMulInput,
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8 } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
-import { canonicalProcessDeactivateStepPublicOutput } from '../public-output.mjs';
+import {
+  canonicalProcessDeactivateCoordKeyPublicOutput,
+  canonicalProcessDeactivateDecryptPublicOutput,
+  canonicalProcessDeactivateEcdhPublicOutput,
+  canonicalProcessDeactivateSignaturePublicOutput,
+  canonicalProcessDeactivateStepCorePublicOutput,
+  canonicalProcessDeactivateStepPublicOutput,
+} from '../public-output.mjs';
 import {
   evaluateProcessDeactivateMessages,
   evaluateProcessDeactivateMessagesStateTransition,
@@ -66,6 +74,21 @@ function splitVector5(values, label) {
     v2: splitObject(values[2], `${label}[2]`),
     v3: splitObject(values[3], `${label}[3]`),
     v4: splitObject(values[4], `${label}[4]`),
+  };
+}
+
+function splitVector7(values, label) {
+  if (!Array.isArray(values) || values.length !== 7) {
+    throw new Error(`${label} must contain seven values`);
+  }
+  return {
+    v0: splitObject(values[0], `${label}[0]`),
+    v1: splitObject(values[1], `${label}[1]`),
+    v2: splitObject(values[2], `${label}[2]`),
+    v3: splitObject(values[3], `${label}[3]`),
+    v4: splitObject(values[4], `${label}[4]`),
+    v5: splitObject(values[5], `${label}[5]`),
+    v6: splitObject(values[6], `${label}[6]`),
   };
 }
 
@@ -156,6 +179,18 @@ function sha256U256x8Claim(inputs, out, label) {
 
 function pointsEqual(left, right) {
   return left[0] === right[0] && left[1] === right[1];
+}
+
+function coordPrivKeyHash(coordPrivKey) {
+  return hashLeftRight(BigInt(coordPrivKey), PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN);
+}
+
+function packedCmdHash(packedCmd) {
+  return hash5([packedCmd[0], packedCmd[1], packedCmd[2], 0n, 0n]);
+}
+
+function pointHash(point) {
+  return hashLeftRight(point[0], point[1]);
 }
 
 function buildElGamalDecryptWitness(result, c1, decrypt, label) {
@@ -635,6 +670,446 @@ export function buildCairoProcessDeactivateMessageStepInput(rawInput, messageInd
   };
 }
 
+function isEmptyDeactivateMessage(rawInput, messageIndex) {
+  return BigInt(rawInput.msgs[messageIndex][0]) === 0n;
+}
+
+function deactivateStepLinkFields(rawInput, messageIndex, result) {
+  const transition = result.state.transitions[messageIndex];
+  const command = result.derived.messageCommands[messageIndex];
+  if (!command) {
+    throw new Error('deep split deactivate proofs are not generated for empty message slots');
+  }
+  const input = transition.input;
+  return {
+    coordPrivKeyHash: coordPrivKeyHash(result.state.input.coordPrivKey),
+    encPubKeyHash: pointHash(rawInput.encPubKeys[messageIndex].map(BigInt)),
+    commandSharedKeyHash: pointHash(command.sharedKey),
+    signaturePubKeyHash: pointHash(input.stateLeaf.slice(0, 2)),
+    signatureR8Hash: pointHash(input.cmdSigR8),
+    packedCmdHash: packedCmdHash(input.packedCmd),
+    cmdSigS: input.cmdSigS,
+    signatureValid: transition.derived.signatureValid,
+    currentStateCiphertextC1Hash: pointHash(input.stateLeaf.slice(5, 7)),
+    currentStateCiphertextC2Hash: pointHash(input.stateLeaf.slice(7, 9)),
+    currentDecryptIsOdd: transition.derived.currentStateDecrypt.isOdd,
+    newStateCiphertextC1Hash: pointHash(input.c1),
+    newStateCiphertextC2Hash: pointHash(input.c2),
+    newDecryptIsOdd: transition.derived.newStateDecrypt.isOdd,
+    deactivatePubKeyHash: pointHash(input.stateLeaf.slice(0, 2)),
+    deactivateSharedKeyHash: transition.derived.sharedKeyHash,
+  };
+}
+
+export function buildCairoProcessDeactivateCoordKeyInput(rawInput, evaluated) {
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const coordPubKeyInput = buildCairoBabyjubScalarMulInput({
+    scalar: result.state.input.coordPrivKey,
+    base: BABYJUB_BASE8.map((value) => value.toString()),
+  });
+  if (!pointsEqual(coordPubKeyInput.expected, rawInput.coordPubKey.map(BigInt))) {
+    throw new Error('coordPrivKey does not match ProcessDeactivate coordPubKey');
+  }
+  const publicFields = {
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    coordPrivKeyHash: coordPrivKeyHash(result.state.input.coordPrivKey),
+  };
+  const fields = {
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+  };
+  const publicOutput = canonicalProcessDeactivateCoordKeyPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+        coord_pub_key_scalar_mul: coordPubKeyInput.program_input.witness,
+        coord_pub_key_hash: hash2Claim(
+          rawInput.coordPubKey[0],
+          rawInput.coordPubKey[1],
+          publicFields.coordPubKeyHash,
+          'coordPubKeyHash',
+        ),
+        coord_priv_key_hash: hash2Claim(
+          result.state.input.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      coordPubKey: coordPubKeyInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessDeactivateEcdhInput(
+  rawInput,
+  messageIndex,
+  ecdhKind = 'command',
+  evaluated,
+) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build deactivate ECDH proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const command = result.derived.messageCommands[messageIndex];
+  const kind = ecdhKind === 'leaf' ? 1n : 0n;
+  const base = ecdhKind === 'leaf'
+    ? transition.input.stateLeaf.slice(0, 2)
+    : rawInput.encPubKeys[messageIndex].map(BigInt);
+  const expectedSharedKey = ecdhKind === 'leaf' ? transition.derived.sharedKey : command.sharedKey;
+  const ecdhInput = buildCairoBabyjubScalarMulInput({
+    scalar: result.state.input.coordPrivKey,
+    base,
+  });
+  if (!pointsEqual(ecdhInput.expected, expectedSharedKey)) {
+    throw new Error(`deactivate ${ecdhKind} ECDH shared key mismatch at message ${messageIndex}`);
+  }
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    ecdhKind: kind,
+    coordPrivKeyHash: coordPrivKeyHash(result.state.input.coordPrivKey),
+    baseHash: pointHash(base),
+    sharedKeyHash: pointHash(expectedSharedKey),
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    ecdh_kind: publicFields.ecdhKind,
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+    base_hash: splitObject(publicFields.baseHash, 'baseHash'),
+    shared_key_hash: splitObject(publicFields.sharedKeyHash, 'sharedKeyHash'),
+  };
+  const publicOutput = canonicalProcessDeactivateEcdhPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        base: splitVector2(base, 'base'),
+        ecdh: ecdhInput.program_input.witness,
+        coord_priv_key_hash: hash2Claim(
+          result.state.input.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+        base_hash: hash2Claim(base[0], base[1], publicFields.baseHash, 'baseHash'),
+        shared_key_hash: hash2Claim(
+          expectedSharedKey[0],
+          expectedSharedKey[1],
+          publicFields.sharedKeyHash,
+          'sharedKeyHash',
+        ),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      ecdhKind,
+      ecdh: ecdhInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessDeactivateSignatureInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build deactivate signature proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const input = transition.input;
+  const signatureInput = buildCairoBabyjubPoseidonSignatureInput({
+    pubKey: input.stateLeaf.slice(0, 2),
+    r8: input.cmdSigR8,
+    s: input.cmdSigS,
+    preimage: input.packedCmd,
+  });
+  if (signatureInput.valid !== transition.derived.signatureValid) {
+    throw new Error('deactivate signature proof does not match transition signatureValid');
+  }
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    pubKeyHash: pointHash(input.stateLeaf.slice(0, 2)),
+    r8Hash: pointHash(input.cmdSigR8),
+    packedCmdHash: packedCmdHash(input.packedCmd),
+    cmdSigS: input.cmdSigS,
+    signatureValid: transition.derived.signatureValid,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    pub_key_hash: splitObject(publicFields.pubKeyHash, 'pubKeyHash'),
+    r8_hash: splitObject(publicFields.r8Hash, 'r8Hash'),
+    packed_cmd_hash: splitObject(publicFields.packedCmdHash, 'packedCmdHash'),
+    cmd_sig_s: splitObject(publicFields.cmdSigS, 'cmdSigS'),
+    signature_valid: splitObject(publicFields.signatureValid, 'signatureValid'),
+  };
+  const publicOutput = canonicalProcessDeactivateSignaturePublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        pub_key: splitVector2(input.stateLeaf.slice(0, 2), 'pubKey'),
+        r8: splitVector2(input.cmdSigR8, 'r8'),
+        s: splitObject(input.cmdSigS, 's'),
+        packed_cmd: splitVector3(input.packedCmd, 'packedCmd'),
+        signature: signatureInput.program_input.witness,
+        pub_key_hash: hash2Claim(input.stateLeaf[0], input.stateLeaf[1], publicFields.pubKeyHash, 'pubKeyHash'),
+        r8_hash: hash2Claim(input.cmdSigR8[0], input.cmdSigR8[1], publicFields.r8Hash, 'r8Hash'),
+        packed_cmd_hash: hash5Claim(
+          [input.packedCmd[0], input.packedCmd[1], input.packedCmd[2], 0n, 0n],
+          publicFields.packedCmdHash,
+          'packedCmdHash',
+        ),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      signature: signatureInput.full_witness,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessDeactivateDecryptInput(
+  rawInput,
+  messageIndex,
+  decryptKind = 'current',
+  evaluated,
+) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build deactivate decrypt proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const current = decryptKind === 'current';
+  const c1 = current ? transition.input.stateLeaf.slice(5, 7) : transition.input.c1;
+  const c2 = current ? transition.input.stateLeaf.slice(7, 9) : transition.input.c2;
+  const decrypt = current ? transition.derived.currentStateDecrypt : transition.derived.newStateDecrypt;
+  const decryptInput = buildElGamalDecryptWitness(
+    transition,
+    c1,
+    decrypt,
+    `${decryptKind}DeactivateDecrypt`,
+  );
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    decryptKind: current ? 0n : 1n,
+    coordPrivKeyHash: coordPrivKeyHash(result.state.input.coordPrivKey),
+    c1Hash: pointHash(c1),
+    c2Hash: pointHash(c2),
+    decryptIsOdd: decrypt.isOdd,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    decrypt_kind: publicFields.decryptKind,
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+    c1_hash: splitObject(publicFields.c1Hash, 'c1Hash'),
+    c2_hash: splitObject(publicFields.c2Hash, 'c2Hash'),
+    decrypt_is_odd: splitObject(publicFields.decryptIsOdd, 'decryptIsOdd'),
+  };
+  const publicOutput = canonicalProcessDeactivateDecryptPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        c1: splitVector2(c1, 'c1'),
+        c2: splitVector2(c2, 'c2'),
+        decrypt: decryptInput,
+        coord_priv_key_hash: hash2Claim(
+          result.state.input.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+        c1_hash: hash2Claim(c1[0], c1[1], publicFields.c1Hash, 'c1Hash'),
+        c2_hash: hash2Claim(c2[0], c2[1], publicFields.c2Hash, 'c2Hash'),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      decryptKind,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build deactivate core proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const transition = result.state.transitions[messageIndex];
+  const input = transition.input;
+  const links = deactivateStepLinkFields(rawInput, messageIndex, result);
+  const currentDeactivateCommitment = hashLeftRight(
+    input.currentActiveStateRoot,
+    input.currentDeactivateRoot,
+  );
+  const newDeactivateCommitment = hashLeftRight(
+    transition.derived.newActiveStateRoot,
+    transition.derived.newDeactivateRoot,
+  );
+  const publicFields = {
+    messageIndex: BigInt(messageIndex),
+    deactivateIndex: input.deactivateIndex,
+    coordPubKeyHash: result.publicFields.coordPubKeyHash,
+    coordPrivKeyHash: links.coordPrivKeyHash,
+    previousMessageHash: result.boundary.derived.messageHashChain[messageIndex],
+    nextMessageHash: result.boundary.derived.messageHashChain[messageIndex + 1],
+    currentActiveStateRoot: input.currentActiveStateRoot,
+    currentDeactivateRoot: input.currentDeactivateRoot,
+    newActiveStateRoot: transition.derived.newActiveStateRoot,
+    newDeactivateRoot: transition.derived.newDeactivateRoot,
+    currentDeactivateCommitment,
+    newDeactivateCommitment,
+    currentStateRoot: result.publicFields.currentStateRoot,
+    expectedPollId: result.publicFields.expectedPollId,
+    ...links,
+  };
+  const fields = {
+    message_index: publicFields.messageIndex,
+    deactivate_index: splitObject(publicFields.deactivateIndex, 'deactivateIndex'),
+    coord_pub_key_hash: splitObject(publicFields.coordPubKeyHash, 'coordPubKeyHash'),
+    coord_priv_key_hash: splitObject(publicFields.coordPrivKeyHash, 'coordPrivKeyHash'),
+    previous_message_hash: splitObject(publicFields.previousMessageHash, 'previousMessageHash'),
+    next_message_hash: splitObject(publicFields.nextMessageHash, 'nextMessageHash'),
+    current_active_state_root: splitObject(publicFields.currentActiveStateRoot, 'currentActiveStateRoot'),
+    current_deactivate_root: splitObject(publicFields.currentDeactivateRoot, 'currentDeactivateRoot'),
+    new_active_state_root: splitObject(publicFields.newActiveStateRoot, 'newActiveStateRoot'),
+    new_deactivate_root: splitObject(publicFields.newDeactivateRoot, 'newDeactivateRoot'),
+    current_deactivate_commitment: splitObject(publicFields.currentDeactivateCommitment, 'currentDeactivateCommitment'),
+    new_deactivate_commitment: splitObject(publicFields.newDeactivateCommitment, 'newDeactivateCommitment'),
+    current_state_root: splitObject(publicFields.currentStateRoot, 'currentStateRoot'),
+    expected_poll_id: splitObject(publicFields.expectedPollId, 'expectedPollId'),
+    enc_pub_key_hash: splitObject(publicFields.encPubKeyHash, 'encPubKeyHash'),
+    command_shared_key_hash: splitObject(publicFields.commandSharedKeyHash, 'commandSharedKeyHash'),
+    signature_pub_key_hash: splitObject(publicFields.signaturePubKeyHash, 'signaturePubKeyHash'),
+    signature_r8_hash: splitObject(publicFields.signatureR8Hash, 'signatureR8Hash'),
+    packed_cmd_hash: splitObject(publicFields.packedCmdHash, 'packedCmdHash'),
+    cmd_sig_s: splitObject(publicFields.cmdSigS, 'cmdSigS'),
+    signature_valid: splitObject(publicFields.signatureValid, 'signatureValid'),
+    current_state_ciphertext_c1_hash: splitObject(publicFields.currentStateCiphertextC1Hash, 'currentStateCiphertextC1Hash'),
+    current_state_ciphertext_c2_hash: splitObject(publicFields.currentStateCiphertextC2Hash, 'currentStateCiphertextC2Hash'),
+    current_decrypt_is_odd: splitObject(publicFields.currentDecryptIsOdd, 'currentDecryptIsOdd'),
+    new_state_ciphertext_c1_hash: splitObject(publicFields.newStateCiphertextC1Hash, 'newStateCiphertextC1Hash'),
+    new_state_ciphertext_c2_hash: splitObject(publicFields.newStateCiphertextC2Hash, 'newStateCiphertextC2Hash'),
+    new_decrypt_is_odd: splitObject(publicFields.newDecryptIsOdd, 'newDecryptIsOdd'),
+    deactivate_pub_key_hash: splitObject(publicFields.deactivatePubKeyHash, 'deactivatePubKeyHash'),
+    deactivate_shared_key_hash: splitObject(publicFields.deactivateSharedKeyHash, 'deactivateSharedKeyHash'),
+  };
+  const command = result.derived.messageCommands[messageIndex];
+  const publicOutput = canonicalProcessDeactivateStepCorePublicOutput(publicFields, result.params);
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        is_empty_msg: splitObject(input.isEmptyMsg, 'isEmptyMsg'),
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        msg: splitVector10(rawInput.msgs[messageIndex], 'msg'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        command_shared_key: splitVector2(command.sharedKey, 'commandSharedKey'),
+        decrypted_command: splitVector7(command.decryptedCommand, 'decryptedCommand'),
+        c1: splitVector2(input.c1, 'c1'),
+        c2: splitVector2(input.c2, 'c2'),
+        state_leaf: splitVector10(input.stateLeaf, 'stateLeaf'),
+        state_leaf_path_0: splitVector4(input.stateLeafPathElements[0], 'stateLeafPathElements[0]'),
+        state_leaf_path_1: splitVector4(input.stateLeafPathElements[1], 'stateLeafPathElements[1]'),
+        active_state_leaf_path_0: splitVector4(input.activeStateLeafPathElements[0], 'activeStateLeafPathElements[0]'),
+        active_state_leaf_path_1: splitVector4(input.activeStateLeafPathElements[1], 'activeStateLeafPathElements[1]'),
+        current_active_state: splitObject(input.currentActiveState, 'currentActiveState'),
+        new_active_state: splitObject(input.newActiveState, 'newActiveState'),
+        cmd_state_index: splitObject(input.cmdStateIndex, 'cmdStateIndex'),
+        cmd_poll_id: splitObject(input.cmdPollId, 'cmdPollId'),
+        cmd_sig_r8: splitVector2(input.cmdSigR8, 'cmdSigR8'),
+        cmd_sig_s: splitObject(input.cmdSigS, 'cmdSigS'),
+        packed_cmd: splitVector3(input.packedCmd, 'packedCmd'),
+        deactivate_leaf_path_0: splitVector4(input.deactivateLeafPathElements[0], 'deactivateLeafPathElements[0]'),
+        deactivate_leaf_path_1: splitVector4(input.deactivateLeafPathElements[1], 'deactivateLeafPathElements[1]'),
+        deactivate_leaf_path_2: splitVector4(input.deactivateLeafPathElements[2], 'deactivateLeafPathElements[2]'),
+        deactivate_leaf_path_3: splitVector4(input.deactivateLeafPathElements[3], 'deactivateLeafPathElements[3]'),
+        current_decrypt_is_odd: splitObject(links.currentDecryptIsOdd, 'currentDecryptIsOdd'),
+        new_decrypt_is_odd: splitObject(links.newDecryptIsOdd, 'newDecryptIsOdd'),
+        signature_valid: splitObject(links.signatureValid, 'signatureValid'),
+        deactivate_shared_key_hash: splitObject(links.deactivateSharedKeyHash, 'deactivateSharedKeyHash'),
+        coord_priv_key_hash: hash2Claim(
+          result.state.input.coordPrivKey,
+          PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+          publicFields.coordPrivKeyHash,
+          'coordPrivKeyHash',
+        ),
+        message_hash: hash13Claim(
+          deactivateMessagePreimage(rawInput.msgs[messageIndex], rawInput.encPubKeys[messageIndex], publicFields.previousMessageHash),
+          processDeactivateMessageHash(rawInput.msgs[messageIndex], rawInput.encPubKeys[messageIndex], publicFields.previousMessageHash),
+          `deactivateMessageHash${messageIndex}`,
+        ),
+        current_deactivate_commitment: hash2Claim(
+          publicFields.currentActiveStateRoot,
+          publicFields.currentDeactivateRoot,
+          publicFields.currentDeactivateCommitment,
+          'currentDeactivateCommitment',
+        ),
+        new_deactivate_commitment: hash2Claim(
+          publicFields.newActiveStateRoot,
+          publicFields.newDeactivateRoot,
+          publicFields.newDeactivateCommitment,
+          'newDeactivateCommitment',
+        ),
+        enc_pub_key_hash: hash2Claim(rawInput.encPubKeys[messageIndex][0], rawInput.encPubKeys[messageIndex][1], links.encPubKeyHash, 'encPubKeyHash'),
+        command_shared_key_hash: hash2Claim(command.sharedKey[0], command.sharedKey[1], links.commandSharedKeyHash, 'commandSharedKeyHash'),
+        signature_pub_key_hash: hash2Claim(input.stateLeaf[0], input.stateLeaf[1], links.signaturePubKeyHash, 'signaturePubKeyHash'),
+        signature_r8_hash: hash2Claim(input.cmdSigR8[0], input.cmdSigR8[1], links.signatureR8Hash, 'signatureR8Hash'),
+        packed_cmd_hash: hash5Claim([input.packedCmd[0], input.packedCmd[1], input.packedCmd[2], 0n, 0n], links.packedCmdHash, 'packedCmdHash'),
+        current_state_ciphertext_c1_hash: hash2Claim(input.stateLeaf[5], input.stateLeaf[6], links.currentStateCiphertextC1Hash, 'currentStateCiphertextC1Hash'),
+        current_state_ciphertext_c2_hash: hash2Claim(input.stateLeaf[7], input.stateLeaf[8], links.currentStateCiphertextC2Hash, 'currentStateCiphertextC2Hash'),
+        new_state_ciphertext_c1_hash: hash2Claim(input.c1[0], input.c1[1], links.newStateCiphertextC1Hash, 'newStateCiphertextC1Hash'),
+        new_state_ciphertext_c2_hash: hash2Claim(input.c2[0], input.c2[1], links.newStateCiphertextC2Hash, 'newStateCiphertextC2Hash'),
+        deactivate_pub_key_hash: hash2Claim(input.stateLeaf[0], input.stateLeaf[1], links.deactivatePubKeyHash, 'deactivatePubKeyHash'),
+        state_leaf_hash: hash10Claim(input.stateLeaf, transition.derived.stateLeafHash, 'stateLeafHash'),
+        deactivate_leaf: hash5Claim([...input.c1, ...input.c2, links.deactivateSharedKeyHash], transition.derived.deactivateLeaf, 'deactivateLeaf'),
+      },
+    },
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+    },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
 function pushU256(args, value) {
   args.push(value.low, value.high);
 }
@@ -826,6 +1301,69 @@ function pushProcessDeactivateStepFields(args, fields) {
   pushU256(args, fields.expected_poll_id);
 }
 
+function pushProcessDeactivateCoordKeyFields(args, fields) {
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.coord_priv_key_hash);
+}
+
+function pushProcessDeactivateEcdhFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  args.push(BigInt(fields.ecdh_kind));
+  pushU256(args, fields.coord_priv_key_hash);
+  pushU256(args, fields.base_hash);
+  pushU256(args, fields.shared_key_hash);
+}
+
+function pushProcessDeactivateSignatureFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.pub_key_hash);
+  pushU256(args, fields.r8_hash);
+  pushU256(args, fields.packed_cmd_hash);
+  pushU256(args, fields.cmd_sig_s);
+  pushU256(args, fields.signature_valid);
+}
+
+function pushProcessDeactivateDecryptFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  args.push(BigInt(fields.decrypt_kind));
+  pushU256(args, fields.coord_priv_key_hash);
+  pushU256(args, fields.c1_hash);
+  pushU256(args, fields.c2_hash);
+  pushU256(args, fields.decrypt_is_odd);
+}
+
+function pushProcessDeactivateStepCoreFields(args, fields) {
+  args.push(BigInt(fields.message_index));
+  pushU256(args, fields.deactivate_index);
+  pushU256(args, fields.coord_pub_key_hash);
+  pushU256(args, fields.coord_priv_key_hash);
+  pushU256(args, fields.previous_message_hash);
+  pushU256(args, fields.next_message_hash);
+  pushU256(args, fields.current_active_state_root);
+  pushU256(args, fields.current_deactivate_root);
+  pushU256(args, fields.new_active_state_root);
+  pushU256(args, fields.new_deactivate_root);
+  pushU256(args, fields.current_deactivate_commitment);
+  pushU256(args, fields.new_deactivate_commitment);
+  pushU256(args, fields.current_state_root);
+  pushU256(args, fields.expected_poll_id);
+  pushU256(args, fields.enc_pub_key_hash);
+  pushU256(args, fields.command_shared_key_hash);
+  pushU256(args, fields.signature_pub_key_hash);
+  pushU256(args, fields.signature_r8_hash);
+  pushU256(args, fields.packed_cmd_hash);
+  pushU256(args, fields.cmd_sig_s);
+  pushU256(args, fields.signature_valid);
+  pushU256(args, fields.current_state_ciphertext_c1_hash);
+  pushU256(args, fields.current_state_ciphertext_c2_hash);
+  pushU256(args, fields.current_decrypt_is_odd);
+  pushU256(args, fields.new_state_ciphertext_c1_hash);
+  pushU256(args, fields.new_state_ciphertext_c2_hash);
+  pushU256(args, fields.new_decrypt_is_odd);
+  pushU256(args, fields.deactivate_pub_key_hash);
+  pushU256(args, fields.deactivate_shared_key_hash);
+}
+
 function pushProcessDeactivateMessagesBoundaryWitness(args, witness) {
   pushVector2(args, witness.coord_pub_key);
   pushU256(args, witness.current_active_state_root);
@@ -894,6 +1432,91 @@ function pushProcessDeactivateMessageStepWitness(args, witness) {
   pushHash2Claim(args, witness.new_deactivate_commitment);
 }
 
+function pushProcessDeactivateCoordKeyWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.coord_pub_key);
+  pushBabyjubScalarMulWitness(args, witness.coord_pub_key_scalar_mul);
+  pushHash2Claim(args, witness.coord_pub_key_hash);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+}
+
+function pushProcessDeactivateEcdhWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.base);
+  pushBabyjubScalarMulWitness(args, witness.ecdh);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+  pushHash2Claim(args, witness.base_hash);
+  pushHash2Claim(args, witness.shared_key_hash);
+}
+
+function pushProcessDeactivateSignatureWitness(args, witness) {
+  pushVector2(args, witness.pub_key);
+  pushVector2(args, witness.r8);
+  pushU256(args, witness.s);
+  pushVector3(args, witness.packed_cmd);
+  pushBabyjubPoseidonSignatureWitness(args, witness.signature);
+  pushHash2Claim(args, witness.pub_key_hash);
+  pushHash2Claim(args, witness.r8_hash);
+  pushHash5Claim(args, witness.packed_cmd_hash);
+}
+
+function pushProcessDeactivateDecryptWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.c1);
+  pushVector2(args, witness.c2);
+  pushElGamalDecryptWitness(args, witness.decrypt);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+  pushHash2Claim(args, witness.c1_hash);
+  pushHash2Claim(args, witness.c2_hash);
+}
+
+function pushProcessDeactivateStepCoreWitness(args, witness) {
+  pushU256(args, witness.is_empty_msg);
+  pushU256(args, witness.coord_priv_key);
+  pushVector10(args, witness.msg);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector2(args, witness.command_shared_key);
+  pushVector7(args, witness.decrypted_command);
+  pushVector2(args, witness.c1);
+  pushVector2(args, witness.c2);
+  pushVector10(args, witness.state_leaf);
+  pushVector4(args, witness.state_leaf_path_0);
+  pushVector4(args, witness.state_leaf_path_1);
+  pushVector4(args, witness.active_state_leaf_path_0);
+  pushVector4(args, witness.active_state_leaf_path_1);
+  pushU256(args, witness.current_active_state);
+  pushU256(args, witness.new_active_state);
+  pushU256(args, witness.cmd_state_index);
+  pushU256(args, witness.cmd_poll_id);
+  pushVector2(args, witness.cmd_sig_r8);
+  pushU256(args, witness.cmd_sig_s);
+  pushVector3(args, witness.packed_cmd);
+  pushVector4(args, witness.deactivate_leaf_path_0);
+  pushVector4(args, witness.deactivate_leaf_path_1);
+  pushVector4(args, witness.deactivate_leaf_path_2);
+  pushVector4(args, witness.deactivate_leaf_path_3);
+  pushU256(args, witness.current_decrypt_is_odd);
+  pushU256(args, witness.new_decrypt_is_odd);
+  pushU256(args, witness.signature_valid);
+  pushU256(args, witness.deactivate_shared_key_hash);
+  pushHash2Claim(args, witness.coord_priv_key_hash);
+  pushHash13Claim(args, witness.message_hash);
+  pushHash2Claim(args, witness.current_deactivate_commitment);
+  pushHash2Claim(args, witness.new_deactivate_commitment);
+  pushHash2Claim(args, witness.enc_pub_key_hash);
+  pushHash2Claim(args, witness.command_shared_key_hash);
+  pushHash2Claim(args, witness.signature_pub_key_hash);
+  pushHash2Claim(args, witness.signature_r8_hash);
+  pushHash5Claim(args, witness.packed_cmd_hash);
+  pushHash2Claim(args, witness.current_state_ciphertext_c1_hash);
+  pushHash2Claim(args, witness.current_state_ciphertext_c2_hash);
+  pushHash2Claim(args, witness.new_state_ciphertext_c1_hash);
+  pushHash2Claim(args, witness.new_state_ciphertext_c2_hash);
+  pushHash2Claim(args, witness.deactivate_pub_key_hash);
+  pushHash10Claim(args, witness.state_leaf_hash);
+  pushHash5Claim(args, witness.deactivate_leaf);
+}
+
 export function serializeCairoProcessDeactivateOneExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateOneWitness(args, cairoInput.program_input.witness);
@@ -911,6 +1534,41 @@ export function serializeCairoProcessDeactivateMessageStepExecutableArgs(cairoIn
   const args = [];
   pushProcessDeactivateStepFields(args, cairoInput.program_input.fields);
   pushProcessDeactivateMessageStepWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateCoordKeyExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateCoordKeyFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateCoordKeyWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateEcdhExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateEcdhFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateEcdhWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateSignatureExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateSignatureFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateSignatureWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateDecryptExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateDecryptFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateDecryptWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeCairoProcessDeactivateStepCoreExecutableArgs(cairoInput) {
+  const args = [];
+  pushProcessDeactivateStepCoreFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

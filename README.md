@@ -140,6 +140,11 @@ The implementation keeps the existing AMACI public-input semantics:
   every non-empty boundary encrypted message and `encPubKey` to its
   `ProcessOne` command fields through ECDH and
   `PoseidonDecryptWithoutCheck(7)`.
+  The preferred split path also exposes smaller deactivate slices:
+  `process_deactivate_coord_key`, per-message command ECDH, per-message
+  signature, current/new ElGamal decrypt parity, deactivate-leaf ECDH, and a
+  `process_deactivate_step_core` proof that links those claims to the root
+  transition.
 - `src/fixtures/` and `tools/discover-amaci-fixtures.mjs` classify existing
   AMACI operator JSON fixtures and report which ones are directly runnable by
   the current small-parameter Cairo targets.
@@ -411,6 +416,16 @@ Expected small execution characteristics on the current local machine:
   `ProcessDeactivateMessages` message slot, `31` output felts. Use this when
   the dense five-message deactivate proof is too large for the current
   machine.
+- `process_deactivate_coord_key`: coordinator key binding, `10` output felts.
+- `process_deactivate_ecdh`: command or deactivate-leaf ECDH claim, `14`
+  output felts.
+- `process_deactivate_signature`: one deactivate signature claim, `17`
+  output felts.
+- `process_deactivate_decrypt`: one current/new ElGamal decrypt parity claim,
+  `16` output felts.
+- `process_deactivate_step_core`: one deactivate message hash/root transition
+  without repeated scalar multiplication or signature verification, `63`
+  output felts.
 
 If `scarb execute` fails, do not run the prover. Fix the input, toolchain, or
 Cairo build first.
@@ -470,6 +485,13 @@ tools/run-cairo-proof.sh --circuit process-message-step-core --message-index 0 -
 tools/run-cairo-proof.sh --circuit process-deactivate --out-dir "$OUT_DIR/process-deactivate"
 tools/run-cairo-proof.sh --circuit process-deactivate-boundary --out-dir "$OUT_DIR/process-deactivate-boundary"
 tools/run-cairo-proof.sh --circuit process-deactivate-step --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-coord-key --out-dir "$OUT_DIR/process-deactivate-coord-key"
+tools/run-cairo-proof.sh --circuit process-deactivate-ecdh-command --message-index 0 --out-dir "$OUT_DIR/process-deactivate-command-ecdh-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-signature --message-index 0 --out-dir "$OUT_DIR/process-deactivate-signature-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-current --message-index 0 --out-dir "$OUT_DIR/process-deactivate-current-decrypt-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-new --message-index 0 --out-dir "$OUT_DIR/process-deactivate-new-decrypt-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-ecdh-leaf --message-index 0 --out-dir "$OUT_DIR/process-deactivate-leaf-ecdh-0"
+tools/run-cairo-proof.sh --circuit process-deactivate-step-core --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-core-0"
 ```
 
 The legacy tally-only form is still supported:
@@ -524,20 +546,22 @@ This proves:
 
 ```text
 process-deactivate-boundary
-process-deactivate-step --message-index 0
-process-deactivate-step --message-index 1
-process-deactivate-step --message-index 2
-process-deactivate-step --message-index 3
-process-deactivate-step --message-index 4
+process-deactivate-coord-key
+process-deactivate-ecdh-command --message-index 0..4
+process-deactivate-signature --message-index 0..4
+process-deactivate-decrypt-current --message-index 0..4
+process-deactivate-decrypt-new --message-index 0..4
+process-deactivate-ecdh-leaf --message-index 0..4
+process-deactivate-step-core --message-index 0..4
 ```
 
-Each step proof exposes the previous/next message hashes, previous/next
-active-state roots, previous/next deactivate roots, per-step deactivate
-commitments, `deactivateIndex`, `currentStateRoot`, and `expectedPollId`.
-Production wrapper logic still needs to check all six facts, enforce hash/root
-chain continuity, enforce `deactivateIndex` increments by one, and bind
-`step0.current_deactivate_commitment` / `step4.new_deactivate_commitment` to
-the boundary output.
+The deep split path moves the heavy BabyJubJub work out of the core root
+transition. The core proof exposes link hashes for command ECDH, signature
+verification, current/new ElGamal decrypt parity, deactivate-leaf ECDH, and
+the same previous/next message hash plus active/deactivate root chain fields.
+Production wrapper logic still needs to check all linked facts, enforce
+hash/root chain continuity, enforce `deactivateIndex` increments by one, and
+bind the first/last per-step deactivate commitments to the boundary output.
 
 ### Summarize Results
 
@@ -652,8 +676,9 @@ input_hash_low128, input_hash_high128
   for verifying and chaining the boundary fact, coord-key fact, five ECDH
   facts, five signature facts, and five core-step facts is not yet
   implemented.
-- Dense `ProcessDeactivateMessages(2,5)` now has the same split proof path;
-  wrapper support for checking the boundary fact plus five deactivate step
+- Dense `ProcessDeactivateMessages(2,5)` now has a deep split proof path;
+  wrapper support for checking the boundary fact, coord-key fact, command
+  ECDH facts, signature facts, decrypt facts, leaf ECDH facts, and core-step
   facts is still pending.
 
 ## Commands

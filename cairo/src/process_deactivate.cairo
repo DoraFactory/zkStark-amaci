@@ -8,9 +8,17 @@ use crate::hash_gates::{
 };
 use crate::poseidon_bn254::{PoseidonT4State, field_sub_mod, poseidon4_permutation, poseidon5_hash};
 use crate::public_output::{
-    ProcessDeactivatePublicFields, ProcessDeactivatePublicOutput, ProcessDeactivateStepPublicFields,
-    ProcessDeactivateStepPublicOutput, build_process_deactivate_public_output,
-    build_process_deactivate_step_public_output,
+    ProcessDeactivateCoordKeyPublicFields, ProcessDeactivateCoordKeyPublicOutput,
+    ProcessDeactivateDecryptPublicFields, ProcessDeactivateDecryptPublicOutput,
+    ProcessDeactivateEcdhPublicFields, ProcessDeactivateEcdhPublicOutput,
+    ProcessDeactivatePublicFields, ProcessDeactivatePublicOutput,
+    ProcessDeactivateSignaturePublicFields, ProcessDeactivateSignaturePublicOutput,
+    ProcessDeactivateStepCorePublicFields, ProcessDeactivateStepCorePublicOutput,
+    ProcessDeactivateStepPublicFields, ProcessDeactivateStepPublicOutput,
+    build_process_deactivate_coord_key_public_output,
+    build_process_deactivate_decrypt_public_output, build_process_deactivate_ecdh_public_output,
+    build_process_deactivate_public_output, build_process_deactivate_signature_public_output,
+    build_process_deactivate_step_core_public_output, build_process_deactivate_step_public_output,
 };
 use crate::types::{
     U256x10, U256x2, U256x3, U256x4, U256x5, U256x7, U256x8, assert_u256_eq, is_zero,
@@ -25,6 +33,11 @@ pub const U128_TWO_POW_96: u128 = 0x1000000000000000000000000;
 pub const STATE_TREE_LEAVES: u128 = 25;
 pub const STATE_TREE_MAX_INDEX: u256 = 24;
 pub const DEACTIVATE_TREE_LEAVES: u128 = 625;
+pub const COORD_PRIV_KEY_HASH_DOMAIN: u256 = 0x414d4143495f434f4f52445f50524956;
+pub const DEACTIVATE_ECDH_KIND_COMMAND: felt252 = 0;
+pub const DEACTIVATE_ECDH_KIND_LEAF: felt252 = 1;
+pub const DEACTIVATE_DECRYPT_KIND_CURRENT: felt252 = 0;
+pub const DEACTIVATE_DECRYPT_KIND_NEW: felt252 = 1;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessDeactivateOneHashTranscript {
@@ -108,6 +121,96 @@ pub struct ProcessDeactivateMessageStepWitness {
     pub process_one: ProcessDeactivateOneWitness,
     pub current_deactivate_commitment: Hash2Claim,
     pub new_deactivate_commitment: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessDeactivateCoordKeyWitness {
+    pub coord_priv_key: u256,
+    pub coord_pub_key: U256x2,
+    pub coord_pub_key_scalar_mul: BabyJubJubScalarMulWitness,
+    pub coord_pub_key_hash: Hash2Claim,
+    pub coord_priv_key_hash: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessDeactivateEcdhWitness {
+    pub coord_priv_key: u256,
+    pub base: U256x2,
+    pub ecdh: BabyJubJubScalarMulWitness,
+    pub coord_priv_key_hash: Hash2Claim,
+    pub base_hash: Hash2Claim,
+    pub shared_key_hash: Hash2Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessDeactivateSignatureWitness {
+    pub pub_key: U256x2,
+    pub r8: U256x2,
+    pub s: u256,
+    pub packed_cmd: U256x3,
+    pub signature: BabyJubJubPoseidonSignatureWitness,
+    pub pub_key_hash: Hash2Claim,
+    pub r8_hash: Hash2Claim,
+    pub packed_cmd_hash: Hash5Claim,
+}
+
+#[derive(Drop, Serde)]
+pub struct ProcessDeactivateDecryptWitness {
+    pub coord_priv_key: u256,
+    pub c1: U256x2,
+    pub c2: U256x2,
+    pub decrypt: ElGamalDecryptWitness,
+    pub coord_priv_key_hash: Hash2Claim,
+    pub c1_hash: Hash2Claim,
+    pub c2_hash: Hash2Claim,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateStepCoreWitness {
+    pub is_empty_msg: u256,
+    pub coord_priv_key: u256,
+    pub msg: U256x10,
+    pub enc_pub_key: U256x2,
+    pub command_shared_key: U256x2,
+    pub decrypted_command: U256x7,
+    pub c1: U256x2,
+    pub c2: U256x2,
+    pub state_leaf: U256x10,
+    pub state_leaf_path_0: U256x4,
+    pub state_leaf_path_1: U256x4,
+    pub active_state_leaf_path_0: U256x4,
+    pub active_state_leaf_path_1: U256x4,
+    pub current_active_state: u256,
+    pub new_active_state: u256,
+    pub cmd_state_index: u256,
+    pub cmd_poll_id: u256,
+    pub cmd_sig_r8: U256x2,
+    pub cmd_sig_s: u256,
+    pub packed_cmd: U256x3,
+    pub deactivate_leaf_path_0: U256x4,
+    pub deactivate_leaf_path_1: U256x4,
+    pub deactivate_leaf_path_2: U256x4,
+    pub deactivate_leaf_path_3: U256x4,
+    pub current_decrypt_is_odd: u256,
+    pub new_decrypt_is_odd: u256,
+    pub signature_valid: u256,
+    pub deactivate_shared_key_hash: u256,
+    pub coord_priv_key_hash: Hash2Claim,
+    pub message_hash: Hash13Claim,
+    pub current_deactivate_commitment: Hash2Claim,
+    pub new_deactivate_commitment: Hash2Claim,
+    pub enc_pub_key_hash: Hash2Claim,
+    pub command_shared_key_hash: Hash2Claim,
+    pub signature_pub_key_hash: Hash2Claim,
+    pub signature_r8_hash: Hash2Claim,
+    pub packed_cmd_hash: Hash5Claim,
+    pub current_state_ciphertext_c1_hash: Hash2Claim,
+    pub current_state_ciphertext_c2_hash: Hash2Claim,
+    pub new_state_ciphertext_c1_hash: Hash2Claim,
+    pub new_state_ciphertext_c2_hash: Hash2Claim,
+    pub deactivate_pub_key_hash: Hash2Claim,
+    pub state_leaf_hash: Hash10Claim,
+    pub deactivate_leaf: Hash5Claim,
 }
 
 #[derive(Drop, Serde)]
@@ -428,6 +531,106 @@ fn assert_coord_pub_key_matches_private_key(
     let derived_pub_key = verify_babyjub_scalar_mul(witness);
     assert_u256_eq(derived_pub_key.v0, coord_pub_key.v0);
     assert_u256_eq(derived_pub_key.v1, coord_pub_key.v1);
+}
+
+fn coord_priv_key_hash(claim: Hash2Claim, coord_priv_key: u256) -> u256 {
+    poseidon_hash2(claim, coord_priv_key, COORD_PRIV_KEY_HASH_DOMAIN)
+}
+
+fn packed_cmd_hash(claim: Hash5Claim, packed_cmd: U256x3) -> u256 {
+    poseidon_hash5(
+        claim,
+        U256x5 {
+            v0: packed_cmd.v0,
+            v1: packed_cmd.v1,
+            v2: packed_cmd.v2,
+            v3: zero_u256(),
+            v4: zero_u256(),
+        },
+    )
+}
+
+fn assert_valid_deactivate_ecdh_kind(ecdh_kind: felt252) {
+    assert(
+        ecdh_kind == DEACTIVATE_ECDH_KIND_COMMAND || ecdh_kind == DEACTIVATE_ECDH_KIND_LEAF,
+        'BAD_DEACT_ECDH_KIND',
+    );
+}
+
+fn assert_valid_deactivate_decrypt_kind(decrypt_kind: felt252) {
+    assert(
+        decrypt_kind == DEACTIVATE_DECRYPT_KIND_CURRENT
+            || decrypt_kind == DEACTIVATE_DECRYPT_KIND_NEW,
+        'BAD_DEACT_DEC_KIND',
+    );
+}
+
+fn verify_process_deactivate_coord_key(
+    fields: ProcessDeactivateCoordKeyPublicFields, witness: ProcessDeactivateCoordKeyWitness,
+) {
+    assert_coord_pub_key_matches_private_key(
+        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
+    );
+    let coord_pub_key_hash = poseidon_hash2(
+        witness.coord_pub_key_hash, witness.coord_pub_key.v0, witness.coord_pub_key.v1,
+    );
+    assert_u256_eq(coord_pub_key_hash, fields.coord_pub_key_hash);
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+}
+
+fn verify_process_deactivate_ecdh(
+    fields: ProcessDeactivateEcdhPublicFields, witness: ProcessDeactivateEcdhWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    assert_valid_deactivate_ecdh_kind(fields.ecdh_kind);
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+    let base_hash = poseidon_hash2(witness.base_hash, witness.base.v0, witness.base.v1);
+    assert_u256_eq(base_hash, fields.base_hash);
+
+    assert_u256_eq(witness.ecdh.scalar, witness.coord_priv_key);
+    assert_u256_eq(witness.ecdh.base.v0, witness.base.v0);
+    assert_u256_eq(witness.ecdh.base.v1, witness.base.v1);
+    let shared_key = verify_babyjub_scalar_mul(witness.ecdh);
+    let shared_key_hash = poseidon_hash2(witness.shared_key_hash, shared_key.v0, shared_key.v1);
+    assert_u256_eq(shared_key_hash, fields.shared_key_hash);
+}
+
+fn verify_process_deactivate_signature(
+    fields: ProcessDeactivateSignaturePublicFields, witness: ProcessDeactivateSignatureWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    assert_bool_u256(fields.signature_valid);
+    let pub_key_hash = poseidon_hash2(witness.pub_key_hash, witness.pub_key.v0, witness.pub_key.v1);
+    assert_u256_eq(pub_key_hash, fields.pub_key_hash);
+    let r8_hash = poseidon_hash2(witness.r8_hash, witness.r8.v0, witness.r8.v1);
+    assert_u256_eq(r8_hash, fields.r8_hash);
+    let command_hash = packed_cmd_hash(witness.packed_cmd_hash, witness.packed_cmd);
+    assert_u256_eq(command_hash, fields.packed_cmd_hash);
+    assert_u256_eq(witness.s, fields.cmd_sig_s);
+    let valid = verify_babyjub_poseidon_signature(
+        witness.pub_key, witness.r8, witness.s, witness.packed_cmd, witness.signature,
+    );
+    assert_u256_eq(valid, fields.signature_valid);
+}
+
+fn verify_process_deactivate_decrypt(
+    fields: ProcessDeactivateDecryptPublicFields, witness: ProcessDeactivateDecryptWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    assert_valid_deactivate_decrypt_kind(fields.decrypt_kind);
+    assert_bool_u256(fields.decrypt_is_odd);
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+    let c1_hash = poseidon_hash2(witness.c1_hash, witness.c1.v0, witness.c1.v1);
+    assert_u256_eq(c1_hash, fields.c1_hash);
+    let c2_hash = poseidon_hash2(witness.c2_hash, witness.c2.v0, witness.c2.v1);
+    assert_u256_eq(c2_hash, fields.c2_hash);
+    let decrypt_is_odd = assert_elgamal_decrypt(
+        witness.decrypt, witness.coord_priv_key, witness.c1, witness.c2,
+    );
+    assert_u256_eq(bool_to_u256(decrypt_is_odd), fields.decrypt_is_odd);
 }
 
 fn process_deactivate_one(witness: ProcessDeactivateOneWitness) -> ProcessDeactivateOneOutput {
@@ -772,6 +975,176 @@ fn verify_process_deactivate_message_step(
     assert_u256_eq(new_deactivate_commitment, fields.new_deactivate_commitment);
 }
 
+fn verify_process_deactivate_step_core_claims(
+    fields: ProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+) {
+    let private_hash = coord_priv_key_hash(witness.coord_priv_key_hash, witness.coord_priv_key);
+    assert_u256_eq(private_hash, fields.coord_priv_key_hash);
+    let enc_pub_key_hash = poseidon_hash2(
+        witness.enc_pub_key_hash, witness.enc_pub_key.v0, witness.enc_pub_key.v1,
+    );
+    assert_u256_eq(enc_pub_key_hash, fields.enc_pub_key_hash);
+    let command_shared_key_hash = poseidon_hash2(
+        witness.command_shared_key_hash,
+        witness.command_shared_key.v0,
+        witness.command_shared_key.v1,
+    );
+    assert_u256_eq(command_shared_key_hash, fields.command_shared_key_hash);
+    let signature_pub_key_hash = poseidon_hash2(
+        witness.signature_pub_key_hash, witness.state_leaf.v0, witness.state_leaf.v1,
+    );
+    assert_u256_eq(signature_pub_key_hash, fields.signature_pub_key_hash);
+    let signature_r8_hash = poseidon_hash2(
+        witness.signature_r8_hash, witness.cmd_sig_r8.v0, witness.cmd_sig_r8.v1,
+    );
+    assert_u256_eq(signature_r8_hash, fields.signature_r8_hash);
+    let command_hash = packed_cmd_hash(witness.packed_cmd_hash, witness.packed_cmd);
+    assert_u256_eq(command_hash, fields.packed_cmd_hash);
+    assert_u256_eq(witness.cmd_sig_s, fields.cmd_sig_s);
+    assert_u256_eq(witness.signature_valid, fields.signature_valid);
+    let current_c1_hash = poseidon_hash2(
+        witness.current_state_ciphertext_c1_hash, witness.state_leaf.v5, witness.state_leaf.v6,
+    );
+    assert_u256_eq(current_c1_hash, fields.current_state_ciphertext_c1_hash);
+    let current_c2_hash = poseidon_hash2(
+        witness.current_state_ciphertext_c2_hash, witness.state_leaf.v7, witness.state_leaf.v8,
+    );
+    assert_u256_eq(current_c2_hash, fields.current_state_ciphertext_c2_hash);
+    assert_u256_eq(witness.current_decrypt_is_odd, fields.current_decrypt_is_odd);
+    let new_c1_hash = poseidon_hash2(
+        witness.new_state_ciphertext_c1_hash, witness.c1.v0, witness.c1.v1,
+    );
+    assert_u256_eq(new_c1_hash, fields.new_state_ciphertext_c1_hash);
+    let new_c2_hash = poseidon_hash2(
+        witness.new_state_ciphertext_c2_hash, witness.c2.v0, witness.c2.v1,
+    );
+    assert_u256_eq(new_c2_hash, fields.new_state_ciphertext_c2_hash);
+    assert_u256_eq(witness.new_decrypt_is_odd, fields.new_decrypt_is_odd);
+    let deactivate_pub_key_hash = poseidon_hash2(
+        witness.deactivate_pub_key_hash, witness.state_leaf.v0, witness.state_leaf.v1,
+    );
+    assert_u256_eq(deactivate_pub_key_hash, fields.deactivate_pub_key_hash);
+    assert_u256_eq(witness.deactivate_shared_key_hash, fields.deactivate_shared_key_hash);
+}
+
+fn verify_process_deactivate_step_core(
+    fields: ProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    assert_deactivate_index(fields.deactivate_index);
+    assert_bool_u256(fields.signature_valid);
+    assert_bool_u256(fields.current_decrypt_is_odd);
+    assert_bool_u256(fields.new_decrypt_is_odd);
+    assert_bool_u256(witness.is_empty_msg);
+    verify_process_deactivate_step_core_claims(fields, witness);
+
+    let next_message_hash = process_deactivate_message_hash_chain_step(
+        witness.msg, witness.enc_pub_key, fields.previous_message_hash, witness.message_hash,
+    );
+    assert_u256_eq(next_message_hash, fields.next_message_hash);
+
+    let current_deactivate_commitment = poseidon_hash2(
+        witness.current_deactivate_commitment,
+        fields.current_active_state_root,
+        fields.current_deactivate_root,
+    );
+    assert_u256_eq(current_deactivate_commitment, fields.current_deactivate_commitment);
+
+    if is_zero(witness.msg.v0) {
+        assert_u256_eq(witness.is_empty_msg, 1);
+        assert_u256_eq(fields.current_active_state_root, fields.new_active_state_root);
+        assert_u256_eq(fields.current_deactivate_root, fields.new_deactivate_root);
+    } else {
+        assert_u256_eq(witness.is_empty_msg, zero_u256());
+        validate_poseidon_decryption(
+            witness.msg, witness.command_shared_key, witness.decrypted_command,
+        );
+        assert_u256_eq(witness.packed_cmd.v0, witness.decrypted_command.v0);
+        assert_u256_eq(witness.packed_cmd.v1, witness.decrypted_command.v1);
+        assert_u256_eq(witness.packed_cmd.v2, witness.decrypted_command.v2);
+        assert_u256_eq(witness.cmd_sig_r8.v0, witness.decrypted_command.v4);
+        assert_u256_eq(witness.cmd_sig_r8.v1, witness.decrypted_command.v5);
+        assert_u256_eq(witness.cmd_sig_s, witness.decrypted_command.v6);
+        let unpacked = unpack_command_data(witness.packed_cmd.v0);
+        assert_u256_eq(witness.cmd_poll_id, unpacked.v0);
+        assert_u256_eq(witness.cmd_state_index, unpacked.v5);
+
+        let valid_poll_id = witness.cmd_poll_id == fields.expected_poll_id;
+        let signature_valid = u256_bool(witness.signature_valid);
+        let current_decrypt_is_odd = u256_bool(witness.current_decrypt_is_odd);
+        let valid = signature_valid && !current_decrypt_is_odd && valid_poll_id;
+        let new_decrypt_is_odd = u256_bool(witness.new_decrypt_is_odd);
+        assert_u256_eq(bool_to_u256(valid), bool_to_u256(!new_decrypt_is_odd));
+
+        let state_index = select_u256(
+            valid_state_index(witness.cmd_state_index),
+            STATE_TREE_MAX_INDEX,
+            witness.cmd_state_index,
+        );
+        let state_leaf_hash = poseidon_hash10(witness.state_leaf_hash, witness.state_leaf);
+        let current_state_root = quinary_root_depth_2(
+            state_leaf_hash, witness.state_leaf_path_0, witness.state_leaf_path_1, state_index,
+        );
+        assert_u256_eq(current_state_root, fields.current_state_root);
+
+        assert(!is_zero(witness.new_active_state), 'NEW_ACTIVE_ZERO');
+        let current_active_state_root = quinary_root_depth_2(
+            witness.current_active_state,
+            witness.active_state_leaf_path_0,
+            witness.active_state_leaf_path_1,
+            state_index,
+        );
+        assert_u256_eq(current_active_state_root, fields.current_active_state_root);
+        let active_state_leaf = select_u256(
+            valid, witness.current_active_state, witness.new_active_state,
+        );
+        let new_active_state_root = quinary_root_depth_2(
+            active_state_leaf,
+            witness.active_state_leaf_path_0,
+            witness.active_state_leaf_path_1,
+            state_index,
+        );
+        assert_u256_eq(new_active_state_root, fields.new_active_state_root);
+
+        let deactivate_leaf = poseidon_hash5(
+            witness.deactivate_leaf,
+            U256x5 {
+                v0: witness.c1.v0,
+                v1: witness.c1.v1,
+                v2: witness.c2.v0,
+                v3: witness.c2.v1,
+                v4: fields.deactivate_shared_key_hash,
+            },
+        );
+        let current_deactivate_root = quinary_root_depth_4(
+            zero_u256(),
+            witness.deactivate_leaf_path_0,
+            witness.deactivate_leaf_path_1,
+            witness.deactivate_leaf_path_2,
+            witness.deactivate_leaf_path_3,
+            fields.deactivate_index,
+        );
+        assert_u256_eq(current_deactivate_root, fields.current_deactivate_root);
+        let new_deactivate_leaf = select_u256(
+            u256_bool(witness.is_empty_msg), deactivate_leaf, zero_u256(),
+        );
+        let new_deactivate_root = quinary_root_depth_4(
+            new_deactivate_leaf,
+            witness.deactivate_leaf_path_0,
+            witness.deactivate_leaf_path_1,
+            witness.deactivate_leaf_path_2,
+            witness.deactivate_leaf_path_3,
+            fields.deactivate_index,
+        );
+        assert_u256_eq(new_deactivate_root, fields.new_deactivate_root);
+    }
+
+    let new_deactivate_commitment = poseidon_hash2(
+        witness.new_deactivate_commitment, fields.new_active_state_root, fields.new_deactivate_root,
+    );
+    assert_u256_eq(new_deactivate_commitment, fields.new_deactivate_commitment);
+}
+
 #[executable]
 pub fn process_deactivate_one_main(
     witness: ProcessDeactivateOneWitness,
@@ -793,6 +1166,46 @@ pub fn process_deactivate_message_step_main(
 ) -> ProcessDeactivateStepPublicOutput {
     verify_process_deactivate_message_step(fields, witness);
     build_process_deactivate_step_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_coord_key_main(
+    fields: ProcessDeactivateCoordKeyPublicFields, witness: ProcessDeactivateCoordKeyWitness,
+) -> ProcessDeactivateCoordKeyPublicOutput {
+    verify_process_deactivate_coord_key(fields, witness);
+    build_process_deactivate_coord_key_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_ecdh_main(
+    fields: ProcessDeactivateEcdhPublicFields, witness: ProcessDeactivateEcdhWitness,
+) -> ProcessDeactivateEcdhPublicOutput {
+    verify_process_deactivate_ecdh(fields, witness);
+    build_process_deactivate_ecdh_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_signature_main(
+    fields: ProcessDeactivateSignaturePublicFields, witness: ProcessDeactivateSignatureWitness,
+) -> ProcessDeactivateSignaturePublicOutput {
+    verify_process_deactivate_signature(fields, witness);
+    build_process_deactivate_signature_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_decrypt_main(
+    fields: ProcessDeactivateDecryptPublicFields, witness: ProcessDeactivateDecryptWitness,
+) -> ProcessDeactivateDecryptPublicOutput {
+    verify_process_deactivate_decrypt(fields, witness);
+    build_process_deactivate_decrypt_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_step_core_main(
+    fields: ProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+) -> ProcessDeactivateStepCorePublicOutput {
+    verify_process_deactivate_step_core(fields, witness);
+    build_process_deactivate_step_core_public_output(fields)
 }
 
 #[executable]

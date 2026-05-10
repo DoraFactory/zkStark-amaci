@@ -6,14 +6,24 @@ import { processDeactivateInputHash } from '../src/compat/encoding.mjs';
 import { BABYJUB_BASE8, babyjubScalarMul, poseidonSignatureMessage } from '../src/compat/babyjub.mjs';
 import { packCommandData, poseidonEncryptWithoutCheck7 } from '../src/msg/process-one.mjs';
 import {
+  buildCairoProcessDeactivateCoordKeyInput,
+  buildCairoProcessDeactivateDecryptInput,
+  buildCairoProcessDeactivateEcdhInput,
   buildCairoProcessDeactivateMessagesBoundaryInput,
   buildCairoProcessDeactivateMessageStepInput,
   buildCairoProcessDeactivateMessagesStateTransitionInput,
   buildCairoProcessDeactivateMessagesStatefulInput,
+  buildCairoProcessDeactivateSignatureInput,
+  buildCairoProcessDeactivateStepCoreInput,
+  serializeCairoProcessDeactivateCoordKeyExecutableArgs,
+  serializeCairoProcessDeactivateDecryptExecutableArgs,
+  serializeCairoProcessDeactivateEcdhExecutableArgs,
   serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs,
   serializeCairoProcessDeactivateMessageStepExecutableArgs,
   serializeCairoProcessDeactivateMessagesStateTransitionExecutableArgs,
   serializeCairoProcessDeactivateMessagesStatefulExecutableArgs,
+  serializeCairoProcessDeactivateSignatureExecutableArgs,
+  serializeCairoProcessDeactivateStepCoreExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
   evaluateProcessDeactivateMessages,
@@ -408,6 +418,59 @@ test('builds Cairo executable arguments for linked ProcessDeactivateMessages ste
   assert.equal(cairoInput.publicFields.newDeactivateRoot, transition.derived.newDeactivateRoot);
   assert.ok(args.length > 22000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('builds Cairo executable arguments for deeply split ProcessDeactivateMessages proofs', () => {
+  const input = getStatefulFixture();
+  const evaluated = evaluateProcessDeactivateMessagesStateful(input);
+  const coordKey = buildCairoProcessDeactivateCoordKeyInput(input, evaluated);
+  const commandEcdh = buildCairoProcessDeactivateEcdhInput(input, 2, 'command', evaluated);
+  const leafEcdh = buildCairoProcessDeactivateEcdhInput(input, 2, 'leaf', evaluated);
+  const signature = buildCairoProcessDeactivateSignatureInput(input, 2, evaluated);
+  const currentDecrypt = buildCairoProcessDeactivateDecryptInput(input, 2, 'current', evaluated);
+  const newDecrypt = buildCairoProcessDeactivateDecryptInput(input, 2, 'new', evaluated);
+  const core = buildCairoProcessDeactivateStepCoreInput(input, 2, evaluated);
+  const coordArgs = serializeCairoProcessDeactivateCoordKeyExecutableArgs(coordKey);
+  const commandEcdhArgs = serializeCairoProcessDeactivateEcdhExecutableArgs(commandEcdh);
+  const leafEcdhArgs = serializeCairoProcessDeactivateEcdhExecutableArgs(leafEcdh);
+  const signatureArgs = serializeCairoProcessDeactivateSignatureExecutableArgs(signature);
+  const currentDecryptArgs = serializeCairoProcessDeactivateDecryptExecutableArgs(currentDecrypt);
+  const newDecryptArgs = serializeCairoProcessDeactivateDecryptExecutableArgs(newDecrypt);
+  const coreArgs = serializeCairoProcessDeactivateStepCoreExecutableArgs(core);
+
+  assert.equal(coordKey.public_output.length, 10);
+  assert.equal(commandEcdh.public_output.length, 14);
+  assert.equal(leafEcdh.public_output.length, 14);
+  assert.equal(signature.public_output.length, 17);
+  assert.equal(currentDecrypt.public_output.length, 16);
+  assert.equal(newDecrypt.public_output.length, 16);
+  assert.equal(core.public_output.length, 63);
+  assert.equal(coordKey.publicFields.coordPrivKeyHash, core.publicFields.coordPrivKeyHash);
+  assert.equal(commandEcdh.publicFields.baseHash, core.publicFields.encPubKeyHash);
+  assert.equal(commandEcdh.publicFields.sharedKeyHash, core.publicFields.commandSharedKeyHash);
+  assert.equal(leafEcdh.publicFields.baseHash, core.publicFields.deactivatePubKeyHash);
+  assert.equal(leafEcdh.publicFields.sharedKeyHash, core.publicFields.deactivateSharedKeyHash);
+  assert.equal(signature.publicFields.pubKeyHash, core.publicFields.signaturePubKeyHash);
+  assert.equal(signature.publicFields.r8Hash, core.publicFields.signatureR8Hash);
+  assert.equal(signature.publicFields.packedCmdHash, core.publicFields.packedCmdHash);
+  assert.equal(currentDecrypt.publicFields.c1Hash, core.publicFields.currentStateCiphertextC1Hash);
+  assert.equal(currentDecrypt.publicFields.c2Hash, core.publicFields.currentStateCiphertextC2Hash);
+  assert.equal(currentDecrypt.publicFields.decryptIsOdd, core.publicFields.currentDecryptIsOdd);
+  assert.equal(newDecrypt.publicFields.c1Hash, core.publicFields.newStateCiphertextC1Hash);
+  assert.equal(newDecrypt.publicFields.c2Hash, core.publicFields.newStateCiphertextC2Hash);
+  assert.equal(newDecrypt.publicFields.decryptIsOdd, core.publicFields.newDecryptIsOdd);
+  assert.ok(coreArgs.length < serializeCairoProcessDeactivateMessageStepExecutableArgs(
+    buildCairoProcessDeactivateMessageStepInput(input, 2, evaluated),
+  ).length);
+  assert.ok([
+    ...coordArgs,
+    ...commandEcdhArgs,
+    ...leafEcdhArgs,
+    ...signatureArgs,
+    ...currentDecryptArgs,
+    ...newDecryptArgs,
+    ...coreArgs,
+  ].every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
 test('rejects tampered ProcessDeactivateMessages batch end hash', () => {

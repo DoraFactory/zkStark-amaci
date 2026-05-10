@@ -63,6 +63,47 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-deactivate-coord-key': {
+    prepareCircuit: 'process-deactivate-coord-key',
+    executable: 'process_deactivate_coord_key',
+    synthetic: true,
+  },
+  'process-deactivate-ecdh-command': {
+    prepareCircuit: 'process-deactivate-ecdh-command',
+    executable: 'process_deactivate_ecdh',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-ecdh-leaf': {
+    prepareCircuit: 'process-deactivate-ecdh-leaf',
+    executable: 'process_deactivate_ecdh',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-signature': {
+    prepareCircuit: 'process-deactivate-signature',
+    executable: 'process_deactivate_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-current': {
+    prepareCircuit: 'process-deactivate-decrypt-current',
+    executable: 'process_deactivate_decrypt',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-new': {
+    prepareCircuit: 'process-deactivate-decrypt-new',
+    executable: 'process_deactivate_decrypt',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-step-core': {
+    prepareCircuit: 'process-deactivate-step-core',
+    executable: 'process_deactivate_step_core',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
 });
 
 function usage() {
@@ -75,7 +116,7 @@ Circuits:
 Options:
   --out-dir <path>      Directory for generated input, Cairo args, stdout, and metadata.
   --timeout-ms <n>      scarb execute timeout in milliseconds. Default: 300000.
-  --message-index <n>   Message index for process-message-* or process-deactivate-step. Default: 0.
+  --message-index <n>   Message index for process-message-* or process-deactivate-* step slices. Default: 0.
   --no-resource-usage   Do not pass --print-resource-usage to scarb execute.
 
 If input.json is omitted for add-new-key, process-messages, or process-deactivate,
@@ -152,7 +193,7 @@ function ensureInput(args, circuit, outDir) {
   const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
   const syntheticCircuit = args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
     ? 'process-messages'
-    : args.circuit === 'process-deactivate-step'
+    : args.circuit === 'process-deactivate-step' || args.circuit.startsWith('process-deactivate-')
       ? 'process-deactivate'
       : args.circuit;
   writeFileSync(inputPath, `${JSON.stringify(buildSmallSyntheticFixture(syntheticCircuit), null, 2)}\n`);

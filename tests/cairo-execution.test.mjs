@@ -84,3 +84,24 @@ test(
     assert.equal(metadata.executable, 'process_deactivate_messages_stateful');
   },
 );
+
+test(
+  'executes deeply split ProcessDeactivateMessages Cairo programs with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const coordKey = runCircuit('process-deactivate-coord-key');
+    const commandEcdh = runCircuit('process-deactivate-ecdh-command', { messageIndex: 2 });
+    const signature = runCircuit('process-deactivate-signature', { messageIndex: 2 });
+    const currentDecrypt = runCircuit('process-deactivate-decrypt-current', { messageIndex: 2 });
+    const newDecrypt = runCircuit('process-deactivate-decrypt-new', { messageIndex: 2 });
+    const leafEcdh = runCircuit('process-deactivate-ecdh-leaf', { messageIndex: 2 });
+    const core = runCircuit('process-deactivate-step-core', { messageIndex: 2 });
+    assert.equal(coordKey.executable, 'process_deactivate_coord_key');
+    assert.equal(commandEcdh.executable, 'process_deactivate_ecdh');
+    assert.equal(signature.executable, 'process_deactivate_signature');
+    assert.equal(currentDecrypt.executable, 'process_deactivate_decrypt');
+    assert.equal(newDecrypt.executable, 'process_deactivate_decrypt');
+    assert.equal(leafEcdh.executable, 'process_deactivate_ecdh');
+    assert.equal(core.executable, 'process_deactivate_step_core');
+  },
+);

@@ -175,35 +175,70 @@ The intended proof composition is:
 
 ```text
 1 boundary proof
-5 process-deactivate-step proofs
+1 process-deactivate-coord-key proof
+5 process-deactivate-ecdh-command proofs
+5 process-deactivate-signature proofs
+5 process-deactivate-decrypt-current proofs
+5 process-deactivate-decrypt-new proofs
+5 process-deactivate-ecdh-leaf proofs
+5 process-deactivate-step-core proofs
 ```
 
 A wrapper or off-chain checker must chain the public outputs:
 
 ```text
-boundary.batchStartHash == step0.previousMessageHash
-step0.nextMessageHash == step1.previousMessageHash
-...
-step4.nextMessageHash == boundary.batchEndHash
+coordKey.coordPubKeyHash == boundary.coordPubKeyHash
+coordKey.coordPrivKeyHash == core{i}.coordPrivKeyHash
 
-boundary.currentDeactivateCommitment == step0.currentDeactivateCommitment
-boundary.newDeactivateCommitment == step4.newDeactivateCommitment
-boundary.newDeactivateRoot == step4.newDeactivateRoot
+commandEcdh{i}.coordPrivKeyHash == coordKey.coordPrivKeyHash
+commandEcdh{i}.baseHash == core{i}.encPubKeyHash
+commandEcdh{i}.sharedKeyHash == core{i}.commandSharedKeyHash
 
-step0.newActiveStateRoot == step1.currentActiveStateRoot
-step0.newDeactivateRoot == step1.currentDeactivateRoot
-...
-step3.newActiveStateRoot == step4.currentActiveStateRoot
-step3.newDeactivateRoot == step4.currentDeactivateRoot
+signature{i}.pubKeyHash == core{i}.signaturePubKeyHash
+signature{i}.r8Hash == core{i}.signatureR8Hash
+signature{i}.packedCmdHash == core{i}.packedCmdHash
+signature{i}.cmdSigS == core{i}.cmdSigS
+signature{i}.signatureValid == core{i}.signatureValid
 
-step1.deactivateIndex == step0.deactivateIndex + 1
+currentDecrypt{i}.coordPrivKeyHash == coordKey.coordPrivKeyHash
+currentDecrypt{i}.c1Hash == core{i}.currentStateCiphertextC1Hash
+currentDecrypt{i}.c2Hash == core{i}.currentStateCiphertextC2Hash
+currentDecrypt{i}.decryptIsOdd == core{i}.currentDecryptIsOdd
+
+newDecrypt{i}.coordPrivKeyHash == coordKey.coordPrivKeyHash
+newDecrypt{i}.c1Hash == core{i}.newStateCiphertextC1Hash
+newDecrypt{i}.c2Hash == core{i}.newStateCiphertextC2Hash
+newDecrypt{i}.decryptIsOdd == core{i}.newDecryptIsOdd
+
+leafEcdh{i}.coordPrivKeyHash == coordKey.coordPrivKeyHash
+leafEcdh{i}.baseHash == core{i}.deactivatePubKeyHash
+leafEcdh{i}.sharedKeyHash == core{i}.deactivateSharedKeyHash
+
+boundary.batchStartHash == core0.previousMessageHash
+core0.nextMessageHash == core1.previousMessageHash
 ...
-step4.deactivateIndex == step3.deactivateIndex + 1
+core4.nextMessageHash == boundary.batchEndHash
+
+boundary.currentDeactivateCommitment == core0.currentDeactivateCommitment
+boundary.newDeactivateCommitment == core4.newDeactivateCommitment
+boundary.newDeactivateRoot == core4.newDeactivateRoot
+
+core0.newActiveStateRoot == core1.currentActiveStateRoot
+core0.newDeactivateRoot == core1.currentDeactivateRoot
+...
+core3.newActiveStateRoot == core4.currentActiveStateRoot
+core3.newDeactivateRoot == core4.currentDeactivateRoot
+
+core1.deactivateIndex == core0.deactivateIndex + 1
+...
+core4.deactivateIndex == core3.deactivateIndex + 1
 ```
 
-The split path lowers peak prover memory by proving one deactivate slot at a
-time, but the Starknet wrapper that verifies all six facts and enforces this
-chaining is still pending.
+The deep split path lowers peak prover memory by moving coordinator key
+derivation, command ECDH, EdDSA-Poseidon signature verification, ElGamal
+decrypt parity checks, and deactivate-leaf ECDH out of the core root
+transition. The Starknet wrapper that verifies all linked facts and enforces
+this chaining is still pending.
 
 ## Empty Slots
 

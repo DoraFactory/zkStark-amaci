@@ -22,6 +22,13 @@ Circuits:
   process-message-step-core
   process-deactivate-boundary
   process-deactivate-step
+  process-deactivate-coord-key
+  process-deactivate-ecdh-command
+  process-deactivate-ecdh-leaf
+  process-deactivate-signature
+  process-deactivate-decrypt-current
+  process-deactivate-decrypt-new
+  process-deactivate-step-core
   process-deactivate
 
 Notes:
@@ -31,7 +38,9 @@ Notes:
     process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
   - process-message-step, process-message-ecdh, process-message-signature,
-    process-message-step-core, and process-deactivate-step require --message-index
+    process-message-step-core, process-deactivate-step,
+    process-deactivate-ecdh-*, process-deactivate-signature,
+    process-deactivate-decrypt-*, and process-deactivate-step-core require --message-index
     0..4 and prove one linked message step.
   - --all runs tally plus the three small synthetic circuit proofs.
 
@@ -66,6 +75,13 @@ prepare_circuit_name() {
     process-message-step-core) echo "process-message-step-core" ;;
     process-deactivate-boundary) echo "process-deactivate-boundary" ;;
     process-deactivate-step) echo "process-deactivate-step" ;;
+    process-deactivate-coord-key) echo "process-deactivate-coord-key" ;;
+    process-deactivate-ecdh-command) echo "process-deactivate-ecdh-command" ;;
+    process-deactivate-ecdh-leaf) echo "process-deactivate-ecdh-leaf" ;;
+    process-deactivate-signature) echo "process-deactivate-signature" ;;
+    process-deactivate-decrypt-current) echo "process-deactivate-decrypt-current" ;;
+    process-deactivate-decrypt-new) echo "process-deactivate-decrypt-new" ;;
+    process-deactivate-step-core) echo "process-deactivate-step-core" ;;
     process-deactivate) echo "process-deactivate-stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -84,6 +100,13 @@ executable_name() {
     process-message-step-core) echo "process_message_step_core" ;;
     process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
     process-deactivate-step) echo "process_deactivate_message_step" ;;
+    process-deactivate-coord-key) echo "process_deactivate_coord_key" ;;
+    process-deactivate-ecdh-command) echo "process_deactivate_ecdh" ;;
+    process-deactivate-ecdh-leaf) echo "process_deactivate_ecdh" ;;
+    process-deactivate-signature) echo "process_deactivate_signature" ;;
+    process-deactivate-decrypt-current) echo "process_deactivate_decrypt" ;;
+    process-deactivate-decrypt-new) echo "process_deactivate_decrypt" ;;
+    process-deactivate-step-core) echo "process_deactivate_step_core" ;;
     process-deactivate) echo "process_deactivate_messages_stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -91,7 +114,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|process-messages|process-messages-boundary|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-step|process-deactivate) return 0 ;;
+    add-new-key|process-messages|process-messages-boundary|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-step|process-deactivate-coord-key|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-signature|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-step-core|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -159,7 +182,7 @@ run_one() {
       local fixture_circuit="$circuit"
       if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
         fixture_circuit="process-messages"
-      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" ]]; then
+      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
         fixture_circuit="process-deactivate"
       fi
       node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$fixture_circuit" --out "$input_path"
@@ -179,7 +202,7 @@ run_one() {
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
 
-  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-step-core" || "$circuit" == "process-deactivate-step" ]]; then
+  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-step-core" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-step-core" ]]; then
     if [[ -z "$message_index" ]]; then
       echo "$circuit requires --message-index" >&2
       exit 1

@@ -19,6 +19,13 @@ pub const PROCESS_DEACTIVATE_CIRCUIT_ID: felt252 =
     0x414d4143495f50524f434553535f44454143544956415445;
 pub const PROCESS_DEACTIVATE_STEP_CIRCUIT_ID: felt252 =
     0x414d4143495f50524f434553535f444541435449564154455f53544550;
+pub const PROCESS_DEACTIVATE_COORD_KEY_CIRCUIT_ID: felt252 =
+    0x414d4143495f44454143545f434f4f52445f4b4559;
+pub const PROCESS_DEACTIVATE_ECDH_CIRCUIT_ID: felt252 = 0x414d4143495f44454143545f45434448;
+pub const PROCESS_DEACTIVATE_SIGNATURE_CIRCUIT_ID: felt252 = 0x414d4143495f44454143545f534947;
+pub const PROCESS_DEACTIVATE_DECRYPT_CIRCUIT_ID: felt252 = 0x414d4143495f44454143545f44454352595054;
+pub const PROCESS_DEACTIVATE_STEP_CORE_CIRCUIT_ID: felt252 =
+    0x414d4143495f44454143545f535445505f434f5245;
 
 #[derive(Copy, Drop, Serde)]
 pub struct U256Split {
@@ -150,6 +157,74 @@ pub struct ProcessDeactivateStepPublicFields {
     pub new_deactivate_commitment: u256,
     pub current_state_root: u256,
     pub expected_poll_id: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateCoordKeyPublicFields {
+    pub coord_pub_key_hash: u256,
+    pub coord_priv_key_hash: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateEcdhPublicFields {
+    pub message_index: felt252,
+    pub ecdh_kind: felt252,
+    pub coord_priv_key_hash: u256,
+    pub base_hash: u256,
+    pub shared_key_hash: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateSignaturePublicFields {
+    pub message_index: felt252,
+    pub pub_key_hash: u256,
+    pub r8_hash: u256,
+    pub packed_cmd_hash: u256,
+    pub cmd_sig_s: u256,
+    pub signature_valid: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateDecryptPublicFields {
+    pub message_index: felt252,
+    pub decrypt_kind: felt252,
+    pub coord_priv_key_hash: u256,
+    pub c1_hash: u256,
+    pub c2_hash: u256,
+    pub decrypt_is_odd: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateStepCorePublicFields {
+    pub message_index: felt252,
+    pub deactivate_index: u256,
+    pub coord_pub_key_hash: u256,
+    pub coord_priv_key_hash: u256,
+    pub previous_message_hash: u256,
+    pub next_message_hash: u256,
+    pub current_active_state_root: u256,
+    pub current_deactivate_root: u256,
+    pub new_active_state_root: u256,
+    pub new_deactivate_root: u256,
+    pub current_deactivate_commitment: u256,
+    pub new_deactivate_commitment: u256,
+    pub current_state_root: u256,
+    pub expected_poll_id: u256,
+    pub enc_pub_key_hash: u256,
+    pub command_shared_key_hash: u256,
+    pub signature_pub_key_hash: u256,
+    pub signature_r8_hash: u256,
+    pub packed_cmd_hash: u256,
+    pub cmd_sig_s: u256,
+    pub signature_valid: u256,
+    pub current_state_ciphertext_c1_hash: u256,
+    pub current_state_ciphertext_c2_hash: u256,
+    pub current_decrypt_is_odd: u256,
+    pub new_state_ciphertext_c1_hash: u256,
+    pub new_state_ciphertext_c2_hash: u256,
+    pub new_decrypt_is_odd: u256,
+    pub deactivate_pub_key_hash: u256,
+    pub deactivate_shared_key_hash: u256,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -420,6 +495,146 @@ pub struct ProcessDeactivateStepPublicOutput {
     pub current_state_root_high128: felt252,
     pub expected_poll_id_low128: felt252,
     pub expected_poll_id_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateCoordKeyPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub coord_pub_key_hash_low128: felt252,
+    pub coord_pub_key_hash_high128: felt252,
+    pub coord_priv_key_hash_low128: felt252,
+    pub coord_priv_key_hash_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateEcdhPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub ecdh_kind: felt252,
+    pub coord_priv_key_hash_low128: felt252,
+    pub coord_priv_key_hash_high128: felt252,
+    pub base_hash_low128: felt252,
+    pub base_hash_high128: felt252,
+    pub shared_key_hash_low128: felt252,
+    pub shared_key_hash_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateSignaturePublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub pub_key_hash_low128: felt252,
+    pub pub_key_hash_high128: felt252,
+    pub r8_hash_low128: felt252,
+    pub r8_hash_high128: felt252,
+    pub packed_cmd_hash_low128: felt252,
+    pub packed_cmd_hash_high128: felt252,
+    pub cmd_sig_s_low128: felt252,
+    pub cmd_sig_s_high128: felt252,
+    pub signature_valid_low128: felt252,
+    pub signature_valid_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateDecryptPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub decrypt_kind: felt252,
+    pub coord_priv_key_hash_low128: felt252,
+    pub coord_priv_key_hash_high128: felt252,
+    pub c1_hash_low128: felt252,
+    pub c1_hash_high128: felt252,
+    pub c2_hash_low128: felt252,
+    pub c2_hash_high128: felt252,
+    pub decrypt_is_odd_low128: felt252,
+    pub decrypt_is_odd_high128: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct ProcessDeactivateStepCorePublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub deactivate_index_low128: felt252,
+    pub deactivate_index_high128: felt252,
+    pub coord_pub_key_hash_low128: felt252,
+    pub coord_pub_key_hash_high128: felt252,
+    pub coord_priv_key_hash_low128: felt252,
+    pub coord_priv_key_hash_high128: felt252,
+    pub previous_message_hash_low128: felt252,
+    pub previous_message_hash_high128: felt252,
+    pub next_message_hash_low128: felt252,
+    pub next_message_hash_high128: felt252,
+    pub current_active_state_root_low128: felt252,
+    pub current_active_state_root_high128: felt252,
+    pub current_deactivate_root_low128: felt252,
+    pub current_deactivate_root_high128: felt252,
+    pub new_active_state_root_low128: felt252,
+    pub new_active_state_root_high128: felt252,
+    pub new_deactivate_root_low128: felt252,
+    pub new_deactivate_root_high128: felt252,
+    pub current_deactivate_commitment_low128: felt252,
+    pub current_deactivate_commitment_high128: felt252,
+    pub new_deactivate_commitment_low128: felt252,
+    pub new_deactivate_commitment_high128: felt252,
+    pub current_state_root_low128: felt252,
+    pub current_state_root_high128: felt252,
+    pub expected_poll_id_low128: felt252,
+    pub expected_poll_id_high128: felt252,
+    pub enc_pub_key_hash_low128: felt252,
+    pub enc_pub_key_hash_high128: felt252,
+    pub command_shared_key_hash_low128: felt252,
+    pub command_shared_key_hash_high128: felt252,
+    pub signature_pub_key_hash_low128: felt252,
+    pub signature_pub_key_hash_high128: felt252,
+    pub signature_r8_hash_low128: felt252,
+    pub signature_r8_hash_high128: felt252,
+    pub packed_cmd_hash_low128: felt252,
+    pub packed_cmd_hash_high128: felt252,
+    pub cmd_sig_s_low128: felt252,
+    pub cmd_sig_s_high128: felt252,
+    pub signature_valid_low128: felt252,
+    pub signature_valid_high128: felt252,
+    pub current_state_ciphertext_c1_hash_low128: felt252,
+    pub current_state_ciphertext_c1_hash_high128: felt252,
+    pub current_state_ciphertext_c2_hash_low128: felt252,
+    pub current_state_ciphertext_c2_hash_high128: felt252,
+    pub current_decrypt_is_odd_low128: felt252,
+    pub current_decrypt_is_odd_high128: felt252,
+    pub new_state_ciphertext_c1_hash_low128: felt252,
+    pub new_state_ciphertext_c1_hash_high128: felt252,
+    pub new_state_ciphertext_c2_hash_low128: felt252,
+    pub new_state_ciphertext_c2_hash_high128: felt252,
+    pub new_decrypt_is_odd_low128: felt252,
+    pub new_decrypt_is_odd_high128: felt252,
+    pub deactivate_pub_key_hash_low128: felt252,
+    pub deactivate_pub_key_hash_high128: felt252,
+    pub deactivate_shared_key_hash_low128: felt252,
+    pub deactivate_shared_key_hash_high128: felt252,
 }
 
 pub fn split_u256(value: u256) -> U256Split {
@@ -812,5 +1027,207 @@ pub fn build_process_deactivate_step_public_output(
         current_state_root_high128: current_state_root.high.into(),
         expected_poll_id_low128: expected_poll_id.low.into(),
         expected_poll_id_high128: expected_poll_id.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_coord_key_public_output(
+    fields: ProcessDeactivateCoordKeyPublicFields,
+) -> ProcessDeactivateCoordKeyPublicOutput {
+    let coord_pub_key_hash = split_u256(fields.coord_pub_key_hash);
+    let coord_priv_key_hash = split_u256(fields.coord_priv_key_hash);
+
+    ProcessDeactivateCoordKeyPublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_COORD_KEY_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        coord_pub_key_hash_low128: coord_pub_key_hash.low.into(),
+        coord_pub_key_hash_high128: coord_pub_key_hash.high.into(),
+        coord_priv_key_hash_low128: coord_priv_key_hash.low.into(),
+        coord_priv_key_hash_high128: coord_priv_key_hash.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_ecdh_public_output(
+    fields: ProcessDeactivateEcdhPublicFields,
+) -> ProcessDeactivateEcdhPublicOutput {
+    let coord_priv_key_hash = split_u256(fields.coord_priv_key_hash);
+    let base_hash = split_u256(fields.base_hash);
+    let shared_key_hash = split_u256(fields.shared_key_hash);
+
+    ProcessDeactivateEcdhPublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_ECDH_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        ecdh_kind: fields.ecdh_kind,
+        coord_priv_key_hash_low128: coord_priv_key_hash.low.into(),
+        coord_priv_key_hash_high128: coord_priv_key_hash.high.into(),
+        base_hash_low128: base_hash.low.into(),
+        base_hash_high128: base_hash.high.into(),
+        shared_key_hash_low128: shared_key_hash.low.into(),
+        shared_key_hash_high128: shared_key_hash.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_signature_public_output(
+    fields: ProcessDeactivateSignaturePublicFields,
+) -> ProcessDeactivateSignaturePublicOutput {
+    let pub_key_hash = split_u256(fields.pub_key_hash);
+    let r8_hash = split_u256(fields.r8_hash);
+    let packed_cmd_hash = split_u256(fields.packed_cmd_hash);
+    let cmd_sig_s = split_u256(fields.cmd_sig_s);
+    let signature_valid = split_u256(fields.signature_valid);
+
+    ProcessDeactivateSignaturePublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_SIGNATURE_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        pub_key_hash_low128: pub_key_hash.low.into(),
+        pub_key_hash_high128: pub_key_hash.high.into(),
+        r8_hash_low128: r8_hash.low.into(),
+        r8_hash_high128: r8_hash.high.into(),
+        packed_cmd_hash_low128: packed_cmd_hash.low.into(),
+        packed_cmd_hash_high128: packed_cmd_hash.high.into(),
+        cmd_sig_s_low128: cmd_sig_s.low.into(),
+        cmd_sig_s_high128: cmd_sig_s.high.into(),
+        signature_valid_low128: signature_valid.low.into(),
+        signature_valid_high128: signature_valid.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_decrypt_public_output(
+    fields: ProcessDeactivateDecryptPublicFields,
+) -> ProcessDeactivateDecryptPublicOutput {
+    let coord_priv_key_hash = split_u256(fields.coord_priv_key_hash);
+    let c1_hash = split_u256(fields.c1_hash);
+    let c2_hash = split_u256(fields.c2_hash);
+    let decrypt_is_odd = split_u256(fields.decrypt_is_odd);
+
+    ProcessDeactivateDecryptPublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_DECRYPT_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        decrypt_kind: fields.decrypt_kind,
+        coord_priv_key_hash_low128: coord_priv_key_hash.low.into(),
+        coord_priv_key_hash_high128: coord_priv_key_hash.high.into(),
+        c1_hash_low128: c1_hash.low.into(),
+        c1_hash_high128: c1_hash.high.into(),
+        c2_hash_low128: c2_hash.low.into(),
+        c2_hash_high128: c2_hash.high.into(),
+        decrypt_is_odd_low128: decrypt_is_odd.low.into(),
+        decrypt_is_odd_high128: decrypt_is_odd.high.into(),
+    }
+}
+
+pub fn build_process_deactivate_step_core_public_output(
+    fields: ProcessDeactivateStepCorePublicFields,
+) -> ProcessDeactivateStepCorePublicOutput {
+    let deactivate_index = split_u256(fields.deactivate_index);
+    let coord_pub_key_hash = split_u256(fields.coord_pub_key_hash);
+    let coord_priv_key_hash = split_u256(fields.coord_priv_key_hash);
+    let previous_message_hash = split_u256(fields.previous_message_hash);
+    let next_message_hash = split_u256(fields.next_message_hash);
+    let current_active_state_root = split_u256(fields.current_active_state_root);
+    let current_deactivate_root = split_u256(fields.current_deactivate_root);
+    let new_active_state_root = split_u256(fields.new_active_state_root);
+    let new_deactivate_root = split_u256(fields.new_deactivate_root);
+    let current_deactivate_commitment = split_u256(fields.current_deactivate_commitment);
+    let new_deactivate_commitment = split_u256(fields.new_deactivate_commitment);
+    let current_state_root = split_u256(fields.current_state_root);
+    let expected_poll_id = split_u256(fields.expected_poll_id);
+    let enc_pub_key_hash = split_u256(fields.enc_pub_key_hash);
+    let command_shared_key_hash = split_u256(fields.command_shared_key_hash);
+    let signature_pub_key_hash = split_u256(fields.signature_pub_key_hash);
+    let signature_r8_hash = split_u256(fields.signature_r8_hash);
+    let packed_cmd_hash = split_u256(fields.packed_cmd_hash);
+    let cmd_sig_s = split_u256(fields.cmd_sig_s);
+    let signature_valid = split_u256(fields.signature_valid);
+    let current_state_ciphertext_c1_hash = split_u256(fields.current_state_ciphertext_c1_hash);
+    let current_state_ciphertext_c2_hash = split_u256(fields.current_state_ciphertext_c2_hash);
+    let current_decrypt_is_odd = split_u256(fields.current_decrypt_is_odd);
+    let new_state_ciphertext_c1_hash = split_u256(fields.new_state_ciphertext_c1_hash);
+    let new_state_ciphertext_c2_hash = split_u256(fields.new_state_ciphertext_c2_hash);
+    let new_decrypt_is_odd = split_u256(fields.new_decrypt_is_odd);
+    let deactivate_pub_key_hash = split_u256(fields.deactivate_pub_key_hash);
+    let deactivate_shared_key_hash = split_u256(fields.deactivate_shared_key_hash);
+
+    ProcessDeactivateStepCorePublicOutput {
+        magic: PUBLIC_OUTPUT_MAGIC,
+        version: PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_STEP_CORE_CIRCUIT_ID,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        deactivate_index_low128: deactivate_index.low.into(),
+        deactivate_index_high128: deactivate_index.high.into(),
+        coord_pub_key_hash_low128: coord_pub_key_hash.low.into(),
+        coord_pub_key_hash_high128: coord_pub_key_hash.high.into(),
+        coord_priv_key_hash_low128: coord_priv_key_hash.low.into(),
+        coord_priv_key_hash_high128: coord_priv_key_hash.high.into(),
+        previous_message_hash_low128: previous_message_hash.low.into(),
+        previous_message_hash_high128: previous_message_hash.high.into(),
+        next_message_hash_low128: next_message_hash.low.into(),
+        next_message_hash_high128: next_message_hash.high.into(),
+        current_active_state_root_low128: current_active_state_root.low.into(),
+        current_active_state_root_high128: current_active_state_root.high.into(),
+        current_deactivate_root_low128: current_deactivate_root.low.into(),
+        current_deactivate_root_high128: current_deactivate_root.high.into(),
+        new_active_state_root_low128: new_active_state_root.low.into(),
+        new_active_state_root_high128: new_active_state_root.high.into(),
+        new_deactivate_root_low128: new_deactivate_root.low.into(),
+        new_deactivate_root_high128: new_deactivate_root.high.into(),
+        current_deactivate_commitment_low128: current_deactivate_commitment.low.into(),
+        current_deactivate_commitment_high128: current_deactivate_commitment.high.into(),
+        new_deactivate_commitment_low128: new_deactivate_commitment.low.into(),
+        new_deactivate_commitment_high128: new_deactivate_commitment.high.into(),
+        current_state_root_low128: current_state_root.low.into(),
+        current_state_root_high128: current_state_root.high.into(),
+        expected_poll_id_low128: expected_poll_id.low.into(),
+        expected_poll_id_high128: expected_poll_id.high.into(),
+        enc_pub_key_hash_low128: enc_pub_key_hash.low.into(),
+        enc_pub_key_hash_high128: enc_pub_key_hash.high.into(),
+        command_shared_key_hash_low128: command_shared_key_hash.low.into(),
+        command_shared_key_hash_high128: command_shared_key_hash.high.into(),
+        signature_pub_key_hash_low128: signature_pub_key_hash.low.into(),
+        signature_pub_key_hash_high128: signature_pub_key_hash.high.into(),
+        signature_r8_hash_low128: signature_r8_hash.low.into(),
+        signature_r8_hash_high128: signature_r8_hash.high.into(),
+        packed_cmd_hash_low128: packed_cmd_hash.low.into(),
+        packed_cmd_hash_high128: packed_cmd_hash.high.into(),
+        cmd_sig_s_low128: cmd_sig_s.low.into(),
+        cmd_sig_s_high128: cmd_sig_s.high.into(),
+        signature_valid_low128: signature_valid.low.into(),
+        signature_valid_high128: signature_valid.high.into(),
+        current_state_ciphertext_c1_hash_low128: current_state_ciphertext_c1_hash.low.into(),
+        current_state_ciphertext_c1_hash_high128: current_state_ciphertext_c1_hash.high.into(),
+        current_state_ciphertext_c2_hash_low128: current_state_ciphertext_c2_hash.low.into(),
+        current_state_ciphertext_c2_hash_high128: current_state_ciphertext_c2_hash.high.into(),
+        current_decrypt_is_odd_low128: current_decrypt_is_odd.low.into(),
+        current_decrypt_is_odd_high128: current_decrypt_is_odd.high.into(),
+        new_state_ciphertext_c1_hash_low128: new_state_ciphertext_c1_hash.low.into(),
+        new_state_ciphertext_c1_hash_high128: new_state_ciphertext_c1_hash.high.into(),
+        new_state_ciphertext_c2_hash_low128: new_state_ciphertext_c2_hash.low.into(),
+        new_state_ciphertext_c2_hash_high128: new_state_ciphertext_c2_hash.high.into(),
+        new_decrypt_is_odd_low128: new_decrypt_is_odd.low.into(),
+        new_decrypt_is_odd_high128: new_decrypt_is_odd.high.into(),
+        deactivate_pub_key_hash_low128: deactivate_pub_key_hash.low.into(),
+        deactivate_pub_key_hash_high128: deactivate_pub_key_hash.high.into(),
+        deactivate_shared_key_hash_low128: deactivate_shared_key_hash.low.into(),
+        deactivate_shared_key_hash_high128: deactivate_shared_key_hash.high.into(),
     }
 }
