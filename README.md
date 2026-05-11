@@ -405,19 +405,21 @@ cargo update -p starknet-types-core@0.1.8 --precise 0.1.9
 cargo build --release
 ```
 
-If that still leaves `size-of 0.1.5` in the build graph, apply the local
-Linux/amd64 compatibility patch and retry:
+If `cairo1-run` or Integrity `proof_serializer` still leaves `size-of 0.1.5`
+in the build graph, apply the local Linux/amd64 compatibility patch and retry
+the failed build:
 
 ```sh
 SIZE_OF_DIR="$(find ~/.cargo/registry/src -type d -path '*/size-of-0.1.5' | head -n 1)"
 cp "$SIZE_OF_DIR/src/core_impls.rs" "$SIZE_OF_DIR/src/core_impls.rs.zkstark-amaci.bak"
 perl -0pi -e 's/impl_function_ptrs!\s*\{\s*"C",\s*"Rust",\s*"aapcs",\s*"cdecl",\s*"stdcall",\s*"fastcall",\s*\}/impl_function_ptrs! {\n    "C",\n    "Rust",\n}/s' "$SIZE_OF_DIR/src/core_impls.rs"
-cargo build --release
 ```
 
-Then link or copy the resulting binary if the installer did not finish:
+For `cairo1-run`, retry and link the binary if the installer did not finish:
 
 ```sh
+cd ~/cairo-vm/cairo1-run
+cargo build --release
 mkdir -p ~/.local/bin
 if [ -x ~/cairo-vm/target/release/cairo1-run ]; then
   ln -sf ~/cairo-vm/target/release/cairo1-run ~/.local/bin/cairo1-run
@@ -426,11 +428,60 @@ else
 fi
 ```
 
+For Integrity `proof_serializer`, retry and link the binary:
+
+```sh
+cd ~/integrity
+cargo build --release --bin proof_serializer
+mkdir -p ~/.local/bin
+ln -sf ~/integrity/target/release/proof_serializer ~/.local/bin/proof_serializer
+```
+
+If `proof_serializer` then fails in `cairo-vm 1.0.2` with
+`is_multiple_of(&...)` type errors, patch the legacy calls for the current
+Rust toolchain and retry:
+
+```sh
+CAIRO_VM_102="$(find ~/.cargo/registry/src -type d -path '*/cairo-vm-1.0.2' | head -n 1)"
+perl -0pi -e 's/\.is_multiple_of\(&\(CELLS_PER_SIGNATURE as usize\)\)/.is_multiple_of(CELLS_PER_SIGNATURE as usize)/g' \
+  "$CAIRO_VM_102/src/hint_processor/builtin_hint_processor/signature.rs"
+perl -0pi -e 's/\.is_multiple_of\(&CELL_BYTE_LEN\)/.is_multiple_of(CELL_BYTE_LEN)/g' \
+  "$CAIRO_VM_102/src/vm/runners/cairo_pie.rs"
+
+cd ~/integrity
+cargo clean -p cairo-vm
+cargo build --release --bin proof_serializer
+ln -sf ~/integrity/target/release/proof_serializer ~/.local/bin/proof_serializer
+```
+
 After installation, rerun:
 
 ```sh
 npm run check:stone-toolchain
 ```
+
+When all Stone/Integrity tools are `ok`, capture the exact CLI surfaces and
+available Cairo artifacts before wiring the proof pipeline:
+
+```sh
+npm run inspect:stone-pipeline -- \
+  --out-dir ~/zkstark-amaci-proofs/stone-inspect \
+  --text
+```
+
+This writes `stone-pipeline-inspection.json` plus stdout/stderr captures for
+`cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`, and `proof_serializer`.
+The next implementation step is to connect the selected Cairo executable to:
+
+```text
+cairo1-run --proof_mode -> AIR public/private input + trace/memory
+cpu_air_prover -> Stone proof JSON
+cpu_air_verifier -> local Stone proof verification
+proof_serializer -> Integrity calldata
+```
+
+Do this against the captured help output rather than assuming that
+`cairo1-run` accepts the same `--arguments-file` shape as `scarb execute`.
 
 ### Repository Setup
 
