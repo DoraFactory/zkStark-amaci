@@ -6,7 +6,8 @@
   "description": "Independent Stark/STARK proof-layer prototype for AMACI tally and process-message circuits",
   "dependencies": {
     "@zk-kit/baby-jubjub": "^1.0.3",
-    "@zk-kit/eddsa-poseidon": "^1.1.0"
+    "@zk-kit/eddsa-poseidon": "^1.1.0",
+    "starknet": "^6.24.1"
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
@@ -52,6 +53,8 @@
     "prove:all-split-small": "tools/run-all-small-split-proof.sh --tally-input fixtures/tally-small/000000.json",
     "prove:process-messages-split": "tools/run-process-messages-split-proof.sh",
     "prove:process-deactivate-split": "tools/run-process-deactivate-split-proof.sh",
+    "check:integrity": "node tools/check-integrity-compatibility.mjs",
+    "check:integrity:tally": "node tools/check-integrity-compatibility.mjs target/cairo-proof/tally/proof-run.json",
     "summarize:proofs": "node tools/summarize-proof-results.mjs target --text",
     "export:hash-vectors": "node tools/export-hash-vectors.mjs fixtures/tally-small/000000.json",
     "verify:hash-vectors": "node tools/verify-hash-vectors.mjs /tmp/zkstark-amaci-hash-vectors.json",

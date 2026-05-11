@@ -152,6 +152,8 @@ write_metadata() {
   fi
   printf '  "inputPath": "%s",\n' "$input_path" >> "$metadata_json"
   printf '  "executionId": "%s",\n' "$execution_id" >> "$metadata_json"
+  printf '  "proofProducer": "scarb-stwo-local",\n' >> "$metadata_json"
+  printf '  "integritySubmissionReady": false,\n' >> "$metadata_json"
   printf '  "proofJson": "%s",\n' "$proof_json" >> "$metadata_json"
   printf '  "preparedJson": "%s",\n' "$prepared_json" >> "$metadata_json"
   printf '  "cairoInputJson": "%s",\n' "$cairo_input_json" >> "$metadata_json"

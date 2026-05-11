@@ -640,6 +640,29 @@ cat "$OUT_DIR/process-deactivate/proof-run.json"
 The `publicOutput.felts` in each `*-prepared.json` is the canonical output that
 the Starknet wrapper will eventually bind to an Integrity fact.
 
+Check whether a tally proof run has enough metadata for the next Integrity
+step:
+
+```sh
+npm run check:integrity -- \
+  /absolute/path/to/tally/proof-run.json \
+  --program-hash <tally_program_hash> \
+  --text
+```
+
+This command separates two questions:
+
+- whether the wrapper binding hash can be computed from
+  `program_hash + publicOutput`;
+- whether the proof run already contains Stone/Integrity proof calldata that
+  can be submitted to a FactRegistry flow.
+
+The current `scarb prove --execute` metadata is marked as
+`proofProducer = scarb-stwo-local`, so it is valid for local proof generation
+and `scarb verify`, but it is not treated as directly ready for Integrity
+submission until a Stone/Integrity-compatible proof calldata artifact is
+provided.
+
 For tally, the encoding is:
 
 ```text

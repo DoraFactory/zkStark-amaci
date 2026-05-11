@@ -7,7 +7,7 @@ import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
 let starknetHash;
 
 function repoRoot() {
-  return join(fileURLToPath(new URL('.', import.meta.url)), '../../..');
+  return join(fileURLToPath(new URL('.', import.meta.url)), '../..');
 }
 
 function loadStarknetHash() {
@@ -15,22 +15,31 @@ function loadStarknetHash() {
     return starknetHash;
   }
 
-  const pnpmDir = join(repoRoot(), 'node_modules', '.pnpm');
-  if (!existsSync(pnpmDir)) {
-    throw new Error('node_modules/.pnpm not found; cannot load starknet.js hashing helpers');
+  const roots = [repoRoot(), join(repoRoot(), '..')];
+  const packageJsons = [];
+  for (const root of roots) {
+    const npmPackageJson = join(root, 'node_modules', 'starknet', 'package.json');
+    if (existsSync(npmPackageJson)) {
+      packageJsons.push(npmPackageJson);
+    }
+
+    const pnpmDir = join(root, 'node_modules', '.pnpm');
+    if (existsSync(pnpmDir)) {
+      const candidate = readdirSync(pnpmDir)
+        .filter((name) => name.startsWith('starknet@'))
+        .sort()
+        .at(-1);
+      if (candidate) {
+        packageJsons.push(join(pnpmDir, candidate, 'node_modules', 'starknet', 'package.json'));
+      }
+    }
   }
 
-  const candidate = readdirSync(pnpmDir)
-    .filter((name) => name.startsWith('starknet@'))
-    .sort()
-    .at(-1);
-
-  if (!candidate) {
-    throw new Error('starknet.js is not installed in node_modules/.pnpm');
+  if (packageJsons.length === 0) {
+    throw new Error('starknet.js is not installed; cannot load hashing helpers');
   }
 
-  const packageJson = join(pnpmDir, candidate, 'node_modules', 'starknet', 'package.json');
-  const requireFromStarknet = createRequire(packageJson);
+  const requireFromStarknet = createRequire(packageJsons[0]);
   ({ hash: starknetHash } = requireFromStarknet('starknet'));
   return starknetHash;
 }
@@ -90,4 +99,3 @@ export function calculateVerificationHash(factHash, verifierConfigHash, security
     parseBigInt(securityBits, 'securityBits'),
   ]);
 }
-

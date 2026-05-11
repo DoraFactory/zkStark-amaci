@@ -55,3 +55,65 @@ fn submit_tally_fact_accepts_mock_integrity_fact() {
     assert(wrapper.get_current_tally_commitment() == NEW_TALLY_COMMITMENT, 'TALLY_NOT_UPDATED');
     assert(wrapper.get_processed_user_count() == 5_u256, 'COUNT_NOT_UPDATED');
 }
+
+#[test]
+fn submit_tally_fact_accepts_bootloaded_mock_integrity_fact() {
+    let integrity = deploy_mock_integrity();
+    let wrapper = deploy_wrapper(integrity.contract_address, 0x5678);
+
+    let fact_hash = wrapper.get_expected_bootloaded_fact_hash(NEW_TALLY_COMMITMENT, INPUT_HASH);
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT, INPUT_HASH, fact_hash);
+
+    assert(wrapper.get_current_tally_commitment() == NEW_TALLY_COMMITMENT, 'TALLY_NOT_UPDATED');
+    assert(wrapper.get_processed_user_count() == 5_u256, 'COUNT_NOT_UPDATED');
+}
+
+#[test]
+#[should_panic]
+fn submit_tally_fact_rejects_unregistered_fact() {
+    let integrity = deploy_mock_integrity();
+    let wrapper = deploy_wrapper(integrity.contract_address, 0);
+
+    let fact_hash = wrapper.get_expected_plain_fact_hash(NEW_TALLY_COMMITMENT, INPUT_HASH);
+
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT, INPUT_HASH, fact_hash);
+}
+
+#[test]
+#[should_panic]
+fn submit_tally_fact_rejects_insufficient_security_bits() {
+    let integrity = deploy_mock_integrity();
+    let wrapper = deploy_wrapper(integrity.contract_address, 0);
+
+    let fact_hash = wrapper.get_expected_plain_fact_hash(NEW_TALLY_COMMITMENT, INPUT_HASH);
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS - 1);
+
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT, INPUT_HASH, fact_hash);
+}
+
+#[test]
+#[should_panic]
+fn submit_tally_fact_rejects_fact_for_different_output() {
+    let integrity = deploy_mock_integrity();
+    let wrapper = deploy_wrapper(integrity.contract_address, 0);
+
+    let fact_hash = wrapper.get_expected_plain_fact_hash(NEW_TALLY_COMMITMENT, INPUT_HASH);
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT + 1_u256, INPUT_HASH, fact_hash);
+}
+
+#[test]
+#[should_panic]
+fn submit_tally_fact_rejects_stale_replay_after_state_update() {
+    let integrity = deploy_mock_integrity();
+    let wrapper = deploy_wrapper(integrity.contract_address, 0);
+
+    let fact_hash = wrapper.get_expected_plain_fact_hash(NEW_TALLY_COMMITMENT, INPUT_HASH);
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT, INPUT_HASH, fact_hash);
+    wrapper.submit_tally_fact(NEW_TALLY_COMMITMENT, INPUT_HASH, fact_hash);
+}

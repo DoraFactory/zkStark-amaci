@@ -100,6 +100,54 @@ test('wrapper model rejects a fact bound to different public output', { skip: wr
   );
 });
 
+test('wrapper model rejects a fact produced by a different program hash', { skip: wrapperTestSkip }, () => {
+  const { input, evaluated, integrity } = setupPlainWrapper();
+  const correctProgramHash = 0x1234n;
+  const wrongProgramHash = 0x9999n;
+  const fact = calculatePlainFactHash(correctProgramHash, evaluated.publicOutput.felts);
+  integrity.registerFact(fact.factHash, 128);
+
+  const wrapper = new TallyVotesStarkWrapperModel({
+    integrity,
+    tallyProgramHash: wrongProgramHash,
+    minSecurityBits: 96,
+    packedVals: evaluated.publicFields.packedVals,
+    stateCommitment: evaluated.publicFields.stateCommitment,
+    currentTallyCommitment: evaluated.publicFields.currentTallyCommitment,
+  });
+
+  assert.throws(
+    () =>
+      wrapper.submitTallyFact({
+        newTallyCommitment: input.newTallyCommitment,
+        inputHash: input.inputHash,
+        factHash: fact.factHash,
+      }),
+    /FACT_HASH_BINDING_MISMATCH/,
+  );
+});
+
+test('wrapper model rejects a stale tally fact replay after state update', { skip: wrapperTestSkip }, () => {
+  const { input, integrity, wrapper, fact } = setupPlainWrapper();
+  integrity.registerFact(fact.factHash, 128);
+
+  wrapper.submitTallyFact({
+    newTallyCommitment: input.newTallyCommitment,
+    inputHash: input.inputHash,
+    factHash: fact.factHash,
+  });
+
+  assert.throws(
+    () =>
+      wrapper.submitTallyFact({
+        newTallyCommitment: input.newTallyCommitment,
+        inputHash: input.inputHash,
+        factHash: fact.factHash,
+      }),
+    /FACT_HASH_BINDING_MISMATCH/,
+  );
+});
+
 test('wrapper model supports bootloaded fact binding and verification hash', { skip: wrapperTestSkip }, () => {
   const input = loadFixture();
   const evaluated = evaluateTallyVotes(input);
@@ -139,6 +187,49 @@ test('wrapper model supports bootloaded fact binding and verification hash', { s
   });
 
   assert.equal(result.currentTallyCommitment.toString(), input.newTallyCommitment);
+});
+
+test('wrapper model rejects a wrong bootloaded verification hash', { skip: wrapperTestSkip }, () => {
+  const input = loadFixture();
+  const evaluated = evaluateTallyVotes(input);
+  const integrity = new MockIntegrityRegistry();
+  const tallyProgramHash = 0x1234n;
+  const bootloaderProgramHash = 0x5678n;
+  const verifierConfigHash = 0x9abcn;
+  const minSecurityBits = 96;
+  const fact = calculateBootloadedFactHash(
+    bootloaderProgramHash,
+    tallyProgramHash,
+    evaluated.publicOutput.felts,
+  );
+  const verificationHash = calculateVerificationHash(
+    fact.factHash,
+    verifierConfigHash,
+    minSecurityBits,
+  );
+  integrity.registerFact(fact.factHash, minSecurityBits);
+
+  const wrapper = new TallyVotesStarkWrapperModel({
+    integrity,
+    tallyProgramHash,
+    bootloaderProgramHash,
+    verifierConfigHash,
+    minSecurityBits,
+    packedVals: evaluated.publicFields.packedVals,
+    stateCommitment: evaluated.publicFields.stateCommitment,
+    currentTallyCommitment: evaluated.publicFields.currentTallyCommitment,
+  });
+
+  assert.throws(
+    () =>
+      wrapper.submitTallyFact({
+        newTallyCommitment: input.newTallyCommitment,
+        inputHash: input.inputHash,
+        factHash: fact.factHash,
+        verificationHash: verificationHash + 1n,
+      }),
+    /VERIFICATION_HASH_MISMATCH/,
+  );
 });
 
 test('generic AMACI wrapper model updates ProcessMessages state commitment', { skip: wrapperTestSkip }, () => {

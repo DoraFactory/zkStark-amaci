@@ -28,7 +28,9 @@ Current status:
   against `starknet.js` vectors.
 - integration tests deploy `MockIntegrity` plus `TallyVotesStarkWrapper`, set
   fact security bits, call `submit_tally_fact`, and assert the wrapper state
-  update.
+  update. They also cover bootloaded fact mode and negative cases for
+  unregistered facts, insufficient security bits, fact/public-output mismatch,
+  and stale replay after the tally commitment has changed.
 - the wrapper supports plain child-program fact hashes and bootloaded fact
   hashes; pass `bootloader_program_hash = 0` for plain mode, or a nonzero
   bootloader hash for the Scarb/bootloader output shape.
