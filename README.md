@@ -387,9 +387,43 @@ BIN_DIR=~/.local/bin npm run install:stone-integrity-toolchain
 STONE_PROVER_DIR=~/stone-prover npm run install:stone-integrity-toolchain
 CAIRO_VM_DIR=~/cairo-vm npm run install:stone-integrity-toolchain
 INTEGRITY_DIR=~/integrity npm run install:stone-integrity-toolchain
+STARKNET_TYPES_CORE_PACKAGE=starknet-types-core@0.1.8 npm run install:stone-integrity-toolchain
+STARKNET_TYPES_CORE_VERSION=0.1.9 npm run install:stone-integrity-toolchain
 npm run install:stone-integrity-toolchain -- --skip-stone
 npm run install:stone-integrity-toolchain -- --skip-cairo1-run
 npm run install:stone-integrity-toolchain -- --skip-integrity
+```
+
+If `cairo-vm/cairo1-run` fails while compiling `size-of 0.1.5` with
+`"aapcs" is not a supported ABI for the current target`, first update
+`starknet-types-core` within the compatible `^0.1.7` range and resume the
+build:
+
+```sh
+cd ~/cairo-vm/cairo1-run
+cargo update -p starknet-types-core@0.1.8 --precise 0.1.9
+cargo build --release
+```
+
+If that still leaves `size-of 0.1.5` in the build graph, apply the local
+Linux/amd64 compatibility patch and retry:
+
+```sh
+SIZE_OF_DIR="$(find ~/.cargo/registry/src -type d -path '*/size-of-0.1.5' | head -n 1)"
+cp "$SIZE_OF_DIR/src/core_impls.rs" "$SIZE_OF_DIR/src/core_impls.rs.zkstark-amaci.bak"
+perl -0pi -e 's/impl_function_ptrs!\s*\{\s*"C",\s*"Rust",\s*"aapcs",\s*"cdecl",\s*"stdcall",\s*"fastcall",\s*\}/impl_function_ptrs! {\n    "C",\n    "Rust",\n}/s' "$SIZE_OF_DIR/src/core_impls.rs"
+cargo build --release
+```
+
+Then link or copy the resulting binary if the installer did not finish:
+
+```sh
+mkdir -p ~/.local/bin
+if [ -x ~/cairo-vm/target/release/cairo1-run ]; then
+  ln -sf ~/cairo-vm/target/release/cairo1-run ~/.local/bin/cairo1-run
+else
+  ln -sf ~/cairo-vm/cairo1-run/target/release/cairo1-run ~/.local/bin/cairo1-run
+fi
 ```
 
 After installation, rerun:

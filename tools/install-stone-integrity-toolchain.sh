@@ -12,6 +12,8 @@ CAIRO_VM_DIR="${CAIRO_VM_DIR:-$HOME/cairo-vm}"
 INTEGRITY_DIR="${INTEGRITY_DIR:-$HOME/integrity}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 STONE_DOCKER_IMAGE="${STONE_DOCKER_IMAGE:-zkstark-amaci-stone-prover}"
+STARKNET_TYPES_CORE_PACKAGE="${STARKNET_TYPES_CORE_PACKAGE:-starknet-types-core@0.1.8}"
+STARKNET_TYPES_CORE_VERSION="${STARKNET_TYPES_CORE_VERSION:-0.1.9}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -47,6 +49,8 @@ Environment overrides:
   CAIRO_VM_DIR=~/cairo-vm
   INTEGRITY_DIR=~/integrity
   STONE_DOCKER_IMAGE=zkstark-amaci-stone-prover
+  STARKNET_TYPES_CORE_PACKAGE=starknet-types-core@0.1.8
+  STARKNET_TYPES_CORE_VERSION=0.1.9
 
 Notes:
   - This targets Ubuntu 22.04/24.04 on Linux/amd64.
@@ -187,6 +191,39 @@ clone_if_missing() {
   git clone "$url" "$dir"
 }
 
+patch_size_of_unsupported_abis() {
+  local registry_dir
+  local size_of_dir
+  local core_impls
+
+  registry_dir="$HOME/.cargo/registry/src"
+  if [[ ! -d "$registry_dir" ]]; then
+    echo "warning: Cargo registry source directory does not exist: $registry_dir" >&2
+    return 1
+  fi
+
+  size_of_dir="$(find "$registry_dir" -type d -path '*/size-of-0.1.5' | head -n 1 || true)"
+  if [[ -z "$size_of_dir" ]]; then
+    echo "warning: could not find size-of-0.1.5 under $registry_dir" >&2
+    return 1
+  fi
+
+  core_impls="$size_of_dir/src/core_impls.rs"
+  if [[ ! -f "$core_impls" ]]; then
+    echo "warning: size-of core_impls.rs not found: $core_impls" >&2
+    return 1
+  fi
+
+  if ! grep -q '"aapcs"' "$core_impls"; then
+    log "size-of unsupported ABI block is already patched"
+    return 0
+  fi
+
+  log "Patching size-of 0.1.5 unsupported ABI impls for Linux/amd64"
+  cp "$core_impls" "$core_impls.zkstark-amaci.bak"
+  perl -0pi -e 's/impl_function_ptrs!\s*\{\s*"C",\s*"Rust",\s*"aapcs",\s*"cdecl",\s*"stdcall",\s*"fastcall",\s*\}/impl_function_ptrs! {\n    "C",\n    "Rust",\n}/s' "$core_impls"
+}
+
 install_stone_binaries() {
   if has_command cpu_air_prover && has_command cpu_air_verifier; then
     log "Stone prover binaries already available"
@@ -228,7 +265,16 @@ install_cairo1_run() {
   (
     cd "$CAIRO_VM_DIR/cairo1-run"
     make deps
-    cargo build --release
+    if [[ -n "$STARKNET_TYPES_CORE_VERSION" ]]; then
+      log "Updating ${STARKNET_TYPES_CORE_PACKAGE} to ${STARKNET_TYPES_CORE_VERSION}"
+      cargo update -p "$STARKNET_TYPES_CORE_PACKAGE" --precise "$STARKNET_TYPES_CORE_VERSION" || {
+        echo "warning: could not update ${STARKNET_TYPES_CORE_PACKAGE}; continuing with the locked dependency" >&2
+      }
+    fi
+    cargo build --release || {
+      patch_size_of_unsupported_abis
+      cargo build --release
+    }
   )
 
   local built_bin=""
