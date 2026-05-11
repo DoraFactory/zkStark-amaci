@@ -309,7 +309,10 @@ install_integrity_serializer() {
   log "Building Integrity proof_serializer"
   (
     cd "$INTEGRITY_DIR"
-    cargo build --release --bin proof_serializer
+    cargo build --release --bin proof_serializer || {
+      patch_size_of_unsupported_abis
+      cargo build --release --bin proof_serializer
+    }
   )
 
   if [[ -x "$INTEGRITY_DIR/target/release/proof_serializer" ]]; then
