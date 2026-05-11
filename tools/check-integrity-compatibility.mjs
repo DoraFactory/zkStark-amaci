@@ -76,9 +76,19 @@ function textReport(report) {
   lines.push(`Executable: ${report.executable ?? 'unknown'}`);
   lines.push(`Execution ID: ${report.executionId ?? 'unknown'}`);
   lines.push(`Proof producer: ${report.proofProducer}`);
+  lines.push(`Proof artifact kind: ${report.proofArtifact.kind}`);
   lines.push(`Public output felts: ${report.publicOutput.feltCount}`);
   lines.push(`Proof JSON: ${report.proofFile.exists ? `${report.proofFile.sizeBytes} bytes` : 'missing'}`);
+  lines.push(`Local scarb verification: ${report.localVerification.verified ? 'yes' : 'no'}`);
+  lines.push(`Local proof ready: ${report.localProofReady ? 'yes' : 'no'}`);
   lines.push(`Local wrapper binding ready: ${report.localWrapperReady ? 'yes' : 'no'}`);
+  lines.push(
+    `Integrity calldata: ${
+      report.integrityCalldata.exists
+        ? `${report.integrityCalldata.feltCount} felts`
+        : 'missing'
+    }`,
+  );
   lines.push(`Integrity submission ready: ${report.integritySubmissionReady ? 'yes' : 'no'}`);
   if (report.hashes.plain) {
     lines.push(`Plain output hash: ${report.hashes.plain.outputHash}`);

@@ -656,12 +656,36 @@ This command separates two questions:
   `program_hash + publicOutput`;
 - whether the proof run already contains Stone/Integrity proof calldata that
   can be submitted to a FactRegistry flow.
+- whether the local `scarb verify` step succeeded for the generated
+  Scarb/Stwo proof artifact.
 
 The current `scarb prove --execute` metadata is marked as
 `proofProducer = scarb-stwo-local`, so it is valid for local proof generation
 and `scarb verify`, but it is not treated as directly ready for Integrity
 submission until a Stone/Integrity-compatible proof calldata artifact is
 provided.
+
+The expected intermediate result for the current local Scarb/Stwo proof path
+is:
+
+```text
+Local scarb verification: yes
+Local proof ready: yes
+Local wrapper binding ready: yes
+Integrity submission ready: no
+```
+
+To mark a proof run as Integrity-ready, rerun the checker only after producing
+Stone/Integrity-compatible calldata:
+
+```sh
+npm run check:integrity -- \
+  /absolute/path/to/tally/proof-run.json \
+  --program-hash <tally_program_hash> \
+  --proof-producer stone \
+  --integrity-calldata /absolute/path/to/integrity-calldata.json \
+  --text
+```
 
 For tally, the encoding is:
 

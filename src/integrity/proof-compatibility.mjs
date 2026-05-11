@@ -38,19 +38,167 @@ function fileMetadata(path) {
   };
 }
 
-function safeTopLevelKeys(path) {
+function safeReadJson(path) {
   if (!path || !existsSync(path)) {
-    return { parseable: false, keys: [] };
+    return { parseable: false, value: undefined, keys: [] };
   }
   try {
     const parsed = readJson(path, 'proof');
     return {
       parseable: true,
+      value: parsed,
       keys: Object.keys(parsed).sort(),
     };
   } catch {
-    return { parseable: false, keys: [] };
+    return { parseable: false, value: undefined, keys: [] };
   }
+}
+
+function classifyProofJson(path, proofProducer) {
+  const parsed = safeReadJson(path);
+  if (!path) {
+    return {
+      kind: 'missing',
+      parseable: false,
+      keys: [],
+      description: 'proofJson path is not set',
+    };
+  }
+  if (!existsSync(path)) {
+    return {
+      kind: 'missing',
+      parseable: false,
+      keys: [],
+      description: 'proofJson path does not exist',
+    };
+  }
+  if (!parsed.parseable) {
+    return {
+      kind: 'unparseable-json',
+      parseable: false,
+      keys: [],
+      description: 'proofJson exists but is not parseable JSON',
+    };
+  }
+
+  if (proofProducer === 'scarb-stwo-local') {
+    return {
+      kind: 'scarb-stwo-local-proof',
+      parseable: true,
+      keys: parsed.keys,
+      description: 'Scarb/Stwo proof artifact for local scarb verify, not an Integrity calldata artifact',
+    };
+  }
+  if (proofProducer === 'stone') {
+    return {
+      kind: 'stone-proof-artifact',
+      parseable: true,
+      keys: parsed.keys,
+      description: 'declared Stone proof artifact; still requires Integrity calldata serialization',
+    };
+  }
+
+  return {
+    kind: 'unknown-json-proof',
+    parseable: true,
+    keys: parsed.keys,
+    description: 'proof JSON format was not identified',
+  };
+}
+
+function isFeltLike(value) {
+  if (typeof value === 'bigint') {
+    return value >= 0n;
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return /^(0x[0-9a-fA-F]+|[0-9]+)$/.test(value);
+}
+
+function extractCalldata(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  for (const key of ['calldata', 'proofCalldata', 'proof_calldata', 'integrityCalldata']) {
+    if (Array.isArray(value[key])) {
+      return value[key];
+    }
+  }
+  return undefined;
+}
+
+function inspectIntegrityCalldata(path) {
+  if (!path) {
+    return {
+      path: undefined,
+      exists: false,
+      parseable: false,
+      feltCount: 0,
+      validFeltArray: false,
+      description: 'Integrity calldata path is not set',
+    };
+  }
+  const metadata = fileMetadata(path);
+  if (!metadata.exists) {
+    return {
+      ...metadata,
+      parseable: false,
+      feltCount: 0,
+      validFeltArray: false,
+      description: 'Integrity calldata path does not exist',
+    };
+  }
+
+  const parsed = safeReadJson(path);
+  if (!parsed.parseable) {
+    return {
+      ...metadata,
+      parseable: false,
+      feltCount: 0,
+      validFeltArray: false,
+      description: 'Integrity calldata exists but is not parseable JSON',
+    };
+  }
+
+  const calldata = extractCalldata(parsed.value);
+  const validFeltArray =
+    Array.isArray(calldata) && calldata.length > 0 && calldata.every((value) => isFeltLike(value));
+  return {
+    ...metadata,
+    parseable: true,
+    feltCount: Array.isArray(calldata) ? calldata.length : 0,
+    validFeltArray,
+    description: validFeltArray
+      ? 'Integrity calldata JSON contains a non-empty felt array'
+      : 'Integrity calldata JSON does not contain a non-empty felt array',
+  };
+}
+
+function inspectVerificationLog(path) {
+  const metadata = fileMetadata(path);
+  if (!metadata.exists) {
+    return {
+      ...metadata,
+      verified: false,
+      description: 'verify log is missing',
+    };
+  }
+  const source = readFileSync(path, 'utf8');
+  const verified = /Verified proof successfully/.test(source);
+  return {
+    ...metadata,
+    verified,
+    description: verified
+      ? 'local scarb verify succeeded'
+      : 'verify log does not contain a successful local verification marker',
+  };
 }
 
 function loadPreparedPublicOutput(preparedJson) {
@@ -126,6 +274,7 @@ export function analyzeProofRunIntegrityCompatibility(proofRunPath, options = {}
   const proofRun = readJson(absoluteProofRunPath, 'proof-run');
   const preparedJson = resolveFromProofRun(absoluteProofRunPath, proofRun.preparedJson);
   const proofJson = resolveFromProofRun(absoluteProofRunPath, proofRun.proofJson);
+  const verifyLog = resolveFromProofRun(absoluteProofRunPath, proofRun.verifyLog);
   const integrityCalldata = options.integrityCalldata
     ? resolve(options.integrityCalldata)
     : undefined;
@@ -137,8 +286,9 @@ export function analyzeProofRunIntegrityCompatibility(proofRunPath, options = {}
 
   const publicOutput = loadPreparedPublicOutput(preparedJson);
   const proofFile = fileMetadata(proofJson);
-  const proofJsonShape = safeTopLevelKeys(proofJson);
-  const calldataFile = fileMetadata(integrityCalldata);
+  const proofArtifact = classifyProofJson(proofJson, proofProducer);
+  const localVerification = inspectVerificationLog(verifyLog);
+  const calldataArtifact = inspectIntegrityCalldata(integrityCalldata);
   const hashes = maybeIntegrityHashes({
     publicOutputFelts: publicOutput.felts,
     programHash: options.programHash,
@@ -153,7 +303,7 @@ export function analyzeProofRunIntegrityCompatibility(proofRunPath, options = {}
   if (!proofFile.exists) {
     blockers.push('proofJson is missing; run scarb prove/Stone prover first');
   }
-  if (!proofJsonShape.parseable && proofFile.exists) {
+  if (!proofArtifact.parseable && proofFile.exists) {
     blockers.push('proofJson exists but is not parseable JSON');
   }
   if (!hashes.hashingAvailable) {
@@ -164,12 +314,17 @@ export function analyzeProofRunIntegrityCompatibility(proofRunPath, options = {}
   }
   if (proofProducer !== 'stone') {
     blockers.push('proof was not identified as a Stone/Integrity proof artifact');
-    warnings.push('current scarb prove output is useful for local verification, but Integrity submission still needs a Stone-compatible proof/calldata path');
+    warnings.push(
+      'current scarb prove output is useful for local verification, but Integrity submission still needs a Stone-compatible proof/calldata path',
+    );
   }
-  if (!calldataFile.exists) {
+  if (!calldataArtifact.exists) {
     blockers.push('Integrity proof calldata artifact is missing');
+  } else if (!calldataArtifact.validFeltArray) {
+    blockers.push('Integrity proof calldata artifact is not a non-empty felt array');
   }
 
+  const localProofReady = Boolean(proofFile.exists && proofArtifact.parseable && localVerification.verified);
   const localWrapperReady = Boolean(
     publicOutput.felts.length > 0 &&
       hashes.hashingAvailable &&
@@ -186,15 +341,18 @@ export function analyzeProofRunIntegrityCompatibility(proofRunPath, options = {}
     proofProducer,
     preparedJson,
     proofJson,
+    verifyLog,
     proofFile,
-    proofJsonShape,
-    integrityCalldata: calldataFile,
+    proofArtifact,
+    localVerification,
+    integrityCalldata: calldataArtifact,
     publicOutput: {
       feltCount: publicOutput.felts.length,
       labels: publicOutput.labels,
       hexFelts: publicOutput.felts.map(bigintToHex),
     },
     hashes,
+    localProofReady,
     localWrapperReady,
     integritySubmissionReady,
     blockers,
