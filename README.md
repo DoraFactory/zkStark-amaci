@@ -687,6 +687,33 @@ npm run check:integrity -- \
   --text
 ```
 
+Generate the JSON calldata wrapper from Herodotus Integrity's monolith
+`proof_serializer` after you have a Stone proof JSON:
+
+```sh
+git clone https://github.com/HerodotusDev/integrity.git ~/integrity
+
+npm run serialize:integrity-calldata -- \
+  --stone-proof /absolute/path/to/stone-proof.json \
+  --integrity-repo ~/integrity \
+  --out /absolute/path/to/integrity-calldata.json \
+  --text
+```
+
+If the serializer has already produced a raw calldata file, wrap it into the
+same JSON shape with:
+
+```sh
+npm run serialize:integrity-calldata -- \
+  --raw-calldata /absolute/path/to/raw-calldata \
+  --out /absolute/path/to/integrity-calldata.json \
+  --text
+```
+
+Do not pass the current `scarb prove` / Scarb-Stwo `proof.json` as
+`--stone-proof`; Integrity verifies Stone prover proofs and the serializer
+expects that proof format.
+
 You can also export a self-contained handoff package for the next
 Stone/Integrity integration step:
 

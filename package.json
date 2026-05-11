@@ -56,6 +56,7 @@
     "check:integrity": "node tools/check-integrity-compatibility.mjs",
     "check:integrity:tally": "node tools/check-integrity-compatibility.mjs target/cairo-proof/tally/proof-run.json",
     "export:integrity-handoff": "node tools/export-integrity-handoff.mjs",
+    "serialize:integrity-calldata": "node tools/serialize-integrity-calldata.mjs",
     "summarize:proofs": "node tools/summarize-proof-results.mjs target --text",
     "export:hash-vectors": "node tools/export-hash-vectors.mjs fixtures/tally-small/000000.json",
     "verify:hash-vectors": "node tools/verify-hash-vectors.mjs /tmp/zkstark-amaci-hash-vectors.json",
