@@ -687,6 +687,44 @@ npm run check:integrity -- \
   --text
 ```
 
+You can also export a self-contained handoff package for the next
+Stone/Integrity integration step:
+
+```sh
+npm run export:integrity-handoff -- \
+  /absolute/path/to/tally/proof-run.json \
+  --program-hash <tally_program_hash> \
+  --out-dir /absolute/path/to/tally-integrity-handoff \
+  --text
+```
+
+The handoff directory contains:
+
+```text
+handoff-manifest.json
+integrity-readiness.json
+public-output.json
+wrapper-fact.json
+proof-run.json
+prepared.json
+proof.json
+verify.log
+```
+
+For the current Scarb/Stwo proof path, the handoff status should be
+`local_proof_and_wrapper_binding_ready`. After a Stone/Integrity calldata
+artifact exists, export again with:
+
+```sh
+npm run export:integrity-handoff -- \
+  /absolute/path/to/tally/proof-run.json \
+  --program-hash <real_tally_program_hash> \
+  --proof-producer stone \
+  --integrity-calldata /absolute/path/to/integrity-calldata.json \
+  --out-dir /absolute/path/to/tally-integrity-handoff \
+  --text
+```
+
 For tally, the encoding is:
 
 ```text
