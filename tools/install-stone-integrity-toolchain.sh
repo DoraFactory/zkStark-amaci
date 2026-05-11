@@ -224,6 +224,40 @@ patch_size_of_unsupported_abis() {
   perl -0pi -e 's/impl_function_ptrs!\s*\{\s*"C",\s*"Rust",\s*"aapcs",\s*"cdecl",\s*"stdcall",\s*"fastcall",\s*\}/impl_function_ptrs! {\n    "C",\n    "Rust",\n}/s' "$core_impls"
 }
 
+patch_cairo_vm_legacy_is_multiple_of() {
+  local registry_dir
+  local cairo_vm_dir
+  local signature_rs
+  local cairo_pie_rs
+
+  registry_dir="$HOME/.cargo/registry/src"
+  if [[ ! -d "$registry_dir" ]]; then
+    echo "warning: Cargo registry source directory does not exist: $registry_dir" >&2
+    return 1
+  fi
+
+  cairo_vm_dir="$(find "$registry_dir" -type d -path '*/cairo-vm-1.0.2' | head -n 1 || true)"
+  if [[ -z "$cairo_vm_dir" ]]; then
+    echo "warning: could not find cairo-vm-1.0.2 under $registry_dir" >&2
+    return 1
+  fi
+
+  signature_rs="$cairo_vm_dir/src/hint_processor/builtin_hint_processor/signature.rs"
+  cairo_pie_rs="$cairo_vm_dir/src/vm/runners/cairo_pie.rs"
+
+  if [[ -f "$signature_rs" ]]; then
+    log "Patching cairo-vm 1.0.2 signature is_multiple_of call"
+    cp "$signature_rs" "$signature_rs.zkstark-amaci.bak"
+    perl -0pi -e 's/\.is_multiple_of\(&\(CELLS_PER_SIGNATURE as usize\)\)/.is_multiple_of(CELLS_PER_SIGNATURE as usize)/g' "$signature_rs"
+  fi
+
+  if [[ -f "$cairo_pie_rs" ]]; then
+    log "Patching cairo-vm 1.0.2 cairo_pie is_multiple_of call"
+    cp "$cairo_pie_rs" "$cairo_pie_rs.zkstark-amaci.bak"
+    perl -0pi -e 's/\.is_multiple_of\(&CELL_BYTE_LEN\)/.is_multiple_of(CELL_BYTE_LEN)/g' "$cairo_pie_rs"
+  fi
+}
+
 install_stone_binaries() {
   if has_command cpu_air_prover && has_command cpu_air_verifier; then
     log "Stone prover binaries already available"
@@ -311,7 +345,10 @@ install_integrity_serializer() {
     cd "$INTEGRITY_DIR"
     cargo build --release --bin proof_serializer || {
       patch_size_of_unsupported_abis
-      cargo build --release --bin proof_serializer
+      cargo build --release --bin proof_serializer || {
+        patch_cairo_vm_legacy_is_multiple_of
+        cargo build --release --bin proof_serializer
+      }
     }
   )
 
