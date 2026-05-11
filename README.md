@@ -665,6 +665,23 @@ and `scarb verify`, but it is not treated as directly ready for Integrity
 submission until a Stone/Integrity-compatible proof calldata artifact is
 provided.
 
+`tools/run-stone.sh` is intentionally not a pass-through alias for
+`scarb prove`. Use it only to check whether a machine has the missing Stone
+toolchain pieces:
+
+```sh
+npm run check:stone-toolchain
+```
+
+For a real Integrity path, the missing artifact is a Stone proof produced from
+Cairo AIR inputs, not the Scarb/Stwo `proof.json` under `cairo/target/execute`.
+That means the next integration step must add or supply:
+
+- `cairo1-run` proof-mode execution that emits trace, memory, AIR public input,
+  and AIR private input for the selected Cairo executable;
+- `cpu_air_prover` and `cpu_air_verifier` over those AIR files;
+- Herodotus Integrity `proof_serializer` output for the Stone proof.
+
 The expected intermediate result for the current local Scarb/Stwo proof path
 is:
 
