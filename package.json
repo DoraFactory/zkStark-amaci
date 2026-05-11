@@ -56,6 +56,7 @@
     "check:integrity": "node tools/check-integrity-compatibility.mjs",
     "check:integrity:tally": "node tools/check-integrity-compatibility.mjs target/cairo-proof/tally/proof-run.json",
     "export:integrity-handoff": "node tools/export-integrity-handoff.mjs",
+    "export:native-stwo-handoff": "node tools/export-native-stwo-handoff.mjs",
     "serialize:integrity-calldata": "node tools/serialize-integrity-calldata.mjs",
     "check:stone-toolchain": "tools/run-stone.sh --check",
     "install:stone-integrity-toolchain": "tools/install-stone-integrity-toolchain.sh",

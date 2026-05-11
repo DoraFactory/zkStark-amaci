@@ -72,7 +72,7 @@ if (missing.length > 0) {
     `Stone AIR layout '${layout}' is missing builtin segment(s): ${missing.join(', ')}.`
   );
   console.error('Regenerate the AIR with a layout that matches this tally wrapper, for example:');
-  console.error('  npm run stone:air:tally -- --out-dir <new-dir> --layout dex');
+  console.error('  npm run stone:air:tally -- --out-dir <new-dir> --layout recursive');
   console.error('Then rerun stone:prove:tally against the new stone-air-run.json.');
   process.exit(2);
 }

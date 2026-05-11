@@ -39,6 +39,9 @@ The implementation keeps the existing AMACI public-input semantics:
 - `tools/prepare-tally-input.mjs` validates an existing tally input JSON and
   emits canonical public output, fixed-size Cairo program input, plus optional
   Integrity fact hashes when a program hash is supplied.
+- `src/native-proof/` and `tools/export-native-stwo-handoff.mjs` export a
+  project-local native Starknet/S-two handoff package from the current
+  `scarb-stwo-local` proof run.
 - `fixtures/tally-small/` vendors the small AMACI tally fixtures used for
   standalone testing and proof generation.
 - `tests/` exercises valid and invalid tally inputs against those AMACI
@@ -246,8 +249,9 @@ local proof attempt with `npm run prove:tally` currently reaches
 `scarb prove --execute` and is then killed by this macOS/arm64 machine with
 exit code `137` / `Killed: 9`. The relation implementation is therefore
 validated by execution and tests, but AMACI local proving needs a larger
-Linux/amd64 machine or CI runner. Integrity proof serialization, a pinned
-FactRegistry interface, and wrapper deployment/testing are still open.
+Linux/amd64 machine or CI runner. Native Starknet proof broadcast wiring,
+Integrity proof serialization, a pinned FactRegistry interface, and wrapper
+deployment/testing are still open.
 
 ## Generating Proofs On A High-Performance Machine
 
@@ -479,15 +483,17 @@ that input/output shape. Generate the tally AIR files with:
 ```sh
 npm run stone:air:tally -- \
   --out-dir ~/zkstark-amaci-proofs/stone-tally \
-  --layout dex
+  --layout recursive
 ```
 
-The default layout is `dex`. Do not use `all_cairo` for this tally wrapper:
-`all_cairo` expects `add_mod`/`mul_mod` builtin segments in the Stone AIR
-public input, but the current wrapper only uses the builtins required by the
-migrated tally relation. If you already generated AIR with `all_cairo`,
-regenerate it with `--layout dex` before running `stone:prove:tally`; changing
-only the prover config cannot fix an AIR layout mismatch.
+The default layout is `recursive`. The tally wrapper's Sierra entrypoint uses
+`RangeCheck` and `Bitwise`, so `plain`, `small`, and `dex` are not valid because
+they do not provide `Bitwise`. Do not use `all_cairo` for this tally wrapper:
+`all_cairo` expects `add_mod`/`mul_mod` builtin segments in the Stone AIR public
+input, but the current Cairo runner does not emit those segments. If you already
+generated AIR with `all_cairo` or `dex`, regenerate it with `--layout recursive`
+before running `stone:prove:tally`; changing only the prover config cannot fix
+an AIR layout mismatch.
 
 `cairo1-run` must be able to find a development `corelib`. The script checks
 `CAIRO_CORELIB_DIR`, `CAIRO_VM_DIR`, and the default
@@ -498,7 +504,7 @@ prints `Failed to find development corelib`, run:
 cd ~/zkStark-amaci
 CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- \
   --out-dir ~/zkstark-amaci-proofs/stone-tally \
-  --layout dex
+  --layout recursive
 ```
 
 If `~/cairo-vm/cairo1-run/corelib` is missing, create it with:
@@ -887,7 +893,57 @@ cat "$OUT_DIR/process-deactivate/proof-run.json"
 ```
 
 The `publicOutput.felts` in each `*-prepared.json` is the canonical output that
-the Starknet wrapper will eventually bind to an Integrity fact.
+the Starknet wrapper will eventually bind to either a native proof transaction
+or an Integrity fact.
+
+### Native Starknet / S-two handoff
+
+The current proof run already uses Scarb's local Stwo prover path:
+`scarb prove --execute` followed by `scarb verify`. Use the native handoff
+exporter first when targeting Starknet's in-protocol proof verification path:
+
+```sh
+npm run export:native-stwo-handoff -- \
+  /absolute/path/to/tally/proof-run.json \
+  --program-hash <real_tally_program_hash> \
+  --out-dir /absolute/path/to/tally-native-stwo-handoff \
+  --text
+```
+
+The handoff directory contains:
+
+```text
+native-handoff-manifest.json
+native-readiness.json
+native-proof-facts.json
+public-output.json
+proof-run.json
+prepared.json
+proof.json
+prove.log
+verify.log
+```
+
+`native-proof-facts.json` currently exports a candidate project-local binding:
+
+```text
+program_hash, public_output_hash, program_output_fact_hash
+```
+
+This separates three states that are easy to confuse:
+
+- `localProofReady`: `scarb verify` accepted the Scarb/Stwo proof locally.
+- `nativeHandoffReady`: the local proof and public-output binding are packaged.
+- `nativeBroadcastReady`: the installed Starknet client stack exposes native
+  `proof` / `proof_facts` transaction fields and this repo has mapped
+  Scarb/Stwo `proof.json` into that transaction proof field.
+
+With the current `starknet.js@6.24.1` dependency, the exporter should usually
+report `Native handoff ready: yes` and `Native broadcast ready: no`. That means
+the proof artifacts are ready for the next native Starknet integration spike,
+but this repo is not yet submitting them as a mainnet transaction.
+
+### Stone / Integrity fallback handoff
 
 Check whether a tally proof run has enough metadata for the next Integrity
 step:

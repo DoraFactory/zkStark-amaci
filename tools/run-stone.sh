@@ -18,7 +18,7 @@ Use these commands for the current local proof path:
   npm run prove:all-split-small
 
 For the current tally Stone proof path:
-  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally --layout dex
+  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally --layout recursive
   npm run stone:prove:tally -- \
     --air-run /absolute/path/to/stone-tally/stone-air-run.json \
     --out-dir /absolute/path/to/stone-tally-proof

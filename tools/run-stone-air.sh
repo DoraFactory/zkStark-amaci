@@ -15,7 +15,7 @@ Current support:
   --circuit tally
 
 Default layout:
-  dex
+  recursive
 
 Outputs:
   prepared.json
@@ -83,7 +83,7 @@ detect_cairo_corelib_dir() {
 CIRCUIT=""
 INPUT_PATH=""
 OUT_DIR=""
-LAYOUT="dex"
+LAYOUT="recursive"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -120,6 +120,20 @@ if [[ "$CIRCUIT" != "tally" ]]; then
   usage >&2
   exit 1
 fi
+
+case "$LAYOUT" in
+  plain|small|dex)
+    echo "layout '$LAYOUT' does not provide the Bitwise builtin required by tally_votes_stone" >&2
+    echo "use --layout recursive" >&2
+    exit 1
+    ;;
+  all_cairo|all_cairo_stwo)
+    echo "layout '$LAYOUT' is not compatible with the current Stone tally path" >&2
+    echo "it requires add_mod/mul_mod AIR segments that this Cairo runner does not emit" >&2
+    echo "use --layout recursive" >&2
+    exit 1
+    ;;
+esac
 
 INPUT_PATH="${INPUT_PATH:-$ROOT_DIR/fixtures/tally-small/000000.json}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/target/stone-air/tally}"
