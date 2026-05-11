@@ -39,6 +39,7 @@ tool_status() {
 
 check_toolchain() {
   local missing=0
+  local serializer_ready=0
 
   echo "Local proof tools:"
   tool_status node || missing=1
@@ -52,8 +53,12 @@ check_toolchain() {
   echo
 
   echo "Integrity serialization tools:"
-  tool_status proof_serializer || true
-  tool_status cargo || true
+  if tool_status proof_serializer; then
+    serializer_ready=1
+  fi
+  if tool_status cargo; then
+    serializer_ready=1
+  fi
   echo
 
   cat <<'EOF'
@@ -61,10 +66,15 @@ Status:
   - node/scarb are enough for this repo's current local Scarb/Stwo proof flow.
   - cairo1-run + cpu_air_prover + cpu_air_verifier are required before this
     repo can generate a real Stone proof artifact.
-  - proof_serializer can be supplied either as a PATH binary, via
-    --proof-serializer to npm run serialize:integrity-calldata, or by passing
-    --integrity-repo so the tool can run cargo inside the Integrity repo.
+  - proof_serializer can be supplied either as a PATH binary or via
+    --proof-serializer to npm run serialize:integrity-calldata.
+  - cargo is enough only when --integrity-repo points to a local Integrity
+    checkout, because the serializer command can then run through cargo.
 EOF
+
+  if [[ "$serializer_ready" -ne 1 ]]; then
+    missing=1
+  fi
 
   if [[ "$missing" -ne 0 ]]; then
     return 1

@@ -346,6 +346,58 @@ scarb verify --help
 If any of the three Scarb subcommands are missing, the installed toolchain is
 not sufficient for this proof path.
 
+### Stone And Integrity Toolchain
+
+The local proof installer above is enough for `scarb prove` and `scarb verify`.
+It is not enough for the Stone/Integrity path. After local proofs work, check
+the remaining tools:
+
+```sh
+npm run check:stone-toolchain
+```
+
+If it reports missing `cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`,
+`proof_serializer`, or `cargo`, install the extra toolchain on the
+Linux/amd64 prover machine:
+
+```sh
+npm run install:stone-integrity-toolchain -- --install-docker
+```
+
+This script installs/builds:
+
+- Rust/cargo, when missing.
+- Stone prover `cpu_air_prover` and `cpu_air_verifier`, built through the
+  upstream Stone Dockerfile.
+- `cairo1-run`, built from `lambdaclass/cairo-vm`.
+- Herodotus Integrity `proof_serializer`, built from
+  `HerodotusDev/integrity`.
+
+The build is heavier than the local Scarb installer and can take a long time.
+If Docker is already installed and running, omit `--install-docker`:
+
+```sh
+npm run install:stone-integrity-toolchain
+```
+
+Useful overrides:
+
+```sh
+BIN_DIR=~/.local/bin npm run install:stone-integrity-toolchain
+STONE_PROVER_DIR=~/stone-prover npm run install:stone-integrity-toolchain
+CAIRO_VM_DIR=~/cairo-vm npm run install:stone-integrity-toolchain
+INTEGRITY_DIR=~/integrity npm run install:stone-integrity-toolchain
+npm run install:stone-integrity-toolchain -- --skip-stone
+npm run install:stone-integrity-toolchain -- --skip-cairo1-run
+npm run install:stone-integrity-toolchain -- --skip-integrity
+```
+
+After installation, rerun:
+
+```sh
+npm run check:stone-toolchain
+```
+
 ### Repository Setup
 
 If you already ran `tools/install-proof-toolchain.sh` from this repository, the
