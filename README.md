@@ -943,6 +943,24 @@ report `Native handoff ready: yes` and `Native broadcast ready: no`. That means
 the proof artifacts are ready for the next native Starknet integration spike,
 but this repo is not yet submitting them as a mainnet transaction.
 
+After a high-performance proof run, export a proof/executable inventory before
+trying to derive native proof transaction fields:
+
+```sh
+npm run export:proof-inventory -- \
+  /absolute/path/to/all-split \
+  --target-dev cairo/target/dev \
+  --out /absolute/path/to/proof-artifact-inventory.json \
+  --text
+```
+
+The inventory records each `proof-run.json`, proof file hash, verify status,
+prepared public-output count, and the matching
+`cairo/target/dev/<executable>.executable.json` hash. Its
+`localProgramDigest` is only a deterministic content digest of
+`executable.program`; it is not a canonical Starknet native `proof_facts`
+program hash.
+
 ### Stone / Integrity fallback handoff
 
 Check whether a tally proof run has enough metadata for the next Integrity
