@@ -481,9 +481,29 @@ npm run stone:air:tally -- \
   --out-dir ~/zkstark-amaci-proofs/stone-tally
 ```
 
+`cairo1-run` must be able to find a development `corelib`. The script checks
+`CAIRO_CORELIB_DIR`, `CAIRO_VM_DIR`, and the default
+`~/cairo-vm/cairo1-run/corelib` location created by `make deps`. If the runner
+prints `Failed to find development corelib`, run:
+
+```sh
+cd ~/zkStark-amaci
+CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally
+```
+
+If `~/cairo-vm/cairo1-run/corelib` is missing, create it with:
+
+```sh
+cd ~/cairo-vm/cairo1-run
+make deps
+```
+
 This command prepares the small tally fixture, converts the Scarb executable
-argument JSON into the bracketed decimal `cairo1-run --args_file` format, runs
-`cairo1-run --proof_mode`, and writes:
+argument JSON into the bracketed decimal `cairo1-run --args_file` format,
+exports a `cairo1-run` Sierra artifact from `zkstark_amaci_tally.sierra.json`,
+renames the Stone wrapper entrypoint to the `::main` suffix expected by
+`cairo1-run`, runs `cairo1-run --proof_mode`, and writes:
 
 ```text
 trace.bin
@@ -492,6 +512,10 @@ air-public-input.json
 air-private-input.json
 stone-air-run.json
 ```
+
+Do not pass `target/dev/tally_votes_stone.executable.json` directly to
+`cairo1-run`. Scarb executable JSON is for the Scarb/cairo-execute runner; the
+Stone AIR path uses the exported `tally_votes_stone.cairo1-run.sierra.json`.
 
 The remaining Stone/Integrity path is:
 

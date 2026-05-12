@@ -34,6 +34,49 @@ require_tool() {
   fi
 }
 
+detect_cairo_corelib_dir() {
+  local candidates=()
+
+  if [[ -n "${CAIRO_CORELIB_DIR:-}" ]]; then
+    candidates+=("$CAIRO_CORELIB_DIR")
+  fi
+
+  if [[ -n "${CAIRO_VM_DIR:-}" ]]; then
+    candidates+=(
+      "$CAIRO_VM_DIR/cairo1-run/corelib"
+      "$CAIRO_VM_DIR/corelib"
+    )
+  fi
+
+  if [[ -n "${HOME:-}" ]]; then
+    candidates+=(
+      "$HOME/cairo-vm/cairo1-run/corelib"
+      "$HOME/cairo-vm/corelib"
+    )
+  fi
+
+  candidates+=(
+    "$ROOT_DIR/corelib"
+    "$ROOT_DIR/../corelib"
+  )
+
+  local candidate nested
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "$candidate/src" ]]; then
+      (cd "$candidate" && pwd)
+      return 0
+    fi
+
+    nested="$candidate/corelib"
+    if [[ -d "$nested/src" ]]; then
+      (cd "$nested" && pwd)
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 CIRCUIT=""
 INPUT_PATH=""
 OUT_DIR=""
@@ -114,6 +157,24 @@ AIR_PRIVATE_INPUT="$OUT_DIR/air-private-input.json"
 RUN_JSON="$OUT_DIR/stone-air-run.json"
 RUN_LOG="$OUT_DIR/cairo1-run.log"
 EXECUTABLE_JSON="$ROOT_DIR/cairo/target/dev/tally_votes_stone.executable.json"
+PACKAGE_SIERRA_JSON="$ROOT_DIR/cairo/target/dev/zkstark_amaci_tally.sierra.json"
+RUNNER_SIERRA_JSON="$OUT_DIR/tally_votes_stone.cairo1-run.sierra.json"
+CORELIB_DIR="$(detect_cairo_corelib_dir || true)"
+
+if [[ -z "$CORELIB_DIR" ]]; then
+  cat >&2 <<'EOF'
+cairo1-run could not find a Cairo development corelib.
+
+Set CAIRO_CORELIB_DIR to the corelib directory built with cairo-vm, for example:
+  CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- --out-dir ~/zkstark-amaci-proofs/stone-tally
+
+If that directory does not exist, run the cairo-vm dependency setup first:
+  cd ~/cairo-vm/cairo1-run && make deps
+EOF
+  exit 1
+fi
+
+CORELIB_PARENT="$(cd "$CORELIB_DIR/.." && pwd)"
 
 echo "==> Preparing tally input"
 node "$ROOT_DIR/tools/prepare-tally-input.mjs" \
@@ -139,28 +200,47 @@ if [[ ! -f "$EXECUTABLE_JSON" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$PACKAGE_SIERRA_JSON" ]]; then
+  echo "missing package Sierra artifact: $PACKAGE_SIERRA_JSON" >&2
+  exit 1
+fi
+
+echo "==> Exporting cairo1-run Sierra artifact"
+node "$ROOT_DIR/tools/export-cairo1-run-sierra.mjs" \
+  "$PACKAGE_SIERRA_JSON" \
+  --function "zkstark_amaci_tally::stone_tally_votes::tally_votes_stone_main" \
+  --main-name "zkstark_amaci_tally::stone_tally_votes::main" \
+  --out "$RUNNER_SIERRA_JSON"
+
 echo "==> Running cairo1-run proof mode for tally"
-cairo1-run \
-  "$EXECUTABLE_JSON" \
-  --layout "$LAYOUT" \
-  --proof_mode \
-  --trace_file "$TRACE_FILE" \
-  --memory_file "$MEMORY_FILE" \
-  --air_public_input "$AIR_PUBLIC_INPUT" \
-  --air_private_input "$AIR_PRIVATE_INPUT" \
-  --args_file "$CAIRO1_ARGS_TXT" \
-  --print_output \
-  2>&1 | tee "$RUN_LOG"
+echo "cairo1-run corelib: $CORELIB_DIR"
+(
+  cd "$CORELIB_PARENT"
+  cairo1-run \
+    "$RUNNER_SIERRA_JSON" \
+    --layout "$LAYOUT" \
+    --proof_mode \
+    --trace_file "$TRACE_FILE" \
+    --memory_file "$MEMORY_FILE" \
+    --air_public_input "$AIR_PUBLIC_INPUT" \
+    --air_private_input "$AIR_PRIVATE_INPUT" \
+    --args_file "$CAIRO1_ARGS_TXT" \
+    --print_output
+) 2>&1 | tee "$RUN_LOG"
 
 printf '{\n' > "$RUN_JSON"
 printf '  "circuit": "tally",\n' >> "$RUN_JSON"
 printf '  "executable": "%s",\n' "$EXECUTABLE_JSON" >> "$RUN_JSON"
+printf '  "packageSierraJson": "%s",\n' "$PACKAGE_SIERRA_JSON" >> "$RUN_JSON"
+printf '  "runnerSierraJson": "%s",\n' "$RUNNER_SIERRA_JSON" >> "$RUN_JSON"
 printf '  "layout": "%s",\n' "$LAYOUT" >> "$RUN_JSON"
 printf '  "inputPath": "%s",\n' "$INPUT_PATH" >> "$RUN_JSON"
 printf '  "preparedJson": "%s",\n' "$PREPARED_JSON" >> "$RUN_JSON"
 printf '  "cairoInputJson": "%s",\n' "$CAIRO_INPUT_JSON" >> "$RUN_JSON"
 printf '  "scarbArgsJson": "%s",\n' "$SCARB_ARGS_JSON" >> "$RUN_JSON"
 printf '  "cairo1ArgsTxt": "%s",\n' "$CAIRO1_ARGS_TXT" >> "$RUN_JSON"
+printf '  "corelibDir": "%s",\n' "$CORELIB_DIR" >> "$RUN_JSON"
+printf '  "cairo1RunCwd": "%s",\n' "$CORELIB_PARENT" >> "$RUN_JSON"
 printf '  "traceFile": "%s",\n' "$TRACE_FILE" >> "$RUN_JSON"
 printf '  "memoryFile": "%s",\n' "$MEMORY_FILE" >> "$RUN_JSON"
 printf '  "airPublicInput": "%s",\n' "$AIR_PUBLIC_INPUT" >> "$RUN_JSON"
