@@ -7,5 +7,6 @@ mod process_deactivate;
 mod process_messages;
 mod public_output;
 mod sha256_u256;
+mod stone_tally_votes;
 mod tally_votes;
 mod types;
