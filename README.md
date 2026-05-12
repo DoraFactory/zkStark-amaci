@@ -525,6 +525,51 @@ cpu_air_verifier -> local Stone proof verification
 proof_serializer -> Integrity calldata
 ```
 
+After `npm run stone:air:tally` succeeds, generate and locally verify the
+Stone proof:
+
+```sh
+npm run stone:prove:tally -- \
+  --air-run ~/zkstark-amaci-proofs/stone-tally/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-proof
+```
+
+By default this uses:
+
+```text
+~/stone-prover/cpu_air_prover_config.json
+~/stone-prover/cpu_air_params.json
+```
+
+Override those files if the trace size requires a different parameter file:
+
+```sh
+npm run stone:prove:tally -- \
+  --air-run ~/zkstark-amaci-proofs/stone-tally/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-proof \
+  --prover-config ~/stone-prover/cpu_air_prover_config.json \
+  --parameter-file ~/stone-prover/cpu_air_params.json
+```
+
+The proof step writes:
+
+```text
+stone-proof.json
+stone-prove.log
+stone-verify.log
+proof-run.json
+```
+
+Then run the Integrity readiness check against the Stone proof metadata:
+
+```sh
+npm run check:integrity -- \
+  ~/zkstark-amaci-proofs/stone-tally-proof/proof-run.json \
+  --program-hash 0x1234 \
+  --proof-producer stone \
+  --text
+```
+
 Do not pass the Scarb JSON args file directly to `cairo1-run`; use
 `tools/convert-cairo1-run-args.mjs` or `npm run stone:air:tally`, because
 `cairo1-run --args_file` expects whitespace-separated values and arrays are
