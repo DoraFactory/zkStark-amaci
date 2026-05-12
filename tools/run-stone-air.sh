@@ -82,6 +82,23 @@ require_tool node
 require_tool scarb
 require_tool cairo1-run
 
+if ! grep -q 'name = "tally_votes_stone"' "$ROOT_DIR/cairo/Scarb.toml" \
+  || ! grep -q 'stone_tally_votes' "$ROOT_DIR/cairo/src/lib.cairo" \
+  || [[ ! -f "$ROOT_DIR/cairo/src/stone_tally_votes.cairo" ]]; then
+  cat >&2 <<EOF
+Stone tally executable source is incomplete.
+
+Expected:
+  - cairo/Scarb.toml contains target executable tally_votes_stone
+  - cairo/src/lib.cairo declares mod stone_tally_votes
+  - cairo/src/stone_tally_votes.cairo exists
+
+Your checkout likely has tools/run-stone-air.sh but not the matching Cairo
+proof-mode wrapper files. Pull or apply the full Stone AIR entrypoint changes.
+EOF
+  exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 INPUT_PATH="$(cd "$(dirname "$INPUT_PATH")" && pwd)/$(basename "$INPUT_PATH")"
