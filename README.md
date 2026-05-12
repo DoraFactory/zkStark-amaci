@@ -471,17 +471,40 @@ npm run inspect:stone-pipeline -- \
 
 This writes `stone-pipeline-inspection.json` plus stdout/stderr captures for
 `cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`, and `proof_serializer`.
-The next implementation step is to connect the selected Cairo executable to:
+For tally, the repository includes a proof-mode wrapper executable named
+`tally_votes_stone`. It accepts one `Array<felt252>` input and returns one
+`Array<felt252>` public output because `cairo1-run --proof_mode` only supports
+that input/output shape. Generate the tally AIR files with:
+
+```sh
+npm run stone:air:tally -- \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally
+```
+
+This command prepares the small tally fixture, converts the Scarb executable
+argument JSON into the bracketed `cairo1-run --args_file` format, runs
+`cairo1-run --proof_mode`, and writes:
 
 ```text
-cairo1-run --proof_mode -> AIR public/private input + trace/memory
+trace.bin
+memory.bin
+air-public-input.json
+air-private-input.json
+stone-air-run.json
+```
+
+The remaining Stone/Integrity path is:
+
+```text
 cpu_air_prover -> Stone proof JSON
 cpu_air_verifier -> local Stone proof verification
 proof_serializer -> Integrity calldata
 ```
 
-Do this against the captured help output rather than assuming that
-`cairo1-run` accepts the same `--arguments-file` shape as `scarb execute`.
+Do not pass the Scarb JSON args file directly to `cairo1-run`; use
+`tools/convert-cairo1-run-args.mjs` or `npm run stone:air:tally`, because
+`cairo1-run --args_file` expects whitespace-separated values and arrays are
+written as `[1 2 3]`.
 
 ### Repository Setup
 

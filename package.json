@@ -60,6 +60,8 @@
     "check:stone-toolchain": "tools/run-stone.sh --check",
     "install:stone-integrity-toolchain": "tools/install-stone-integrity-toolchain.sh",
     "inspect:stone-pipeline": "node tools/inspect-stone-pipeline.mjs",
+    "convert:cairo1-run-args": "node tools/convert-cairo1-run-args.mjs",
+    "stone:air:tally": "tools/run-stone-air.sh --circuit tally --input fixtures/tally-small/000000.json",
     "summarize:proofs": "node tools/summarize-proof-results.mjs target --text",
     "export:hash-vectors": "node tools/export-hash-vectors.mjs fixtures/tally-small/000000.json",
     "verify:hash-vectors": "node tools/verify-hash-vectors.mjs /tmp/zkstark-amaci-hash-vectors.json",
