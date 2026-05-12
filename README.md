@@ -482,7 +482,7 @@ npm run stone:air:tally -- \
 ```
 
 This command prepares the small tally fixture, converts the Scarb executable
-argument JSON into the bracketed `cairo1-run --args_file` format, runs
+argument JSON into the bracketed decimal `cairo1-run --args_file` format, runs
 `cairo1-run --proof_mode`, and writes:
 
 ```text
@@ -504,7 +504,8 @@ proof_serializer -> Integrity calldata
 Do not pass the Scarb JSON args file directly to `cairo1-run`; use
 `tools/convert-cairo1-run-args.mjs` or `npm run stone:air:tally`, because
 `cairo1-run --args_file` expects whitespace-separated values and arrays are
-written as `[1 2 3]`.
+written as `[1 2 3]`. Hex values from the Scarb argument JSON are converted to
+decimal before calling `cairo1-run`.
 
 ### Repository Setup
 

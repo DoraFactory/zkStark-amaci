@@ -21,7 +21,10 @@ export function normalizeFelt(value, index = 0) {
 
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (FELT_HEX_RE.test(trimmed) || FELT_DECIMAL_RE.test(trimmed)) {
+    if (FELT_HEX_RE.test(trimmed)) {
+      return BigInt(trimmed).toString();
+    }
+    if (FELT_DECIMAL_RE.test(trimmed)) {
       return trimmed;
     }
   }

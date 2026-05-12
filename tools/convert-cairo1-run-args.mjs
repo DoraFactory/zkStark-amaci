@@ -10,9 +10,10 @@ Options:
   --text   Print a short summary.
   --help   Show this help.
 
-By default this writes one bracketed Array<felt252> argument, which is the input
-shape required by cairo1-run --proof_mode entrypoints. The source JSON is the
-array emitted by this repository's --cairo-args-out tools for scarb execute.`;
+By default this writes one bracketed Array<felt252> argument with decimal felt
+values, which is the input shape required by cairo1-run --proof_mode
+entrypoints. The source JSON is the array emitted by this repository's
+--cairo-args-out tools for scarb execute.`;
 }
 
 function parseArgs(argv) {
