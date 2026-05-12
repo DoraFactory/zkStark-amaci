@@ -14,6 +14,9 @@ not run cpu_air_prover yet.
 Current support:
   --circuit tally
 
+Default layout:
+  dex
+
 Outputs:
   prepared.json
   cairo-input.json
@@ -80,7 +83,7 @@ detect_cairo_corelib_dir() {
 CIRCUIT=""
 INPUT_PATH=""
 OUT_DIR=""
-LAYOUT="all_cairo"
+LAYOUT="dex"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

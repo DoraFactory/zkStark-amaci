@@ -15,8 +15,8 @@ Options:
   --air-run <path>          stone-air-run.json. Default: target/stone-air/tally/stone-air-run.json
   --out-dir <dir>           Output directory. Default: sibling directory "stone-proof" next to --air-run
   --stone-prover-dir <dir>  Stone prover checkout. Default: $STONE_PROVER_DIR or ~/stone-prover
-  --prover-config <path>    cpu_air_prover_config.json. Default: <stone-prover-dir>/cpu_air_prover_config.json
-  --parameter-file <path>   cpu_air_params.json. Default: <stone-prover-dir>/cpu_air_params.json
+  --prover-config <path>    cpu_air_prover_config.json. Auto-detected if omitted.
+  --parameter-file <path>   cpu_air_params.json. Auto-detected if omitted.
   --skip-verify             Skip cpu_air_verifier.
 
 Outputs:
@@ -47,6 +47,70 @@ if (typeof value !== "string" || value.length === 0) {
 }
 process.stdout.write(value);
 ' "$file" "$field"
+}
+
+validate_air_layout() {
+  local public_input_file="$1"
+  node - "$public_input_file" <<'NODE'
+const fs = require('fs');
+const publicInputFile = process.argv[2];
+const json = JSON.parse(fs.readFileSync(publicInputFile, 'utf8'));
+const layout = String(json.layout ?? '');
+const segments = json.mem_segment_addresses ?? {};
+const missing = [];
+
+if (layout === 'all_cairo' || layout === 'all_cairo_stwo') {
+  for (const segment of ['add_mod', 'mul_mod']) {
+    if (!Object.prototype.hasOwnProperty.call(segments, segment)) {
+      missing.push(segment);
+    }
+  }
+}
+
+if (missing.length > 0) {
+  console.error(
+    `Stone AIR layout '${layout}' is missing builtin segment(s): ${missing.join(', ')}.`
+  );
+  console.error('Regenerate the AIR with a layout that matches this tally wrapper, for example:');
+  console.error('  npm run stone:air:tally -- --out-dir <new-dir> --layout dex');
+  console.error('Then rerun stone:prove:tally against the new stone-air-run.json.');
+  process.exit(2);
+}
+NODE
+}
+
+resolve_stone_config_file() {
+  local explicit_path="$1"
+  local file_name="$2"
+  local candidates=()
+
+  if [[ -n "$explicit_path" ]]; then
+    candidates+=("$explicit_path")
+  else
+    candidates+=(
+      "$STONE_PROVER_DIR/$file_name"
+      "$STONE_PROVER_DIR/e2e_test/Cairo/$file_name"
+      "$STONE_PROVER_DIR/e2e_test/CairoZero/$file_name"
+    )
+
+    if [[ -n "${INTEGRITY_DIR:-}" ]]; then
+      candidates+=("$INTEGRITY_DIR/examples/proofs/$file_name")
+    fi
+    if [[ -n "${HOME:-}" ]]; then
+      candidates+=("$HOME/integrity/examples/proofs/$file_name")
+    fi
+  fi
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s/%s\n' "$(cd "$(dirname "$candidate")" && pwd)" "$(basename "$candidate")"
+      return 0
+    fi
+  done
+
+  echo "${explicit_path:-$STONE_PROVER_DIR/$file_name}"
+  return 1
 }
 
 AIR_RUN_JSON=""
@@ -107,9 +171,11 @@ OUT_DIR="${OUT_DIR:-$(dirname "$AIR_RUN_JSON")/stone-proof}"
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
-STONE_PROVER_DIR="$(cd "$STONE_PROVER_DIR" && pwd)"
-PROVER_CONFIG_FILE="${PROVER_CONFIG_FILE:-$STONE_PROVER_DIR/cpu_air_prover_config.json}"
-PARAMETER_FILE="${PARAMETER_FILE:-$STONE_PROVER_DIR/cpu_air_params.json}"
+if [[ -d "$STONE_PROVER_DIR" ]]; then
+  STONE_PROVER_DIR="$(cd "$STONE_PROVER_DIR" && pwd)"
+fi
+PROVER_CONFIG_FILE="$(resolve_stone_config_file "$PROVER_CONFIG_FILE" cpu_air_prover_config.json || true)"
+PARAMETER_FILE="$(resolve_stone_config_file "$PARAMETER_FILE" cpu_air_params.json || true)"
 
 require_tool node
 require_tool cpu_air_prover
@@ -119,11 +185,13 @@ fi
 
 if [[ ! -f "$PROVER_CONFIG_FILE" ]]; then
   echo "missing prover config file: $PROVER_CONFIG_FILE" >&2
+  echo "pass --prover-config or set STONE_PROVER_DIR to a Stone checkout" >&2
   exit 1
 fi
 
 if [[ ! -f "$PARAMETER_FILE" ]]; then
   echo "missing parameter file: $PARAMETER_FILE" >&2
+  echo "pass --parameter-file or set STONE_PROVER_DIR to a Stone checkout" >&2
   exit 1
 fi
 
@@ -143,6 +211,8 @@ if [[ ! -f "$AIR_PRIVATE_INPUT" ]]; then
   echo "missing AIR private input: $AIR_PRIVATE_INPUT" >&2
   exit 1
 fi
+
+validate_air_layout "$AIR_PUBLIC_INPUT"
 
 PROOF_JSON="$OUT_DIR/stone-proof.json"
 PROVE_LOG="$OUT_DIR/stone-prove.log"

@@ -478,8 +478,16 @@ that input/output shape. Generate the tally AIR files with:
 
 ```sh
 npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally
+  --out-dir ~/zkstark-amaci-proofs/stone-tally \
+  --layout dex
 ```
+
+The default layout is `dex`. Do not use `all_cairo` for this tally wrapper:
+`all_cairo` expects `add_mod`/`mul_mod` builtin segments in the Stone AIR
+public input, but the current wrapper only uses the builtins required by the
+migrated tally relation. If you already generated AIR with `all_cairo`,
+regenerate it with `--layout dex` before running `stone:prove:tally`; changing
+only the prover config cannot fix an AIR layout mismatch.
 
 `cairo1-run` must be able to find a development `corelib`. The script checks
 `CAIRO_CORELIB_DIR`, `CAIRO_VM_DIR`, and the default
@@ -489,7 +497,8 @@ prints `Failed to find development corelib`, run:
 ```sh
 cd ~/zkStark-amaci
 CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally
+  --out-dir ~/zkstark-amaci-proofs/stone-tally \
+  --layout dex
 ```
 
 If `~/cairo-vm/cairo1-run/corelib` is missing, create it with:
@@ -541,14 +550,24 @@ By default this uses:
 ~/stone-prover/cpu_air_params.json
 ```
 
+If those files are not in the Stone checkout root, the script also checks the
+official Stone example locations:
+
+```text
+~/stone-prover/e2e_test/Cairo/cpu_air_prover_config.json
+~/stone-prover/e2e_test/Cairo/cpu_air_params.json
+~/stone-prover/e2e_test/CairoZero/cpu_air_prover_config.json
+~/stone-prover/e2e_test/CairoZero/cpu_air_params.json
+```
+
 Override those files if the trace size requires a different parameter file:
 
 ```sh
 npm run stone:prove:tally -- \
   --air-run ~/zkstark-amaci-proofs/stone-tally/stone-air-run.json \
   --out-dir ~/zkstark-amaci-proofs/stone-tally-proof \
-  --prover-config ~/stone-prover/cpu_air_prover_config.json \
-  --parameter-file ~/stone-prover/cpu_air_params.json
+  --prover-config ~/stone-prover/e2e_test/Cairo/cpu_air_prover_config.json \
+  --parameter-file ~/stone-prover/e2e_test/Cairo/cpu_air_params.json
 ```
 
 The proof step writes:
