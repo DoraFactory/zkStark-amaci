@@ -6,9 +6,15 @@ import { joinU128Pair, tallyInputHash } from '../src/compat/encoding.mjs';
 import { poseidonHashBn254 } from '../src/compat/poseidon-bn254.mjs';
 import { hash10, hash13, isCircomPoseidonAvailable, poseidonHashFromCircom } from '../src/compat/poseidon.mjs';
 import { buildCairoTallyInput, serializeCairoExecutableArgs } from '../src/cairo-input.mjs';
+import {
+  buildNativeCairoTallyInput,
+  serializeNativeCairoTallyExecutableArgs,
+} from '../src/native-cairo-input.mjs';
 import { mutateSplitU256, runTallyCairoModel } from '../src/cairo-model/tally-program.mjs';
 import { collectTallyHashVectors } from '../src/hash-vectors.mjs';
 import { verifyHashVectors } from '../src/hash-vector-check.mjs';
+import { STARK_FIELD } from '../src/constants.mjs';
+import { evaluateNativeTallyVotes } from '../src/tally/native-tally-votes.mjs';
 import { evaluateTallyVotes, unpackPackedVals } from '../src/tally/tally-votes.mjs';
 import {
   calculatePlainFactHash,
@@ -31,6 +37,7 @@ const hasCircomPoseidon = isCircomPoseidonAvailable();
 const mainFixtureSkip = hasMainFixture ? false : `missing AMACI fixture: ${fixturePath}`;
 const alternateFixturesSkip = hasAlternateFixtures ? false : 'missing alternate AMACI tally fixtures';
 const circomPoseidonSkip = hasCircomPoseidon ? false : 'circom package is not installed';
+const nativePoseidonSkip = isIntegrityHashingAvailable() ? false : 'starknet.js hashing helpers are not installed';
 
 function loadFixture(path = fixturePath) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -165,6 +172,35 @@ test('serializes Cairo executable arguments for scarb execute', { skip: mainFixt
   assert.equal(args[1], '0x0');
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
+
+test(
+  'evaluates a Starknet-native hash tally v2 fixture without BN254 hash claims',
+  { skip: mainFixtureSkip || nativePoseidonSkip },
+  () => {
+    const input = loadFixture();
+    const legacy = evaluateTallyVotes(input);
+    const evaluated = evaluateNativeTallyVotes(input);
+    const cairoInput = buildNativeCairoTallyInput(input, evaluated);
+    const args = serializeNativeCairoTallyExecutableArgs(cairoInput);
+
+    assert.equal(evaluated.publicOutput.felts.length, 12);
+    assert.equal(evaluated.publicOutput.labels[1], 'version');
+    assert.equal(evaluated.publicOutput.felts[1], 2n);
+    assert.equal(evaluated.publicOutput.labels[3], 'hash_scheme');
+    assert.notEqual(
+      evaluated.publicFields.newTallyCommitment.toString(),
+      legacy.publicFields.newTallyCommitment.toString(),
+    );
+    assert.ok(evaluated.publicOutput.felts.every((felt) => felt >= 0n && felt < STARK_FIELD));
+    assert.equal(args.length, 95);
+    assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+    assert.equal(cairoInput.public_output.length, 12);
+    const expectedLeaf0VoteRoot = BigInt(input.stateLeaf[0][3]) === 0n
+      ? '0'
+      : evaluated.derived.voteRoots[0].toString();
+    assert.equal(cairoInput.program_input.witness.state_leaf_0.v3, expectedLeaf0VoteRoot);
+  },
+);
 
 test('cairo model accepts the generated tally program input', { skip: mainFixtureSkip }, () => {
   const input = loadFixture();

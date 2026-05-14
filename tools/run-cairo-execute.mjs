@@ -13,6 +13,11 @@ const CIRCUITS = Object.freeze({
     executable: 'tally_votes',
     synthetic: false,
   },
+  'tally-native': {
+    prepareCircuit: 'tally-native',
+    executable: 'tally_votes_native',
+    synthetic: false,
+  },
   'add-new-key': {
     prepareCircuit: 'add-new-key',
     executable: 'add_new_key',

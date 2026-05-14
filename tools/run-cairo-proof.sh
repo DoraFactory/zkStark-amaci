@@ -12,6 +12,7 @@ Usage:
 
 Circuits:
   tally
+  tally-native
   add-new-key
   process-messages
   process-messages-boundary
@@ -33,7 +34,7 @@ Circuits:
 
 Notes:
   - The legacy positional form runs only the tally proof.
-  - tally requires an input JSON.
+  - tally and tally-native require an input JSON.
   - add-new-key, process-messages, process-messages-boundary,
     process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
@@ -65,6 +66,7 @@ require_tool() {
 prepare_circuit_name() {
   case "$1" in
     tally) echo "tally" ;;
+    tally-native) echo "tally-native" ;;
     add-new-key) echo "add-new-key" ;;
     process-messages) echo "process-messages-stateful-ecdh-signature" ;;
     process-messages-boundary) echo "process-messages-boundary" ;;
@@ -90,6 +92,7 @@ prepare_circuit_name() {
 executable_name() {
   case "$1" in
     tally) echo "tally_votes" ;;
+    tally-native) echo "tally_votes_native" ;;
     add-new-key) echo "add_new_key" ;;
     process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
     process-messages-boundary) echo "process_messages_boundary" ;;

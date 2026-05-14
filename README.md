@@ -52,6 +52,10 @@ The implementation keeps the existing AMACI public-input semantics:
   retaining hash claims only as witness compatibility assertions against the
   generated input. It also contains the initial
   `ProcessMessages(2, 1, 5)` public-boundary executable.
+- `cairo/src/native_tally_votes.cairo` is the first AMACI-STARK v2 spike. It
+  keeps the small tally state transition but replaces BN254 Poseidon hash
+  claims and SHA-256 input binding with Starknet-native Poseidon over `felt252`
+  values, producing a felt-native public output with `version = 2`.
 - `contracts/` contains the Starknet target scaffolding for the Integrity
   wrapper.
 - `spec/process-messages-compat.md`, `src/msg/`, and the Cairo
@@ -271,6 +275,33 @@ This flow does not submit anything to Starknet or Integrity yet. Success means:
 2. `scarb prove --execute` generates a local STARK proof for each Cairo
    executable,
 3. `scarb verify` verifies every generated proof locally.
+
+### AMACI-STARK v2 native hash tally spike
+
+The compatibility tally executable remains `tally_votes`. A Starknet-native
+hash spike is available as `tally_votes_native`:
+
+```sh
+npm run prepare:tally-native -- \
+  --out /tmp/zkstark-amaci-native-prepared.json \
+  --cairo-input-out /tmp/zkstark-amaci-native-cairo-input.json \
+  --cairo-args-out /tmp/zkstark-amaci-native-cairo-args.json
+
+cd cairo
+scarb execute \
+  --executable-name tally_votes_native \
+  --arguments-file /tmp/zkstark-amaci-native-cairo-args.json \
+  --print-program-output \
+  --print-resource-usage
+
+npm run prove:tally-native -- --out-dir target/cairo-proof/tally-native
+```
+
+This v2 spike deliberately derives new Starknet-native commitments from the
+fixture witness instead of preserving the legacy Circom/BN254 public hashes.
+Its public output is 12 felts rather than the v1 split-`u256` 16-felt output.
+Use it to compare execution/proof cost before expanding native hashing to
+message processing and deactivate circuits.
 
 ### Machine requirements
 

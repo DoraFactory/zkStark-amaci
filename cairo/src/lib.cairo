@@ -1,6 +1,7 @@
 mod add_new_key;
 mod babyjub;
 mod hash_gates;
+mod native_tally_votes;
 mod poseidon_bn254;
 mod poseidon_constants;
 mod process_deactivate;

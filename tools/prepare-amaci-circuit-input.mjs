@@ -3,7 +3,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { bigintToHex, decimalize } from '../src/compat/encoding.mjs';
 import { evaluateTallyVotes } from '../src/tally/tally-votes.mjs';
+import { evaluateNativeTallyVotes } from '../src/tally/native-tally-votes.mjs';
 import { buildCairoTallyInput, serializeCairoExecutableArgs } from '../src/cairo-input.mjs';
+import {
+  buildNativeCairoTallyInput,
+  serializeNativeCairoTallyExecutableArgs,
+} from '../src/native-cairo-input.mjs';
 import {
   buildCairoProcessMessagesInput,
   buildCairoProcessMessageCoordKeyInput,
@@ -62,6 +67,12 @@ const PREPARERS = {
     evaluate: evaluateTallyVotes,
     build: buildCairoTallyInput,
     serialize: serializeCairoExecutableArgs,
+  },
+  'tally-native': {
+    executable: 'tally_votes_native',
+    evaluate: evaluateNativeTallyVotes,
+    build: buildNativeCairoTallyInput,
+    serialize: serializeNativeCairoTallyExecutableArgs,
   },
   'process-messages-boundary': {
     executable: 'process_messages_boundary',
