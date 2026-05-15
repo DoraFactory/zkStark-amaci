@@ -58,6 +58,10 @@ import {
   buildCairoProcessDeactivateMessagesStatefulInput,
   buildCairoProcessDeactivateSignatureInput,
   buildCairoProcessDeactivateStepCoreInput,
+  buildNativeCairoProcessDeactivateCoordKeyInput,
+  buildNativeCairoProcessDeactivateDecryptInput,
+  buildNativeCairoProcessDeactivateEcdhInput,
+  buildNativeCairoProcessDeactivateSignatureInput,
   serializeCairoProcessDeactivateCoordKeyExecutableArgs,
   serializeCairoProcessDeactivateDecryptExecutableArgs,
   serializeCairoProcessDeactivateEcdhExecutableArgs,
@@ -66,6 +70,10 @@ import {
   serializeCairoProcessDeactivateMessagesStatefulExecutableArgs,
   serializeCairoProcessDeactivateSignatureExecutableArgs,
   serializeCairoProcessDeactivateStepCoreExecutableArgs,
+  serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs,
+  serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
+  serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
+  serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
   evaluateProcessDeactivateMessages,
@@ -216,6 +224,12 @@ const PREPARERS = {
     build: buildCairoProcessDeactivateCoordKeyInput,
     serialize: serializeCairoProcessDeactivateCoordKeyExecutableArgs,
   },
+  'process-deactivate-coord-key-native': {
+    executable: 'process_deactivate_coord_key_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: buildNativeCairoProcessDeactivateCoordKeyInput,
+    serialize: serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs,
+  },
   'process-deactivate-ecdh-command': {
     executable: 'process_deactivate_ecdh',
     evaluate: evaluateProcessDeactivateMessagesStateful,
@@ -232,6 +246,22 @@ const PREPARERS = {
     serialize: serializeCairoProcessDeactivateEcdhExecutableArgs,
     requiresMessageIndex: true,
   },
+  'process-deactivate-ecdh-command-native': {
+    executable: 'process_deactivate_ecdh_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessDeactivateEcdhInput(input, options.messageIndex, 'command', evaluated),
+    serialize: serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-ecdh-leaf-native': {
+    executable: 'process_deactivate_ecdh_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessDeactivateEcdhInput(input, options.messageIndex, 'leaf', evaluated),
+    serialize: serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
+    requiresMessageIndex: true,
+  },
   'process-deactivate-signature': {
     executable: 'process_deactivate_signature',
     evaluate: evaluateProcessDeactivateMessagesStateful,
@@ -240,12 +270,36 @@ const PREPARERS = {
     serialize: serializeCairoProcessDeactivateSignatureExecutableArgs,
     requiresMessageIndex: true,
   },
+  'process-deactivate-signature-native': {
+    executable: 'process_deactivate_signature_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessDeactivateSignatureInput(input, options.messageIndex, evaluated),
+    serialize: serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
+    requiresMessageIndex: true,
+  },
   'process-deactivate-decrypt-current': {
     executable: 'process_deactivate_decrypt',
     evaluate: evaluateProcessDeactivateMessagesStateful,
     build: (input, evaluated, options) =>
       buildCairoProcessDeactivateDecryptInput(input, options.messageIndex, 'current', evaluated),
     serialize: serializeCairoProcessDeactivateDecryptExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-current-native': {
+    executable: 'process_deactivate_decrypt_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessDeactivateDecryptInput(input, options.messageIndex, 'current', evaluated),
+    serialize: serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-new-native': {
+    executable: 'process_deactivate_decrypt_native',
+    evaluate: evaluateProcessDeactivateMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessDeactivateDecryptInput(input, options.messageIndex, 'new', evaluated),
+    serialize: serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
     requiresMessageIndex: true,
   },
   'process-deactivate-decrypt-new': {

@@ -15,6 +15,10 @@ import {
   buildCairoProcessDeactivateMessagesStatefulInput,
   buildCairoProcessDeactivateSignatureInput,
   buildCairoProcessDeactivateStepCoreInput,
+  buildNativeCairoProcessDeactivateCoordKeyInput,
+  buildNativeCairoProcessDeactivateDecryptInput,
+  buildNativeCairoProcessDeactivateEcdhInput,
+  buildNativeCairoProcessDeactivateSignatureInput,
   serializeCairoProcessDeactivateCoordKeyExecutableArgs,
   serializeCairoProcessDeactivateDecryptExecutableArgs,
   serializeCairoProcessDeactivateEcdhExecutableArgs,
@@ -24,6 +28,10 @@ import {
   serializeCairoProcessDeactivateMessagesStatefulExecutableArgs,
   serializeCairoProcessDeactivateSignatureExecutableArgs,
   serializeCairoProcessDeactivateStepCoreExecutableArgs,
+  serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs,
+  serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
+  serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
+  serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
   buildNativeCairoProcessDeactivateBoundaryInput,
@@ -506,6 +514,49 @@ test('builds Cairo executable arguments for deeply split ProcessDeactivateMessag
     ...currentDecryptArgs,
     ...newDecryptArgs,
     ...coreArgs,
+  ].every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('builds native public hash arguments for split ProcessDeactivateMessages helper proofs', () => {
+  const input = getStatefulFixture();
+  const evaluated = evaluateProcessDeactivateMessagesStateful(input);
+  const coordKey = buildNativeCairoProcessDeactivateCoordKeyInput(input, evaluated);
+  const commandEcdh = buildNativeCairoProcessDeactivateEcdhInput(input, 2, 'command', evaluated);
+  const leafEcdh = buildNativeCairoProcessDeactivateEcdhInput(input, 2, 'leaf', evaluated);
+  const signature = buildNativeCairoProcessDeactivateSignatureInput(input, 2, evaluated);
+  const currentDecrypt = buildNativeCairoProcessDeactivateDecryptInput(input, 2, 'current', evaluated);
+  const newDecrypt = buildNativeCairoProcessDeactivateDecryptInput(input, 2, 'new', evaluated);
+  const coordArgs = serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs(coordKey);
+  const commandEcdhArgs = serializeNativeCairoProcessDeactivateEcdhExecutableArgs(commandEcdh);
+  const leafEcdhArgs = serializeNativeCairoProcessDeactivateEcdhExecutableArgs(leafEcdh);
+  const signatureArgs = serializeNativeCairoProcessDeactivateSignatureExecutableArgs(signature);
+  const currentDecryptArgs = serializeNativeCairoProcessDeactivateDecryptExecutableArgs(currentDecrypt);
+  const newDecryptArgs = serializeNativeCairoProcessDeactivateDecryptExecutableArgs(newDecrypt);
+  const legacyCoordKey = buildCairoProcessDeactivateCoordKeyInput(input, evaluated);
+
+  assert.equal(coordKey.public_output.length, 9);
+  assert.equal(commandEcdh.public_output.length, 12);
+  assert.equal(leafEcdh.public_output.length, 12);
+  assert.equal(signature.public_output.length, 13);
+  assert.equal(currentDecrypt.public_output.length, 13);
+  assert.equal(newDecrypt.public_output.length, 13);
+  assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
+  assert.equal(commandEcdh.publicFields.message_index, 2n);
+  assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
+  assert.equal(leafEcdh.publicFields.ecdh_kind, 1n);
+  assert.equal(commandEcdh.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
+  assert.equal(currentDecrypt.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
+  assert.notEqual(coordKey.publicFields.coord_pub_key_hash, legacyCoordKey.publicFields.coordPubKeyHash);
+  assert.equal(signature.publicFields.signature_valid, evaluated.state.transitions[2].derived.signatureValid);
+  assert.equal(currentDecrypt.publicFields.decrypt_is_odd, evaluated.state.transitions[2].derived.currentStateDecrypt.isOdd);
+  assert.equal(newDecrypt.publicFields.decrypt_is_odd, evaluated.state.transitions[2].derived.newStateDecrypt.isOdd);
+  assert.ok([
+    ...coordArgs,
+    ...commandEcdhArgs,
+    ...leafEcdhArgs,
+    ...signatureArgs,
+    ...currentDecryptArgs,
+    ...newDecryptArgs,
   ].every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 

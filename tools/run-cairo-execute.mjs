@@ -100,6 +100,11 @@ const CIRCUITS = Object.freeze({
     executable: 'process_deactivate_coord_key',
     synthetic: true,
   },
+  'process-deactivate-coord-key-native': {
+    prepareCircuit: 'process-deactivate-coord-key-native',
+    executable: 'process_deactivate_coord_key_native',
+    synthetic: true,
+  },
   'process-deactivate-ecdh-command': {
     prepareCircuit: 'process-deactivate-ecdh-command',
     executable: 'process_deactivate_ecdh',
@@ -112,9 +117,27 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-deactivate-ecdh-command-native': {
+    prepareCircuit: 'process-deactivate-ecdh-command-native',
+    executable: 'process_deactivate_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-ecdh-leaf-native': {
+    prepareCircuit: 'process-deactivate-ecdh-leaf-native',
+    executable: 'process_deactivate_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate-signature': {
     prepareCircuit: 'process-deactivate-signature',
     executable: 'process_deactivate_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-signature-native': {
+    prepareCircuit: 'process-deactivate-signature-native',
+    executable: 'process_deactivate_signature_native',
     synthetic: true,
     requiresMessageIndex: true,
   },
@@ -127,6 +150,18 @@ const CIRCUITS = Object.freeze({
   'process-deactivate-decrypt-new': {
     prepareCircuit: 'process-deactivate-decrypt-new',
     executable: 'process_deactivate_decrypt',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-current-native': {
+    prepareCircuit: 'process-deactivate-decrypt-current-native',
+    executable: 'process_deactivate_decrypt_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-new-native': {
+    prepareCircuit: 'process-deactivate-decrypt-new-native',
+    executable: 'process_deactivate_decrypt_native',
     synthetic: true,
     requiresMessageIndex: true,
   },

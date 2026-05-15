@@ -1,5 +1,15 @@
-import { bigintToHex, splitU256ToU128 } from '../compat/encoding.mjs';
-import { PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN } from '../constants.mjs';
+import { bigintToHex, decimalize, splitU256ToU128 } from '../compat/encoding.mjs';
+import {
+  NATIVE_PUBLIC_OUTPUT_VERSION,
+  PROCESS_DEACTIVATE_COORD_KEY_NATIVE_CIRCUIT_ID,
+  PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
+  PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
+  PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
+  PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+  PUBLIC_OUTPUT_MAGIC,
+  STARKNET_POSEIDON_HASH_SCHEME,
+} from '../constants.mjs';
+import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import {
   buildCairoBabyjubPoseidonSignatureInput,
   buildCairoBabyjubScalarMulInput,
@@ -28,6 +38,75 @@ function splitObject(value, label) {
   return {
     low: low.toString(),
     high: high.toString(),
+  };
+}
+
+function feltObject(value) {
+  return value.toString();
+}
+
+function u256Limbs(value, label) {
+  const { low, high } = splitU256ToU128(value, label);
+  return [low, high];
+}
+
+function nativeHashU256(value, label) {
+  return poseidonManyFelts(u256Limbs(value, label));
+}
+
+function nativeHashPoint(values, label) {
+  if (!Array.isArray(values) || values.length !== 2) {
+    throw new Error(`${label} must contain two values`);
+  }
+  return poseidonManyFelts([
+    ...u256Limbs(values[0], `${label}[0]`),
+    ...u256Limbs(values[1], `${label}[1]`),
+  ]);
+}
+
+function nativeCoordPrivKeyHash(coordPrivKey) {
+  return poseidonManyFelts([
+    ...u256Limbs(coordPrivKey, 'coordPrivKey'),
+    PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
+  ]);
+}
+
+function nativePackedCmdHash(packedCmd) {
+  if (!Array.isArray(packedCmd) || packedCmd.length !== 3) {
+    throw new Error('packedCmd must contain three values');
+  }
+  return poseidonManyFelts([
+    ...u256Limbs(packedCmd[0], 'packedCmd[0]'),
+    ...u256Limbs(packedCmd[1], 'packedCmd[1]'),
+    ...u256Limbs(packedCmd[2], 'packedCmd[2]'),
+  ]);
+}
+
+function nativeProcessDeactivatePublicOutput(circuitId, fields, params, fieldLabels) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'hash_scheme',
+    'state_tree_depth',
+    'deactivate_tree_depth',
+    'message_batch_size',
+    ...fieldLabels,
+  ];
+  const felts = [
+    PUBLIC_OUTPUT_MAGIC,
+    NATIVE_PUBLIC_OUTPUT_VERSION,
+    circuitId,
+    STARKNET_POSEIDON_HASH_SCHEME,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.deactivateTreeDepth),
+    BigInt(params.messageBatchSize),
+    ...fieldLabels.map((label) => fields[label]),
+  ];
+  return {
+    labels,
+    felts,
+    decimalFelts: felts.map(decimalize),
   };
 }
 
@@ -963,6 +1042,189 @@ export function buildCairoProcessDeactivateDecryptInput(
   };
 }
 
+export function buildNativeCairoProcessDeactivateCoordKeyInput(rawInput, evaluated) {
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const legacy = buildCairoProcessDeactivateCoordKeyInput(rawInput, result);
+  const publicFields = {
+    coord_pub_key_hash: nativeHashPoint(rawInput.coordPubKey, 'coordPubKey'),
+    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+  };
+  const fields = {
+    coord_pub_key_hash: feltObject(publicFields.coord_pub_key_hash),
+    coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
+  };
+  const publicOutput = nativeProcessDeactivatePublicOutput(
+    PROCESS_DEACTIVATE_COORD_KEY_NATIVE_CIRCUIT_ID,
+    publicFields,
+    result.params,
+    ['coord_pub_key_hash', 'coord_priv_key_hash'],
+  );
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: legacy.program_input.witness,
+    },
+    full_witness: legacy.full_witness,
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildNativeCairoProcessDeactivateEcdhInput(
+  rawInput,
+  messageIndex,
+  ecdhKind = 'command',
+  evaluated,
+) {
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const legacy = buildCairoProcessDeactivateEcdhInput(rawInput, messageIndex, ecdhKind, result);
+  const transition = result.state.transitions[messageIndex];
+  const command = result.derived.messageCommands[messageIndex];
+  const base = ecdhKind === 'leaf'
+    ? transition.input.stateLeaf.slice(0, 2)
+    : rawInput.encPubKeys[messageIndex].map(BigInt);
+  const expectedSharedKey = ecdhKind === 'leaf' ? transition.derived.sharedKey : command.sharedKey;
+  const publicFields = {
+    message_index: BigInt(messageIndex),
+    ecdh_kind: ecdhKind === 'leaf' ? 1n : 0n,
+    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+    base_hash: nativeHashPoint(base, 'base'),
+    shared_key_hash: nativeHashPoint(expectedSharedKey, 'sharedKey'),
+  };
+  const fields = {
+    message_index: feltObject(publicFields.message_index),
+    ecdh_kind: feltObject(publicFields.ecdh_kind),
+    coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
+    base_hash: feltObject(publicFields.base_hash),
+    shared_key_hash: feltObject(publicFields.shared_key_hash),
+  };
+  const publicOutput = nativeProcessDeactivatePublicOutput(
+    PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
+    publicFields,
+    result.params,
+    ['message_index', 'ecdh_kind', 'coord_priv_key_hash', 'base_hash', 'shared_key_hash'],
+  );
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: legacy.program_input.witness,
+    },
+    full_witness: legacy.full_witness,
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildNativeCairoProcessDeactivateSignatureInput(rawInput, messageIndex, evaluated) {
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const legacy = buildCairoProcessDeactivateSignatureInput(rawInput, messageIndex, result);
+  const transition = result.state.transitions[messageIndex];
+  const input = transition.input;
+  const publicFields = {
+    message_index: BigInt(messageIndex),
+    pub_key_hash: nativeHashPoint(input.stateLeaf.slice(0, 2), 'pubKey'),
+    r8_hash: nativeHashPoint(input.cmdSigR8, 'r8'),
+    packed_cmd_hash: nativePackedCmdHash(input.packedCmd),
+    cmd_sig_s_hash: nativeHashU256(input.cmdSigS, 'cmdSigS'),
+    signature_valid: transition.derived.signatureValid,
+  };
+  const fields = {
+    message_index: feltObject(publicFields.message_index),
+    pub_key_hash: feltObject(publicFields.pub_key_hash),
+    r8_hash: feltObject(publicFields.r8_hash),
+    packed_cmd_hash: feltObject(publicFields.packed_cmd_hash),
+    cmd_sig_s_hash: feltObject(publicFields.cmd_sig_s_hash),
+    signature_valid: feltObject(publicFields.signature_valid),
+  };
+  const publicOutput = nativeProcessDeactivatePublicOutput(
+    PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
+    publicFields,
+    result.params,
+    [
+      'message_index',
+      'pub_key_hash',
+      'r8_hash',
+      'packed_cmd_hash',
+      'cmd_sig_s_hash',
+      'signature_valid',
+    ],
+  );
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: legacy.program_input.witness,
+    },
+    full_witness: legacy.full_witness,
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildNativeCairoProcessDeactivateDecryptInput(
+  rawInput,
+  messageIndex,
+  decryptKind = 'current',
+  evaluated,
+) {
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const legacy = buildCairoProcessDeactivateDecryptInput(rawInput, messageIndex, decryptKind, result);
+  const transition = result.state.transitions[messageIndex];
+  const current = decryptKind === 'current';
+  const c1 = current ? transition.input.stateLeaf.slice(5, 7) : transition.input.c1;
+  const c2 = current ? transition.input.stateLeaf.slice(7, 9) : transition.input.c2;
+  const decrypt = current ? transition.derived.currentStateDecrypt : transition.derived.newStateDecrypt;
+  const publicFields = {
+    message_index: BigInt(messageIndex),
+    decrypt_kind: current ? 0n : 1n,
+    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+    c1_hash: nativeHashPoint(c1, 'c1'),
+    c2_hash: nativeHashPoint(c2, 'c2'),
+    decrypt_is_odd: decrypt.isOdd,
+  };
+  const fields = {
+    message_index: feltObject(publicFields.message_index),
+    decrypt_kind: feltObject(publicFields.decrypt_kind),
+    coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
+    c1_hash: feltObject(publicFields.c1_hash),
+    c2_hash: feltObject(publicFields.c2_hash),
+    decrypt_is_odd: feltObject(publicFields.decrypt_is_odd),
+  };
+  const publicOutput = nativeProcessDeactivatePublicOutput(
+    PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
+    publicFields,
+    result.params,
+    [
+      'message_index',
+      'decrypt_kind',
+      'coord_priv_key_hash',
+      'c1_hash',
+      'c2_hash',
+      'decrypt_is_odd',
+    ],
+  );
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: legacy.program_input.witness,
+    },
+    full_witness: legacy.full_witness,
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
 export function buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex, evaluated) {
   assertMessageIndex(messageIndex);
   if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
@@ -1112,6 +1374,10 @@ export function buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex,
 
 function pushU256(args, value) {
   args.push(value.low, value.high);
+}
+
+function pushFelt(args, value) {
+  args.push(BigInt(value));
 }
 
 function pushVector2(args, value) {
@@ -1306,12 +1572,25 @@ function pushProcessDeactivateCoordKeyFields(args, fields) {
   pushU256(args, fields.coord_priv_key_hash);
 }
 
+function pushNativeProcessDeactivateCoordKeyFields(args, fields) {
+  pushFelt(args, fields.coord_pub_key_hash);
+  pushFelt(args, fields.coord_priv_key_hash);
+}
+
 function pushProcessDeactivateEcdhFields(args, fields) {
   args.push(BigInt(fields.message_index));
   args.push(BigInt(fields.ecdh_kind));
   pushU256(args, fields.coord_priv_key_hash);
   pushU256(args, fields.base_hash);
   pushU256(args, fields.shared_key_hash);
+}
+
+function pushNativeProcessDeactivateEcdhFields(args, fields) {
+  pushFelt(args, fields.message_index);
+  pushFelt(args, fields.ecdh_kind);
+  pushFelt(args, fields.coord_priv_key_hash);
+  pushFelt(args, fields.base_hash);
+  pushFelt(args, fields.shared_key_hash);
 }
 
 function pushProcessDeactivateSignatureFields(args, fields) {
@@ -1323,6 +1602,15 @@ function pushProcessDeactivateSignatureFields(args, fields) {
   pushU256(args, fields.signature_valid);
 }
 
+function pushNativeProcessDeactivateSignatureFields(args, fields) {
+  pushFelt(args, fields.message_index);
+  pushFelt(args, fields.pub_key_hash);
+  pushFelt(args, fields.r8_hash);
+  pushFelt(args, fields.packed_cmd_hash);
+  pushFelt(args, fields.cmd_sig_s_hash);
+  pushFelt(args, fields.signature_valid);
+}
+
 function pushProcessDeactivateDecryptFields(args, fields) {
   args.push(BigInt(fields.message_index));
   args.push(BigInt(fields.decrypt_kind));
@@ -1330,6 +1618,15 @@ function pushProcessDeactivateDecryptFields(args, fields) {
   pushU256(args, fields.c1_hash);
   pushU256(args, fields.c2_hash);
   pushU256(args, fields.decrypt_is_odd);
+}
+
+function pushNativeProcessDeactivateDecryptFields(args, fields) {
+  pushFelt(args, fields.message_index);
+  pushFelt(args, fields.decrypt_kind);
+  pushFelt(args, fields.coord_priv_key_hash);
+  pushFelt(args, fields.c1_hash);
+  pushFelt(args, fields.c2_hash);
+  pushFelt(args, fields.decrypt_is_odd);
 }
 
 function pushProcessDeactivateStepCoreFields(args, fields) {
@@ -1544,9 +1841,23 @@ export function serializeCairoProcessDeactivateCoordKeyExecutableArgs(cairoInput
   return args.map((value) => bigintToHex(value));
 }
 
+export function serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeProcessDeactivateCoordKeyFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateCoordKeyWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
 export function serializeCairoProcessDeactivateEcdhExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateEcdhFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateEcdhWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeNativeCairoProcessDeactivateEcdhExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeProcessDeactivateEcdhFields(args, cairoInput.program_input.fields);
   pushProcessDeactivateEcdhWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
@@ -1558,9 +1869,23 @@ export function serializeCairoProcessDeactivateSignatureExecutableArgs(cairoInpu
   return args.map((value) => bigintToHex(value));
 }
 
+export function serializeNativeCairoProcessDeactivateSignatureExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeProcessDeactivateSignatureFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateSignatureWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
 export function serializeCairoProcessDeactivateDecryptExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateDecryptFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateDecryptWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeNativeCairoProcessDeactivateDecryptExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeProcessDeactivateDecryptFields(args, cairoInput.program_input.fields);
   pushProcessDeactivateDecryptWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }

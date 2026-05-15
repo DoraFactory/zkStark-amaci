@@ -125,16 +125,32 @@ name = "process_deactivate_coord_key"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_coord_key_main"
 
 [[target.executable]]
+name = "process_deactivate_coord_key_native"
+function = "zkstark_amaci_tally::process_deactivate::process_deactivate_coord_key_native_main"
+
+[[target.executable]]
 name = "process_deactivate_ecdh"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_ecdh_main"
+
+[[target.executable]]
+name = "process_deactivate_ecdh_native"
+function = "zkstark_amaci_tally::process_deactivate::process_deactivate_ecdh_native_main"
 
 [[target.executable]]
 name = "process_deactivate_signature"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_signature_main"
 
 [[target.executable]]
+name = "process_deactivate_signature_native"
+function = "zkstark_amaci_tally::process_deactivate::process_deactivate_signature_native_main"
+
+[[target.executable]]
 name = "process_deactivate_decrypt"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_decrypt_main"
+
+[[target.executable]]
+name = "process_deactivate_decrypt_native"
+function = "zkstark_amaci_tally::process_deactivate::process_deactivate_decrypt_native_main"
 
 [[target.executable]]
 name = "process_deactivate_step_core"
