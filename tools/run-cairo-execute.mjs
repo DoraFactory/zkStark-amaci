@@ -44,15 +44,32 @@ const CIRCUITS = Object.freeze({
     executable: 'process_message_coord_key',
     synthetic: true,
   },
+  'process-message-coord-key-native': {
+    prepareCircuit: 'process-message-coord-key-native',
+    executable: 'process_message_coord_key_native',
+    synthetic: true,
+  },
   'process-message-ecdh': {
     prepareCircuit: 'process-message-ecdh',
     executable: 'process_message_ecdh',
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-ecdh-native': {
+    prepareCircuit: 'process-message-ecdh-native',
+    executable: 'process_message_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-message-signature': {
     prepareCircuit: 'process-message-signature',
     executable: 'process_message_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-message-signature-native': {
+    prepareCircuit: 'process-message-signature-native',
+    executable: 'process_message_signature_native',
     synthetic: true,
     requiresMessageIndex: true,
   },

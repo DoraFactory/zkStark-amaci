@@ -19,6 +19,9 @@ import {
   buildCairoProcessMessagesStatefulInput,
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
+  buildNativeCairoProcessMessageCoordKeyInput,
+  buildNativeCairoProcessMessageEcdhInput,
+  buildNativeCairoProcessMessageSignatureInput,
   serializeCairoProcessMessageCoordKeyExecutableArgs,
   serializeCairoProcessMessageEcdhExecutableArgs,
   serializeCairoProcessMessageSignatureExecutableArgs,
@@ -28,6 +31,9 @@ import {
   serializeCairoProcessMessagesStatefulExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
+  serializeNativeCairoProcessMessageCoordKeyExecutableArgs,
+  serializeNativeCairoProcessMessageEcdhExecutableArgs,
+  serializeNativeCairoProcessMessageSignatureExecutableArgs,
 } from '../src/msg/cairo-input.mjs';
 import {
   evaluateProcessMessages,
@@ -132,6 +138,12 @@ const PREPARERS = {
     build: buildCairoProcessMessageCoordKeyInput,
     serialize: serializeCairoProcessMessageCoordKeyExecutableArgs,
   },
+  'process-message-coord-key-native': {
+    executable: 'process_message_coord_key_native',
+    evaluate: evaluateProcessMessagesStateful,
+    build: buildNativeCairoProcessMessageCoordKeyInput,
+    serialize: serializeNativeCairoProcessMessageCoordKeyExecutableArgs,
+  },
   'process-message-ecdh': {
     executable: 'process_message_ecdh',
     evaluate: evaluateProcessMessagesStateful,
@@ -140,12 +152,28 @@ const PREPARERS = {
     serialize: serializeCairoProcessMessageEcdhExecutableArgs,
     requiresMessageIndex: true,
   },
+  'process-message-ecdh-native': {
+    executable: 'process_message_ecdh_native',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessMessageEcdhInput(input, options.messageIndex, evaluated),
+    serialize: serializeNativeCairoProcessMessageEcdhExecutableArgs,
+    requiresMessageIndex: true,
+  },
   'process-message-signature': {
     executable: 'process_message_signature',
     evaluate: evaluateProcessMessagesStateful,
     build: (input, evaluated, options) =>
       buildCairoProcessMessageSignatureInput(input, options.messageIndex, evaluated),
     serialize: serializeCairoProcessMessageSignatureExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-signature-native': {
+    executable: 'process_message_signature_native',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessMessageSignatureInput(input, options.messageIndex, evaluated),
+    serialize: serializeNativeCairoProcessMessageSignatureExecutableArgs,
     requiresMessageIndex: true,
   },
   'process-message-step-core': {
