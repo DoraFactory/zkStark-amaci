@@ -33,6 +33,10 @@ name = "add_new_key"
 function = "zkstark_amaci_tally::add_new_key::add_new_key_main"
 
 [[target.executable]]
+name = "add_new_key_native"
+function = "zkstark_amaci_tally::add_new_key::add_new_key_native_main"
+
+[[target.executable]]
 name = "process_messages_boundary"
 function = "zkstark_amaci_tally::process_messages::process_messages_boundary_main"
 

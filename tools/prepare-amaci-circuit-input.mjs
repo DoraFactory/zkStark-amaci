@@ -47,7 +47,9 @@ import {
 import { evaluateAddNewKey } from '../src/add-new-key/add-new-key.mjs';
 import {
   buildCairoAddNewKeyInput,
+  buildNativeCairoAddNewKeyInput,
   serializeCairoAddNewKeyExecutableArgs,
+  serializeNativeCairoAddNewKeyExecutableArgs,
 } from '../src/add-new-key/cairo-input.mjs';
 import {
   buildCairoProcessDeactivateCoordKeyInput,
@@ -197,6 +199,12 @@ const PREPARERS = {
     evaluate: evaluateAddNewKey,
     build: buildCairoAddNewKeyInput,
     serialize: serializeCairoAddNewKeyExecutableArgs,
+  },
+  'add-new-key-native': {
+    executable: 'add_new_key_native',
+    evaluate: evaluateAddNewKey,
+    build: buildNativeCairoAddNewKeyInput,
+    serialize: serializeNativeCairoAddNewKeyExecutableArgs,
   },
   'process-deactivate-boundary': {
     executable: 'process_deactivate_messages_boundary',

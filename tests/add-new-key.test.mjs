@@ -7,7 +7,9 @@ import { hash5, hashLeftRight } from '../src/compat/poseidon.mjs';
 import { evaluateAddNewKey } from '../src/add-new-key/add-new-key.mjs';
 import {
   buildCairoAddNewKeyInput,
+  buildNativeCairoAddNewKeyInput,
   serializeCairoAddNewKeyExecutableArgs,
+  serializeNativeCairoAddNewKeyExecutableArgs,
 } from '../src/add-new-key/cairo-input.mjs';
 
 function quinaryLayers(leaves, depth) {
@@ -131,6 +133,24 @@ test('builds Cairo executable arguments for AddNewKey', () => {
   assert.equal(args.length, 10793);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.deepEqual(cairoInput.public_output, evaluated.publicOutput.decimalFelts);
+});
+
+test('builds native public hash arguments for AddNewKey', () => {
+  const input = buildFixture();
+  const evaluated = evaluateAddNewKey(input);
+  const cairoInput = buildNativeCairoAddNewKeyInput(input, evaluated);
+  const legacyInput = buildCairoAddNewKeyInput(input, evaluated);
+  const args = serializeNativeCairoAddNewKeyExecutableArgs(cairoInput);
+
+  assert.equal(cairoInput.public_output.length, 14);
+  assert.ok(cairoInput.public_output_labels.includes('hash_scheme'));
+  assert.equal(cairoInput.publicFields.poll_id, evaluated.input.pollId);
+  assert.notEqual(cairoInput.publicFields.coord_pub_key_hash, evaluated.publicFields.coordPubKeyHash);
+  assert.notEqual(cairoInput.publicFields.new_pub_key_hash, evaluated.publicFields.newPubKeyHash);
+  assert.notEqual(cairoInput.publicFields.input_hash, evaluated.publicFields.inputHash);
+  assert.deepEqual(cairoInput.program_input.witness.legacy, legacyInput.program_input.witness);
+  assert.ok(args.length > legacyInput.public_output.length);
+  assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
 test('rejects a tampered AddNewKey re-randomized ciphertext', () => {

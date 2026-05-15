@@ -1,4 +1,13 @@
-import { bigintToHex, splitU256ToU128 } from '../compat/encoding.mjs';
+import { bigintToHex, decimalize, splitU256ToU128 } from '../compat/encoding.mjs';
+import {
+  ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+  ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
+  ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+  NATIVE_PUBLIC_OUTPUT_VERSION,
+  PUBLIC_OUTPUT_MAGIC,
+  STARKNET_POSEIDON_HASH_SCHEME,
+} from '../constants.mjs';
+import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import {
   buildCairoBabyjubScalarMulInput,
   buildCairoEcdhSharedKeyInput,
@@ -11,6 +20,90 @@ function splitObject(value, label) {
   return {
     low: low.toString(),
     high: high.toString(),
+  };
+}
+
+function feltObject(value) {
+  return value.toString();
+}
+
+function u256Limbs(value, label) {
+  const { low, high } = splitU256ToU128(value, label);
+  return [low, high];
+}
+
+function nativeHashU256(value, label) {
+  return poseidonManyFelts(u256Limbs(value, label));
+}
+
+function nativeHashPoint(values, label) {
+  if (!Array.isArray(values) || values.length !== 2) {
+    throw new Error(`${label} must contain two values`);
+  }
+  return poseidonManyFelts([
+    ...u256Limbs(values[0], `${label}[0]`),
+    ...u256Limbs(values[1], `${label}[1]`),
+  ]);
+}
+
+function nativeNullifier(oldPrivateKey, pollId) {
+  return poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+    ...u256Limbs(oldPrivateKey, 'oldPrivateKey'),
+    ...u256Limbs(pollId, 'pollId'),
+  ]);
+}
+
+function nativeInputHash(fields) {
+  return poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
+    fields.deactivate_root_hash,
+    fields.coord_pub_key_hash,
+    fields.nullifier,
+    fields.d1_hash,
+    fields.d2_hash,
+    fields.new_pub_key_hash,
+    fields.poll_id,
+  ]);
+}
+
+function nativeAddNewKeyPublicOutput(fields, params) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'hash_scheme',
+    'state_tree_depth',
+    'deactivate_tree_depth',
+    'deactivate_root_hash',
+    'coord_pub_key_hash',
+    'nullifier',
+    'd1_hash',
+    'd2_hash',
+    'new_pub_key_hash',
+    'poll_id',
+    'input_hash',
+  ];
+  const felts = [
+    PUBLIC_OUTPUT_MAGIC,
+    NATIVE_PUBLIC_OUTPUT_VERSION,
+    ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+    STARKNET_POSEIDON_HASH_SCHEME,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.deactivateTreeDepth),
+    fields.deactivate_root_hash,
+    fields.coord_pub_key_hash,
+    fields.nullifier,
+    fields.d1_hash,
+    fields.d2_hash,
+    fields.new_pub_key_hash,
+    fields.poll_id,
+    fields.input_hash,
+  ];
+  return {
+    labels,
+    felts,
+    decimalFelts: felts.map(decimalize),
   };
 }
 
@@ -195,8 +288,55 @@ export function buildCairoAddNewKeyInput(rawInput, evaluated) {
   };
 }
 
+export function buildNativeCairoAddNewKeyInput(rawInput, evaluated) {
+  const result = evaluated ?? evaluateAddNewKey(rawInput);
+  const legacy = buildCairoAddNewKeyInput(rawInput, result);
+  const input = result.input;
+  const publicFields = {
+    deactivate_root_hash: nativeHashU256(input.deactivateRoot, 'deactivateRoot'),
+    coord_pub_key_hash: nativeHashPoint(input.coordPubKey, 'coordPubKey'),
+    nullifier: nativeNullifier(input.oldPrivateKey, input.pollId),
+    d1_hash: nativeHashPoint(input.d1, 'd1'),
+    d2_hash: nativeHashPoint(input.d2, 'd2'),
+    new_pub_key_hash: nativeHashPoint(input.newPubKey, 'newPubKey'),
+    poll_id: input.pollId,
+  };
+  publicFields.input_hash = nativeInputHash(publicFields);
+  const fields = {
+    deactivate_root_hash: feltObject(publicFields.deactivate_root_hash),
+    coord_pub_key_hash: feltObject(publicFields.coord_pub_key_hash),
+    nullifier: feltObject(publicFields.nullifier),
+    d1_hash: feltObject(publicFields.d1_hash),
+    d2_hash: feltObject(publicFields.d2_hash),
+    new_pub_key_hash: feltObject(publicFields.new_pub_key_hash),
+    poll_id: feltObject(publicFields.poll_id),
+    input_hash: feltObject(publicFields.input_hash),
+  };
+  const publicOutput = nativeAddNewKeyPublicOutput(publicFields, result.params);
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: {
+        legacy: legacy.program_input.witness,
+        d1: splitVector2(input.d1, 'd1'),
+        d2: splitVector2(input.d2, 'd2'),
+      },
+    },
+    full_witness: rawInput,
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
 function pushU256(args, value) {
   args.push(value.low, value.high);
+}
+
+function pushFelt(args, value) {
+  args.push(BigInt(value));
 }
 
 function pushVector2(args, value) {
@@ -275,6 +415,17 @@ function pushAddNewKeyFields(args, fields) {
   pushU256(args, fields.input_hash);
 }
 
+function pushNativeAddNewKeyFields(args, fields) {
+  pushFelt(args, fields.deactivate_root_hash);
+  pushFelt(args, fields.coord_pub_key_hash);
+  pushFelt(args, fields.nullifier);
+  pushFelt(args, fields.d1_hash);
+  pushFelt(args, fields.d2_hash);
+  pushFelt(args, fields.new_pub_key_hash);
+  pushFelt(args, fields.poll_id);
+  pushFelt(args, fields.input_hash);
+}
+
 function pushAddNewKeyWitness(args, witness) {
   pushVector2(args, witness.coord_pub_key);
   pushU256(args, witness.deactivate_index);
@@ -300,9 +451,22 @@ function pushAddNewKeyWitness(args, witness) {
   pushSha256U256x9Claim(args, witness.hashes.input_hash);
 }
 
+function pushNativeAddNewKeyWitness(args, witness) {
+  pushAddNewKeyWitness(args, witness.legacy);
+  pushVector2(args, witness.d1);
+  pushVector2(args, witness.d2);
+}
+
 export function serializeCairoAddNewKeyExecutableArgs(cairoInput) {
   const args = [];
   pushAddNewKeyFields(args, cairoInput.program_input.fields);
   pushAddNewKeyWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeNativeCairoAddNewKeyExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeAddNewKeyFields(args, cairoInput.program_input.fields);
+  pushNativeAddNewKeyWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }

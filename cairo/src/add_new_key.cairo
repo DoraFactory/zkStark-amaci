@@ -1,3 +1,4 @@
+use core::poseidon::poseidon_hash_span;
 use crate::babyjub::{
     BabyJubJubScalarMulWitness, assert_babyjub_add, babyjub_base8, verify_babyjub_scalar_mul,
 };
@@ -13,6 +14,14 @@ use crate::types::{U256x2, U256x4, U256x5, U256x9, assert_u256_eq};
 
 pub const DEACTIVATE_TREE_DEPTH: felt252 = 4;
 pub const DEACTIVATE_TREE_LEAVES: u128 = 625;
+pub const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
+pub const ADD_NEW_KEY_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f4144445f4b45595f4e4154495645;
+pub const STARKNET_POSEIDON_HASH_SCHEME: felt252 = 0x535441524b4e45545f504f534549444f4e;
+pub const ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN: felt252 =
+    0x414d4143495f4144445f4b45595f4e41544956455f494e505554;
+pub const ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN: felt252 =
+    0x414d4143495f4144445f4b45595f4e554c4c4946494552;
 
 #[derive(Copy, Drop, Serde)]
 pub struct AddNewKeyHashTranscript {
@@ -43,6 +52,43 @@ pub struct AddNewKeyWitness {
     pub random_base8: BabyJubJubScalarMulWitness,
     pub random_coord_pub_key: BabyJubJubScalarMulWitness,
     pub hashes: AddNewKeyHashTranscript,
+}
+
+#[derive(Drop, Serde)]
+pub struct NativeAddNewKeyWitness {
+    pub legacy: AddNewKeyWitness,
+    pub d1: U256x2,
+    pub d2: U256x2,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct NativeAddNewKeyPublicFields {
+    pub deactivate_root_hash: felt252,
+    pub coord_pub_key_hash: felt252,
+    pub nullifier: felt252,
+    pub d1_hash: felt252,
+    pub d2_hash: felt252,
+    pub new_pub_key_hash: felt252,
+    pub poll_id: felt252,
+    pub input_hash: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct NativeAddNewKeyPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub hash_scheme: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub deactivate_root_hash: felt252,
+    pub coord_pub_key_hash: felt252,
+    pub nullifier: felt252,
+    pub d1_hash: felt252,
+    pub d2_hash: felt252,
+    pub new_pub_key_hash: felt252,
+    pub poll_id: felt252,
+    pub input_hash: felt252,
 }
 
 fn assert_deactivate_index(value: u256) {
@@ -146,6 +192,106 @@ fn assert_rerandomize(
     assert_babyjub_add(random_coord_pub_key_point, c2, d2);
 }
 
+fn felt_from_u128(value: u128) -> felt252 {
+    value.into()
+}
+
+fn native_hash_u256(value: u256) -> felt252 {
+    poseidon_hash_span([felt_from_u128(value.low), felt_from_u128(value.high)].span())
+}
+
+fn native_hash_u256x2(value: U256x2) -> felt252 {
+    poseidon_hash_span(
+        [
+            felt_from_u128(value.v0.low),
+            felt_from_u128(value.v0.high),
+            felt_from_u128(value.v1.low),
+            felt_from_u128(value.v1.high),
+        ]
+            .span(),
+    )
+}
+
+fn native_nullifier(old_private_key: u256, poll_id: u256) -> felt252 {
+    poseidon_hash_span(
+        [
+            ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+            felt_from_u128(old_private_key.low),
+            felt_from_u128(old_private_key.high),
+            felt_from_u128(poll_id.low),
+            felt_from_u128(poll_id.high),
+        ]
+            .span(),
+    )
+}
+
+fn native_input_hash(fields: NativeAddNewKeyPublicFields) -> felt252 {
+    poseidon_hash_span(
+        [
+            ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
+            fields.deactivate_root_hash,
+            fields.coord_pub_key_hash,
+            fields.nullifier,
+            fields.d1_hash,
+            fields.d2_hash,
+            fields.new_pub_key_hash,
+            fields.poll_id,
+        ]
+            .span(),
+    )
+}
+
+fn verify_native_add_new_key(fields: NativeAddNewKeyPublicFields, witness: NativeAddNewKeyWitness) {
+    let legacy = witness.legacy;
+    assert(native_hash_u256x2(legacy.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
+    assert(native_hash_u256x2(legacy.new_pub_key) == fields.new_pub_key_hash, 'N_NEW_KEY');
+    assert(native_nullifier(legacy.old_private_key, legacy.poll_id) == fields.nullifier, 'N_NULLIFIER');
+    assert(native_hash_u256x2(witness.d1) == fields.d1_hash, 'N_D1');
+    assert(native_hash_u256x2(witness.d2) == fields.d2_hash, 'N_D2');
+    assert(legacy.poll_id.high == 0, 'N_POLL_HIGH');
+    assert(felt_from_u128(legacy.poll_id.low) == fields.poll_id, 'N_POLL_ID');
+    assert(native_input_hash(fields) == fields.input_hash, 'N_INPUT_HASH');
+
+    assert_u256_eq(legacy.ecdh.scalar, legacy.old_private_key);
+    assert_u256_eq(legacy.ecdh.base.v0, legacy.coord_pub_key.v0);
+    assert_u256_eq(legacy.ecdh.base.v1, legacy.coord_pub_key.v1);
+    let shared_key = verify_babyjub_scalar_mul(legacy.ecdh);
+    let shared_key_hash = poseidon_hash2(
+        legacy.hashes.shared_key_hash, shared_key.v0, shared_key.v1,
+    );
+    let deactivate_leaf = poseidon_hash5(
+        legacy.hashes.deactivate_leaf,
+        U256x5 {
+            v0: legacy.c1.v0,
+            v1: legacy.c1.v1,
+            v2: legacy.c2.v0,
+            v3: legacy.c2.v1,
+            v4: shared_key_hash,
+        },
+    );
+    assert_u256_eq(deactivate_leaf, legacy.deactivate_leaf);
+    let deactivate_root = quinary_root_depth_4(
+        legacy.deactivate_leaf,
+        legacy.deactivate_leaf_path_0,
+        legacy.deactivate_leaf_path_1,
+        legacy.deactivate_leaf_path_2,
+        legacy.deactivate_leaf_path_3,
+        legacy.deactivate_index,
+    );
+    assert(native_hash_u256(deactivate_root) == fields.deactivate_root_hash, 'N_DEACT_ROOT');
+
+    assert_rerandomize(
+        legacy.random_val,
+        legacy.coord_pub_key,
+        legacy.c1,
+        legacy.c2,
+        witness.d1,
+        witness.d2,
+        legacy.random_base8,
+        legacy.random_coord_pub_key,
+    );
+}
+
 fn verify_add_new_key(fields: AddNewKeyPublicFields, witness: AddNewKeyWitness) {
     let coord_pub_key_hash = poseidon_hash2(
         witness.hashes.coord_pub_key_hash, witness.coord_pub_key.v0, witness.coord_pub_key.v1,
@@ -225,4 +371,33 @@ pub fn add_new_key_main(
 ) -> AddNewKeyPublicOutput {
     verify_add_new_key(fields, witness);
     build_add_new_key_public_output(fields)
+}
+
+fn build_native_add_new_key_public_output(
+    fields: NativeAddNewKeyPublicFields,
+) -> NativeAddNewKeyPublicOutput {
+    NativeAddNewKeyPublicOutput {
+        magic: crate::public_output::PUBLIC_OUTPUT_MAGIC,
+        version: NATIVE_PUBLIC_OUTPUT_VERSION,
+        circuit_id: ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+        hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
+        state_tree_depth: 2,
+        deactivate_tree_depth: DEACTIVATE_TREE_DEPTH,
+        deactivate_root_hash: fields.deactivate_root_hash,
+        coord_pub_key_hash: fields.coord_pub_key_hash,
+        nullifier: fields.nullifier,
+        d1_hash: fields.d1_hash,
+        d2_hash: fields.d2_hash,
+        new_pub_key_hash: fields.new_pub_key_hash,
+        poll_id: fields.poll_id,
+        input_hash: fields.input_hash,
+    }
+}
+
+#[executable]
+pub fn add_new_key_native_main(
+    fields: NativeAddNewKeyPublicFields, witness: NativeAddNewKeyWitness,
+) -> NativeAddNewKeyPublicOutput {
+    verify_native_add_new_key(fields, witness);
+    build_native_add_new_key_public_output(fields)
 }

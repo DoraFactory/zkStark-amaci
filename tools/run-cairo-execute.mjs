@@ -23,6 +23,11 @@ const CIRCUITS = Object.freeze({
     executable: 'add_new_key',
     synthetic: true,
   },
+  'add-new-key-native': {
+    prepareCircuit: 'add-new-key-native',
+    executable: 'add_new_key_native',
+    synthetic: true,
+  },
   'process-messages': {
     prepareCircuit: 'process-messages-stateful-ecdh-signature',
     executable: 'process_messages_stateful_with_ecdh_signature',
@@ -258,7 +263,9 @@ function ensureInput(args, circuit, outDir) {
     throw new Error(`input.json is required for ${args.circuit}`);
   }
   const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
-  const syntheticCircuit = args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
+  const syntheticCircuit = args.circuit === 'add-new-key-native'
+    ? 'add-new-key'
+    : args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
     ? 'process-messages'
     : args.circuit === 'process-deactivate-step' || args.circuit.startsWith('process-deactivate-')
       ? 'process-deactivate'
