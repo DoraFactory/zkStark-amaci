@@ -33,6 +33,11 @@ import {
   evaluateProcessMessages,
   evaluateProcessMessagesStateful,
 } from '../src/msg/process-messages.mjs';
+import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
+import {
+  buildNativeCairoProcessMessagesBoundaryInput,
+  serializeNativeCairoProcessMessagesBoundaryExecutableArgs,
+} from '../src/msg/native-cairo-input.mjs';
 import { evaluateAddNewKey } from '../src/add-new-key/add-new-key.mjs';
 import {
   buildCairoAddNewKeyInput,
@@ -60,6 +65,11 @@ import {
   evaluateProcessDeactivateMessages,
   evaluateProcessDeactivateMessagesStateful,
 } from '../src/deactivate/process-deactivate-messages.mjs';
+import { evaluateNativeProcessDeactivateMessagesBoundary } from '../src/deactivate/native-process-deactivate-messages.mjs';
+import {
+  buildNativeCairoProcessDeactivateBoundaryInput,
+  serializeNativeCairoProcessDeactivateBoundaryExecutableArgs,
+} from '../src/deactivate/native-cairo-input.mjs';
 
 const PREPARERS = {
   tally: {
@@ -79,6 +89,12 @@ const PREPARERS = {
     evaluate: evaluateProcessMessages,
     build: buildCairoProcessMessagesInput,
     serialize: serializeCairoProcessMessagesExecutableArgs,
+  },
+  'process-messages-boundary-native': {
+    executable: 'process_messages_native_boundary',
+    evaluate: evaluateNativeProcessMessagesBoundary,
+    build: buildNativeCairoProcessMessagesBoundaryInput,
+    serialize: serializeNativeCairoProcessMessagesBoundaryExecutableArgs,
   },
   'process-messages-stateful': {
     executable: 'process_messages_stateful',
@@ -151,6 +167,12 @@ const PREPARERS = {
     evaluate: evaluateProcessDeactivateMessages,
     build: buildCairoProcessDeactivateMessagesBoundaryInput,
     serialize: serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs,
+  },
+  'process-deactivate-boundary-native': {
+    executable: 'process_deactivate_native_boundary',
+    evaluate: evaluateNativeProcessDeactivateMessagesBoundary,
+    build: buildNativeCairoProcessDeactivateBoundaryInput,
+    serialize: serializeNativeCairoProcessDeactivateBoundaryExecutableArgs,
   },
   'process-deactivate-step': {
     executable: 'process_deactivate_message_step',

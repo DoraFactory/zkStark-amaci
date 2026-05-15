@@ -28,6 +28,11 @@ const CIRCUITS = Object.freeze({
     executable: 'process_messages_stateful_with_ecdh_signature',
     synthetic: true,
   },
+  'process-messages-boundary-native': {
+    prepareCircuit: 'process-messages-boundary-native',
+    executable: 'process_messages_native_boundary',
+    synthetic: true,
+  },
   'process-message-step': {
     prepareCircuit: 'process-message-step-ecdh-signature',
     executable: 'process_message_step_with_ecdh_signature',
@@ -60,6 +65,11 @@ const CIRCUITS = Object.freeze({
   'process-deactivate': {
     prepareCircuit: 'process-deactivate-stateful',
     executable: 'process_deactivate_messages_stateful',
+    synthetic: true,
+  },
+  'process-deactivate-boundary-native': {
+    prepareCircuit: 'process-deactivate-boundary-native',
+    executable: 'process_deactivate_native_boundary',
     synthetic: true,
   },
   'process-deactivate-step': {

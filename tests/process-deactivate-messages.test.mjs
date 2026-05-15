@@ -26,6 +26,13 @@ import {
   serializeCairoProcessDeactivateStepCoreExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
+  buildNativeCairoProcessDeactivateBoundaryInput,
+  serializeNativeCairoProcessDeactivateBoundaryExecutableArgs,
+} from '../src/deactivate/native-cairo-input.mjs';
+import { isIntegrityHashingAvailable } from '../src/integrity/hashes.mjs';
+import { STARK_FIELD } from '../src/constants.mjs';
+import { evaluateNativeProcessDeactivateMessagesBoundary } from '../src/deactivate/native-process-deactivate-messages.mjs';
+import {
   evaluateProcessDeactivateMessages,
   evaluateProcessDeactivateMessagesStateTransition,
   evaluateProcessDeactivateMessagesStateful,
@@ -39,6 +46,7 @@ import {
 import { requireZkKitPackage } from '../src/compat/zk-kit-require.mjs';
 
 const { derivePublicKey, signMessage } = requireZkKitPackage('@zk-kit/eddsa-poseidon');
+const nativePoseidonSkip = isIntegrityHashingAvailable() ? false : 'starknet.js hashing helpers are not installed';
 
 function decimalize(value) {
   if (typeof value === 'bigint') {
@@ -59,7 +67,8 @@ function buildFixture() {
   const currentDeactivateRoot = 202n;
   const currentDeactivateCommitment = hashLeftRight(currentActiveStateRoot, currentDeactivateRoot);
   const newDeactivateRoot = 303n;
-  const newDeactivateCommitment = hashLeftRight(404n, newDeactivateRoot);
+  const newActiveStateRoot = 404n;
+  const newDeactivateCommitment = hashLeftRight(newActiveStateRoot, newDeactivateRoot);
   const currentStateRoot = 505n;
   const expectedPollId = 77n;
   const batchStartHash = 123n;
@@ -99,6 +108,7 @@ function buildFixture() {
     currentActiveStateRoot,
     currentDeactivateRoot,
     currentDeactivateCommitment,
+    newActiveStateRoot,
     newDeactivateCommitment,
     currentStateRoot,
     expectedPollId,
@@ -354,6 +364,32 @@ test('builds Cairo executable arguments for ProcessDeactivateMessages boundary',
     evaluated.derived.inputHash.toString(),
   );
 });
+
+test(
+  'evaluates a Starknet-native ProcessDeactivateMessages boundary v2 fixture',
+  { skip: nativePoseidonSkip },
+  () => {
+    const input = buildFixture();
+    const legacy = evaluateProcessDeactivateMessages(input);
+    const evaluated = evaluateNativeProcessDeactivateMessagesBoundary(input);
+    const cairoInput = buildNativeCairoProcessDeactivateBoundaryInput(input, evaluated);
+    const args = serializeNativeCairoProcessDeactivateBoundaryExecutableArgs(cairoInput);
+
+    assert.equal(evaluated.publicOutput.felts.length, 16);
+    assert.equal(evaluated.publicOutput.labels[1], 'version');
+    assert.equal(evaluated.publicOutput.felts[1], 2n);
+    assert.equal(evaluated.publicOutput.labels[3], 'hash_scheme');
+    assert.equal(evaluated.derived.messageHashChain.length, 6);
+    assert.notEqual(
+      evaluated.publicFields.newDeactivateCommitment.toString(),
+      legacy.publicFields.newDeactivateCommitment.toString(),
+    );
+    assert.ok(evaluated.publicOutput.felts.every((felt) => felt >= 0n && felt < STARK_FIELD));
+    assert.equal(args.length, 74);
+    assert.equal(cairoInput.public_output.length, 16);
+    assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+  },
+);
 
 test('chains five AMACI ProcessDeactivate ProcessOne witnesses', () => {
   const input = getStatefulFixture();

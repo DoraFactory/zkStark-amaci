@@ -16,12 +16,14 @@ Circuits:
   add-new-key
   process-messages
   process-messages-boundary
+  process-messages-boundary-native
   process-message-step
   process-message-coord-key
   process-message-ecdh
   process-message-signature
   process-message-step-core
   process-deactivate-boundary
+  process-deactivate-boundary-native
   process-deactivate-step
   process-deactivate-coord-key
   process-deactivate-ecdh-command
@@ -36,6 +38,7 @@ Notes:
   - The legacy positional form runs only the tally proof.
   - tally and tally-native require an input JSON.
   - add-new-key, process-messages, process-messages-boundary,
+    process-messages-boundary-native,
     process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
   - process-message-step, process-message-ecdh, process-message-signature,
@@ -70,12 +73,14 @@ prepare_circuit_name() {
     add-new-key) echo "add-new-key" ;;
     process-messages) echo "process-messages-stateful-ecdh-signature" ;;
     process-messages-boundary) echo "process-messages-boundary" ;;
+    process-messages-boundary-native) echo "process-messages-boundary-native" ;;
     process-message-step) echo "process-message-step-ecdh-signature" ;;
     process-message-coord-key) echo "process-message-coord-key" ;;
     process-message-ecdh) echo "process-message-ecdh" ;;
     process-message-signature) echo "process-message-signature" ;;
     process-message-step-core) echo "process-message-step-core" ;;
     process-deactivate-boundary) echo "process-deactivate-boundary" ;;
+    process-deactivate-boundary-native) echo "process-deactivate-boundary-native" ;;
     process-deactivate-step) echo "process-deactivate-step" ;;
     process-deactivate-coord-key) echo "process-deactivate-coord-key" ;;
     process-deactivate-ecdh-command) echo "process-deactivate-ecdh-command" ;;
@@ -96,12 +101,14 @@ executable_name() {
     add-new-key) echo "add_new_key" ;;
     process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
     process-messages-boundary) echo "process_messages_boundary" ;;
+    process-messages-boundary-native) echo "process_messages_native_boundary" ;;
     process-message-step) echo "process_message_step_with_ecdh_signature" ;;
     process-message-coord-key) echo "process_message_coord_key" ;;
     process-message-ecdh) echo "process_message_ecdh" ;;
     process-message-signature) echo "process_message_signature" ;;
     process-message-step-core) echo "process_message_step_core" ;;
     process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
+    process-deactivate-boundary-native) echo "process_deactivate_native_boundary" ;;
     process-deactivate-step) echo "process_deactivate_message_step" ;;
     process-deactivate-coord-key) echo "process_deactivate_coord_key" ;;
     process-deactivate-ecdh-command) echo "process_deactivate_ecdh" ;;
@@ -117,7 +124,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|process-messages|process-messages-boundary|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-step|process-deactivate-coord-key|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-signature|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-step-core|process-deactivate) return 0 ;;
+    add-new-key|process-messages|process-messages-boundary|process-messages-boundary-native|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-boundary-native|process-deactivate-step|process-deactivate-coord-key|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-signature|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-step-core|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -185,9 +192,9 @@ run_one() {
     if can_generate_fixture "$circuit"; then
       input_path="$out_dir/$circuit-small-input.json"
       local fixture_circuit="$circuit"
-      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
+      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-messages-boundary-native" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
         fixture_circuit="process-messages"
-      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
+      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-boundary-native" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
         fixture_circuit="process-deactivate"
       fi
       node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$fixture_circuit" --out "$input_path"

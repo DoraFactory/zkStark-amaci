@@ -37,6 +37,10 @@ name = "process_messages_boundary"
 function = "zkstark_amaci_tally::process_messages::process_messages_boundary_main"
 
 [[target.executable]]
+name = "process_messages_native_boundary"
+function = "zkstark_amaci_tally::native_process_messages::process_messages_native_boundary_main"
+
+[[target.executable]]
 name = "process_one_state_transition"
 function = "zkstark_amaci_tally::process_messages::process_one_state_transition_main"
 
@@ -95,6 +99,10 @@ function = "zkstark_amaci_tally::process_deactivate::process_deactivate_one_main
 [[target.executable]]
 name = "process_deactivate_messages_boundary"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_messages_boundary_main"
+
+[[target.executable]]
+name = "process_deactivate_native_boundary"
+function = "zkstark_amaci_tally::native_process_deactivate::process_deactivate_native_boundary_main"
 
 [[target.executable]]
 name = "process_deactivate_message_step"

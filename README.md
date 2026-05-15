@@ -303,6 +303,21 @@ Its public output is 12 felts rather than the v1 split-`u256` 16-felt output.
 Use it to compare execution/proof cost before expanding native hashing to
 message processing and deactivate circuits.
 
+Native boundary spikes are also available for the message-processing flows:
+
+```sh
+npm run prove:process-messages-boundary-native -- \
+  --out-dir target/cairo-proof/process-messages-boundary-native
+
+npm run prove:process-deactivate-boundary-native -- \
+  --out-dir target/cairo-proof/process-deactivate-boundary-native
+```
+
+These boundary variants replace the legacy BN254 Poseidon/SHA-256 public hash
+claims with Starknet Poseidon commitments and input hashes. They intentionally
+cover only the public boundary/hash-chain layer; ECDH, signature, and state
+transition step/core native variants are the next migration layer.
+
 ### Machine requirements
 
 Use Linux/amd64 for the full proof run. The current macOS/arm64 machine can
