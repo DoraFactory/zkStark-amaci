@@ -17,6 +17,8 @@ Options:
   --stone-prover-dir <dir>  Stone prover checkout. Default: $STONE_PROVER_DIR or ~/stone-prover
   --prover-config <path>    cpu_air_prover_config.json. Auto-detected if omitted.
   --parameter-file <path>   cpu_air_params.json. Auto-detected if omitted.
+                            If omitted, a matching params file is generated
+                            from AIR n_steps under --out-dir.
   --skip-verify             Skip cpu_air_verifier.
 
 Outputs:
@@ -118,6 +120,7 @@ OUT_DIR=""
 STONE_PROVER_DIR="${STONE_PROVER_DIR:-$HOME/stone-prover}"
 PROVER_CONFIG_FILE=""
 PARAMETER_FILE=""
+PARAMETER_FILE_EXPLICIT=0
 SKIP_VERIFY=0
 
 while [[ $# -gt 0 ]]; do
@@ -140,6 +143,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --parameter-file)
       PARAMETER_FILE="${2:-}"
+      PARAMETER_FILE_EXPLICIT=1
       shift 2
       ;;
     --skip-verify)
@@ -213,6 +217,19 @@ if [[ ! -f "$AIR_PRIVATE_INPUT" ]]; then
 fi
 
 validate_air_layout "$AIR_PUBLIC_INPUT"
+
+if [[ "$PARAMETER_FILE_EXPLICIT" -ne 1 ]]; then
+  BASE_PARAMETER_FILE="$PARAMETER_FILE"
+  PARAMETER_FILE="$OUT_DIR/cpu_air_params.generated.json"
+  PARAMETER_METADATA_FILE="$OUT_DIR/cpu_air_params.generated.metadata.json"
+  echo "==> Generating Stone params for AIR trace size"
+  node "$ROOT_DIR/tools/generate-stone-params.mjs" \
+    --base "$BASE_PARAMETER_FILE" \
+    --air-public-input "$AIR_PUBLIC_INPUT" \
+    --out "$PARAMETER_FILE" \
+    --metadata-out "$PARAMETER_METADATA_FILE" \
+    --text
+fi
 
 PROOF_JSON="$OUT_DIR/stone-proof.json"
 PROVE_LOG="$OUT_DIR/stone-prove.log"

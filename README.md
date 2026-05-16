@@ -607,6 +607,20 @@ By default this uses:
 ~/stone-prover/cpu_air_params.json
 ```
 
+If `--parameter-file` is omitted, the script treats the detected
+`cpu_air_params.json` as a template and writes a generated parameter file under
+the proof output directory. The generated file adjusts `fri_step_list` so the
+FRI degree matches the AIR `n_steps`, using Stone's required relation:
+
+```text
+log2(last_layer_degree_bound) + sum(fri_step_list) = ceil(log2(n_steps)) + 4
+```
+
+For the current `tally_votes_stone` small fixture this avoids the default
+Fibonacci example mismatch where `[0, 4, 3]` and `last_layer_degree_bound=64`
+only support FRI degree `2^13`, while the tally AIR can require a much larger
+degree bound.
+
 If those files are not in the Stone checkout root, the script also checks the
 official Stone example locations:
 
