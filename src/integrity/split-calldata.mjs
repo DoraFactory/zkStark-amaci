@@ -1,4 +1,5 @@
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -133,6 +134,8 @@ function runStoneCliSerializer({ stoneCli, stoneProofPath, outDir, settings }) {
 
 function runSwiftnessSerializer({ calldataGeneratorDir, stoneProofPath, outDir, settings }) {
   const cwd = join(resolve(calldataGeneratorDir), 'cli');
+  const generatorOutDir = join(cwd, 'calldata');
+  ensureEmptyDir(generatorOutDir);
   const command = [
     'cargo',
     'run',
@@ -148,20 +151,44 @@ function runSwiftnessSerializer({ calldataGeneratorDir, stoneProofPath, outDir, 
     settings.stoneVersion,
     '--proof',
     resolve(stoneProofPath),
-    '--out',
-    outDir,
   ];
   const result = spawnSync(command[0], command.slice(1), {
     cwd,
     encoding: 'utf8',
     maxBuffer: 1024 * 1024 * 1024,
   });
-  return { command, cwd, result };
+  if (result.status === 0) {
+    copySplitCalldataDirectory(generatorOutDir, outDir);
+  }
+  return { command, cwd, generatorOutDir, result };
 }
 
 function ensureEmptyDir(dir) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
+}
+
+function copySplitCalldataDirectory(fromDir, toDir) {
+  ensureEmptyDir(toDir);
+  for (const entry of readdirSync(fromDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    copyFileSync(join(fromDir, entry.name), join(toDir, entry.name));
+  }
+}
+
+function formatSpawnFailure({ label, status, signal, error, cwd, command, stderr, stdout }) {
+  return [
+    `${label} failed with status ${status ?? 'null'}${signal ? ` signal ${signal}` : ''}`,
+    error ? `error: ${error.message}` : undefined,
+    cwd ? `cwd: ${cwd}` : undefined,
+    command?.length ? `command: ${command.join(' ')}` : undefined,
+    stderr,
+    stdout,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function buildIntegritySplitCalldataPackage({
@@ -202,13 +229,15 @@ export function buildIntegritySplitCalldataPackage({
       });
       if (serialized.result.status !== 0) {
         throw new Error(
-          [
-            `stone-cli serialize-proof failed with status ${serialized.result.status}`,
-            serialized.result.stderr,
-            serialized.result.stdout,
-          ]
-            .filter(Boolean)
-            .join('\n'),
+          formatSpawnFailure({
+            label: 'stone-cli serialize-proof',
+            status: serialized.result.status,
+            signal: serialized.result.signal,
+            error: serialized.result.error,
+            command: serialized.command,
+            stderr: serialized.result.stderr,
+            stdout: serialized.result.stdout,
+          }),
         );
       }
       serializer = {
@@ -224,19 +253,23 @@ export function buildIntegritySplitCalldataPackage({
       });
       if (serialized.result.status !== 0) {
         throw new Error(
-          [
-            `swiftness split calldata generation failed with status ${serialized.result.status}`,
-            serialized.result.stderr,
-            serialized.result.stdout,
-          ]
-            .filter(Boolean)
-            .join('\n'),
+          formatSpawnFailure({
+            label: 'swiftness split calldata generation',
+            status: serialized.result.status,
+            signal: serialized.result.signal,
+            error: serialized.result.error,
+            cwd: serialized.cwd,
+            command: serialized.command,
+            stderr: serialized.result.stderr,
+            stdout: serialized.result.stdout,
+          }),
         );
       }
       serializer = {
         mode: 'swiftness-split',
         command: serialized.command,
         cwd: serialized.cwd,
+        generatorOutDir: serialized.generatorOutDir,
         stdout: serialized.result.stdout.trim(),
       };
     } else {

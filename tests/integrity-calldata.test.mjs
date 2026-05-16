@@ -1,4 +1,11 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
@@ -96,4 +103,53 @@ test('wraps split Integrity calldata into standard JSON package', () => {
   assert.equal(parsed.files.steps[0].feltCount, 2);
   assert.equal(parsed.files.final.feltCount, 2);
   assert.ok(parsed.settings.verifierConfigHash);
+});
+
+test('runs swiftness split generator and copies cli/calldata output', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-swiftness-calldata-'));
+  const fakeBin = join(dir, 'bin');
+  const generatorDir = join(dir, 'integrity-calldata-generator');
+  const generatorCliDir = join(generatorDir, 'cli');
+  const argsLog = join(dir, 'cargo-args.txt');
+  const fakeCargo = join(fakeBin, 'cargo');
+  const stoneProof = join(dir, 'stone-proof.json');
+  const outDir = join(dir, 'integrity-split');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(generatorCliDir, { recursive: true });
+  writeFileSync(stoneProof, '{"proof":[]}\n');
+  writeFileSync(
+    fakeCargo,
+    [
+      '#!/usr/bin/env sh',
+      `printf "%s\\n" "$@" > ${JSON.stringify(argsLog)}`,
+      'mkdir -p calldata',
+      'printf "10\\n" > calldata/initial',
+      'printf "11 12\\n" > calldata/step1',
+      'printf "13\\n" > calldata/final',
+      'printf "14 15 16 17\\n" > calldata/full',
+    ].join('\n') + '\n',
+  );
+  chmodSync(fakeCargo, 0o755);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${fakeBin}:${previousPath}`;
+  try {
+    const result = buildIntegritySplitCalldataPackage({
+      stoneProofPath: stoneProof,
+      calldataGeneratorDir: generatorDir,
+      outDir,
+      out,
+    });
+
+    assert.equal(result.calldataFelts, 4);
+    assert.equal(readFileSync(argsLog, 'utf8').includes('\n--out\n'), false);
+    assert.equal(existsSync(join(outDir, 'split-calldata', 'initial')), true);
+    const parsed = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(parsed.serializer.mode, 'swiftness-split');
+    assert.equal(parsed.files.full.feltCount, 4);
+  } finally {
+    process.env.PATH = previousPath;
+  }
 });
