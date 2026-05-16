@@ -1,6 +1,6 @@
 import { SMALL_TALLY_PARAMS, TREE_ARITY } from '../constants.mjs';
 import { parseBigInt } from '../compat/encoding.mjs';
-import { canonicalTallyPublicOutput } from '../public-output.mjs';
+import { canonicalNativeTallyPublicOutput } from '../public-output.mjs';
 import {
   calculateBootloadedFactHash,
   calculatePlainFactHash,
@@ -9,6 +9,7 @@ import {
 
 export class MockIntegrityRegistry {
   #securityByFact = new Map();
+  #validVerificationHashes = new Set();
 
   registerFact(factHash, securityBits) {
     const fact = parseBigInt(factHash, 'factHash').toString();
@@ -23,6 +24,16 @@ export class MockIntegrityRegistry {
     const fact = parseBigInt(factHash, 'factHash').toString();
     const min = Number(parseBigInt(minSecurityBits, 'minSecurityBits'));
     return (this.#securityByFact.get(fact) ?? -1) >= min;
+  }
+
+  registerVerificationHash(verificationHash) {
+    this.#validVerificationHashes.add(parseBigInt(verificationHash, 'verificationHash').toString());
+  }
+
+  isVerificationHashValid(verificationHash) {
+    return this.#validVerificationHashes.has(
+      parseBigInt(verificationHash, 'verificationHash').toString(),
+    );
   }
 }
 
@@ -61,7 +72,7 @@ export class TallyVotesStarkWrapperModel {
   }
 
   expectedPublicOutput({ newTallyCommitment, inputHash }) {
-    return canonicalTallyPublicOutput(
+    return canonicalNativeTallyPublicOutput(
       {
         packedVals: this.packedVals,
         stateCommitment: this.stateCommitment,
@@ -105,21 +116,22 @@ export class TallyVotesStarkWrapperModel {
       throw new Error('FACT_HASH_BINDING_MISMATCH');
     }
 
-    if (
-      this.verifierConfigHash !== undefined &&
-      verificationHash !== undefined
-    ) {
+    if (this.verifierConfigHash !== undefined) {
       const expectedVerificationHash = calculateVerificationHash(
         expected.factHash,
         this.verifierConfigHash,
         this.minSecurityBits,
       );
-      if (parseBigInt(verificationHash, 'verificationHash') !== expectedVerificationHash) {
+      if (
+        verificationHash !== undefined &&
+        parseBigInt(verificationHash, 'verificationHash') !== expectedVerificationHash
+      ) {
         throw new Error('VERIFICATION_HASH_MISMATCH');
       }
-    }
-
-    if (!this.integrity.isFactHashValidWithSecurity(expected.factHash, this.minSecurityBits)) {
+      if (!this.integrity.isVerificationHashValid(expectedVerificationHash)) {
+        throw new Error('INVALID_INTEGRITY_FACT');
+      }
+    } else if (!this.integrity.isFactHashValidWithSecurity(expected.factHash, this.minSecurityBits)) {
       throw new Error('INVALID_INTEGRITY_FACT');
     }
 
@@ -133,4 +145,3 @@ export class TallyVotesStarkWrapperModel {
     };
   }
 }
-

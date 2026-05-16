@@ -61,7 +61,11 @@ function normalizeFelt(value, index) {
 
 export function parseIntegrityCalldata(source) {
   const parsedJson = readJsonMaybe(source);
-  const rawValues = parsedJson === undefined ? parsePlainCalldata(source) : extractCalldata(parsedJson);
+  const jsonCalldata =
+    Array.isArray(parsedJson) || (parsedJson && typeof parsedJson === 'object')
+      ? extractCalldata(parsedJson)
+      : undefined;
+  const rawValues = jsonCalldata ?? parsePlainCalldata(source);
   if (!Array.isArray(rawValues) || rawValues.length === 0) {
     throw new Error('Integrity calldata must be a non-empty felt array or raw felt list');
   }

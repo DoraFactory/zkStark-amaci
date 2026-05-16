@@ -1088,14 +1088,56 @@ Integrity submission ready: no
 ```
 
 To mark a proof run as Integrity-ready, rerun the checker only after producing
-Stone/Integrity-compatible calldata:
+Stone/Integrity-compatible calldata. The native tally Stone proof uses
+`recursive_with_poseidon`, so use split calldata:
 
 ```sh
+export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
+
+npm run serialize:integrity-split-calldata -- \
+  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --calldata-generator ~/integrity-calldata-generator \
+  --out-dir "$STONE_OUT/integrity-split" \
+  --out "$STONE_OUT/integrity-split-calldata.json" \
+  --layout recursive_with_poseidon \
+  --hasher keccak_160_lsb \
+  --stone-version stone6 \
+  --memory-verification cairo1 \
+  --text
+```
+
+If split calldata has already been generated, wrap it without regenerating:
+
+```sh
+npm run serialize:integrity-split-calldata -- \
+  --split-calldata-dir "$STONE_OUT/integrity-split/split-calldata" \
+  --out "$STONE_OUT/integrity-split-calldata.json" \
+  --layout recursive_with_poseidon \
+  --hasher keccak_160_lsb \
+  --stone-version stone6 \
+  --memory-verification cairo1 \
+  --text
+```
+
+Then rerun the checker:
+
+```sh
+npm run inspect:stone-fact -- \
+  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --out "$STONE_OUT/stone-fact.json" \
+  --text
+
+PROGRAM_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).programHash)' "$STONE_OUT/stone-fact.json")
+FACT_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).factHash)' "$STONE_OUT/stone-fact.json")
+VERIFIER_CONFIG_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).settings.verifierConfigHash)' "$STONE_OUT/integrity-split-calldata.json")
+
 npm run check:integrity -- \
-  /absolute/path/to/tally/proof-run.json \
-  --program-hash <tally_program_hash> \
+  "$STONE_OUT/stone-proof/proof-run.json" \
+  --program-hash "$PROGRAM_HASH" \
   --proof-producer stone \
-  --integrity-calldata /absolute/path/to/integrity-calldata.json \
+  --integrity-calldata "$STONE_OUT/integrity-split-calldata.json" \
+  --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
+  --security-bits <security_bits> \
   --text
 ```
 
@@ -1125,6 +1167,49 @@ npm run serialize:integrity-calldata -- \
 Do not pass the current `scarb prove` / Scarb-Stwo `proof.json` as
 `--stone-proof`; Integrity verifies Stone prover proofs and the serializer
 expects that proof format.
+
+After split calldata is ready, prepare or send the FactRegistry transactions:
+
+```sh
+npm run submit:integrity-fact -- \
+  --split-calldata "$STONE_OUT/integrity-split-calldata.json" \
+  --network sepolia \
+  --job-id 20260516144921 \
+  --fact-hash "$FACT_HASH" \
+  --verification-hash <expected_verification_hash> \
+  --program-hash "$PROGRAM_HASH" \
+  --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
+  --security-bits <security_bits> \
+  --out "$STONE_OUT/integrity-submission.json" \
+  --text
+```
+
+The command above is a dry run. Add `--send` only after `sncast` is configured
+with the target account and RPC. The split flow sends
+`verify_proof_initial`, each `verify_proof_step`, and
+`verify_proof_final_and_register_fact`.
+
+Finally export the AMACI wrapper call:
+
+```sh
+npm run export:wrapper-call -- \
+  "$STONE_OUT/stone-proof/proof-run.json" \
+  --program-hash "$PROGRAM_HASH" \
+  --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
+  --security-bits <security_bits> \
+  --proof-producer stone \
+  --integrity-calldata "$STONE_OUT/integrity-split-calldata.json" \
+  --wrapper-address <deployed_amaci_wrapper_address> \
+  --out "$STONE_OUT/wrapper-call.json" \
+  --text
+```
+
+The native tally wrapper checks that the supplied `fact_hash` equals the hash
+derived from the pinned program hash and the native public output
+(`new_tally_commitment` and `input_hash` included), then checks Integrity. If a
+non-zero `verifier_config_hash` was configured in the wrapper constructor, it
+checks the exact `verification_hash`; otherwise it falls back to
+`is_fact_hash_valid_with_security`.
 
 You can also export a self-contained handoff package for the next
 Stone/Integrity integration step:

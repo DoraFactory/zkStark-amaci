@@ -266,6 +266,37 @@ du -sh "$OUT" "$OUT.tar.gz"
 Because the layout is `recursive_with_poseidon`, use the split serialization
 path rather than monolith serialization.
 
+```sh
+export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
+
+npm run serialize:integrity-split-calldata -- \
+  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --calldata-generator ~/integrity-calldata-generator \
+  --out-dir "$STONE_OUT/integrity-split" \
+  --out "$STONE_OUT/integrity-split-calldata.json" \
+  --layout recursive_with_poseidon \
+  --hasher keccak_160_lsb \
+  --stone-version stone6 \
+  --memory-verification cairo1 \
+  --text
+```
+
+This writes a split calldata package with `initial`, `step*`, and `final`
+transaction payloads plus the computed verifier config hash.
+
+Extract the program hash and expected fact from the Stone proof public input:
+
+```sh
+npm run inspect:stone-fact -- \
+  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --out "$STONE_OUT/stone-fact.json" \
+  --text
+
+PROGRAM_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).programHash)' "$STONE_OUT/stone-fact.json")
+FACT_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).factHash)' "$STONE_OUT/stone-fact.json")
+VERIFIER_CONFIG_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).settings.verifierConfigHash)' "$STONE_OUT/integrity-split-calldata.json")
+```
+
 3. Submit split verifier transactions to Starknet Integrity/FactRegistry.
 
 The submitted settings must match the proof:
@@ -274,6 +305,24 @@ The submitted settings must match the proof:
 - Stone version: must match the prover/serializer
 - memory verification mode: must match the selected Integrity verifier
 - hasher/verifier configuration: must match the serializer output
+
+Dry-run the transaction sequence first:
+
+```sh
+npm run submit:integrity-fact -- \
+  --split-calldata "$STONE_OUT/integrity-split-calldata.json" \
+  --network sepolia \
+  --job-id 20260516144921 \
+  --fact-hash "$FACT_HASH" \
+  --program-hash "$PROGRAM_HASH" \
+  --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
+  --out "$STONE_OUT/integrity-submission.json" \
+  --text
+```
+
+Add `--send` only when `sncast` account/RPC are configured. The sequence sends
+`verify_proof_initial`, every `verify_proof_step`, and
+`verify_proof_final_and_register_fact`.
 
 4. Record the registered fact.
 
@@ -287,9 +336,24 @@ Capture:
 
 5. Wire AMACI wrapper verification.
 
-The AMACI contract should not trust "a proof was verified" generically. It
-should check that the registered fact binds to the expected program hash and
-native public output, and then apply the expected AMACI state transition.
+The native tally wrapper now checks that the registered fact binds to the
+expected program hash and native public output. If the wrapper is deployed with
+a non-zero verifier config hash, it checks the exact Integrity
+`verification_hash`; otherwise it falls back to the weaker
+`is_fact_hash_valid_with_security` check.
+
+```sh
+npm run export:wrapper-call -- \
+  "$STONE_OUT/stone-proof/proof-run.json" \
+  --program-hash "$PROGRAM_HASH" \
+  --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
+  --security-bits <security_bits> \
+  --proof-producer stone \
+  --integrity-calldata "$STONE_OUT/integrity-split-calldata.json" \
+  --wrapper-address <deployed_amaci_wrapper_address> \
+  --out "$STONE_OUT/wrapper-call.json" \
+  --text
+```
 
 ## References
 

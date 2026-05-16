@@ -7,6 +7,7 @@ import {
   buildIntegrityCalldataPackage,
   parseIntegrityCalldata,
 } from '../src/integrity/calldata.mjs';
+import { buildIntegritySplitCalldataPackage } from '../src/integrity/split-calldata.mjs';
 
 function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
@@ -72,4 +73,27 @@ test('runs a proof_serializer-compatible binary and writes calldata JSON', () =>
   const parsed = JSON.parse(readFileSync(out, 'utf8'));
   assert.deepEqual(parsed.calldata, ['7', '0x8', '9']);
   assert.equal(parsed.source.stoneProof.exists, true);
+});
+
+test('wraps split Integrity calldata into standard JSON package', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-split-calldata-'));
+  writeFileSync(join(dir, 'initial'), '1 2 3\n');
+  writeFileSync(join(dir, 'step1'), '4 5\n');
+  writeFileSync(join(dir, 'final'), '6 7\n');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  const result = buildIntegritySplitCalldataPackage({
+    splitCalldataDir: dir,
+    out,
+  });
+
+  assert.equal(result.calldataFelts, 7);
+  assert.equal(result.stepCount, 1);
+  const parsed = JSON.parse(readFileSync(out, 'utf8'));
+  assert.equal(parsed.schema, 'zkstark-amaci.integrity-split-calldata.v1');
+  assert.equal(parsed.serializationType, 'split');
+  assert.equal(parsed.files.initial.feltCount, 3);
+  assert.equal(parsed.files.steps[0].feltCount, 2);
+  assert.equal(parsed.files.final.feltCount, 2);
+  assert.ok(parsed.settings.verifierConfigHash);
 });

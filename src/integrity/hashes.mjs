@@ -99,3 +99,27 @@ export function calculateVerificationHash(factHash, verifierConfigHash, security
     parseBigInt(securityBits, 'securityBits'),
   ]);
 }
+
+export function asciiToFelt(value, label = 'ascii') {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${label} must be a non-empty ASCII string`);
+  }
+  if (![...value].every((char) => char.charCodeAt(0) <= 0x7f)) {
+    throw new Error(`${label} must contain ASCII characters only`);
+  }
+  return BigInt(`0x${Buffer.from(value, 'ascii').toString('hex')}`);
+}
+
+export function calculateVerifierConfigHash({
+  layout,
+  hasher,
+  stoneVersion,
+  memoryVerification,
+}) {
+  return poseidonManyFelts([
+    asciiToFelt(layout, 'layout'),
+    asciiToFelt(hasher, 'hasher'),
+    asciiToFelt(stoneVersion, 'stoneVersion'),
+    asciiToFelt(memoryVerification, 'memoryVerification'),
+  ]);
+}

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { evaluateTallyVotes } from '../src/tally/tally-votes.mjs';
+import { evaluateNativeTallyVotes } from '../src/tally/native-tally-votes.mjs';
 import {
   MockIntegrityRegistry,
   TallyVotesStarkWrapperModel,
@@ -27,7 +27,7 @@ function loadFixture() {
 
 function setupPlainWrapper(securityBits = 96) {
   const input = loadFixture();
-  const evaluated = evaluateTallyVotes(input);
+  const evaluated = evaluateNativeTallyVotes(input);
   const integrity = new MockIntegrityRegistry();
   const tallyProgramHash = 0x1234n;
   const wrapper = new TallyVotesStarkWrapperModel({
@@ -43,27 +43,27 @@ function setupPlainWrapper(securityBits = 96) {
 }
 
 test('wrapper model accepts a valid plain Integrity fact', { skip: wrapperTestSkip }, () => {
-  const { input, integrity, wrapper, fact } = setupPlainWrapper();
+  const { evaluated, integrity, wrapper, fact } = setupPlainWrapper();
   integrity.registerFact(fact.factHash, 128);
 
   const result = wrapper.submitTallyFact({
-    newTallyCommitment: input.newTallyCommitment,
-    inputHash: input.inputHash,
+    newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+    inputHash: evaluated.publicFields.inputHash,
     factHash: fact.factHash,
   });
 
-  assert.equal(result.currentTallyCommitment.toString(), input.newTallyCommitment);
+  assert.equal(result.currentTallyCommitment, evaluated.publicFields.newTallyCommitment);
   assert.equal(result.processedUserCount, 5n);
 });
 
 test('wrapper model rejects an unregistered fact', { skip: wrapperTestSkip }, () => {
-  const { input, wrapper, fact } = setupPlainWrapper();
+  const { evaluated, wrapper, fact } = setupPlainWrapper();
 
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: input.newTallyCommitment,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
       }),
     /INVALID_INTEGRITY_FACT/,
@@ -71,14 +71,14 @@ test('wrapper model rejects an unregistered fact', { skip: wrapperTestSkip }, ()
 });
 
 test('wrapper model rejects insufficient security bits', { skip: wrapperTestSkip }, () => {
-  const { input, integrity, wrapper, fact } = setupPlainWrapper(96);
+  const { evaluated, integrity, wrapper, fact } = setupPlainWrapper(96);
   integrity.registerFact(fact.factHash, 80);
 
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: input.newTallyCommitment,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
       }),
     /INVALID_INTEGRITY_FACT/,
@@ -86,14 +86,14 @@ test('wrapper model rejects insufficient security bits', { skip: wrapperTestSkip
 });
 
 test('wrapper model rejects a fact bound to different public output', { skip: wrapperTestSkip }, () => {
-  const { input, integrity, wrapper, fact } = setupPlainWrapper();
+  const { evaluated, integrity, wrapper, fact } = setupPlainWrapper();
   integrity.registerFact(fact.factHash, 128);
 
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: BigInt(input.newTallyCommitment) + 1n,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment + 1n,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
       }),
     /FACT_HASH_BINDING_MISMATCH/,
@@ -101,7 +101,7 @@ test('wrapper model rejects a fact bound to different public output', { skip: wr
 });
 
 test('wrapper model rejects a fact produced by a different program hash', { skip: wrapperTestSkip }, () => {
-  const { input, evaluated, integrity } = setupPlainWrapper();
+  const { evaluated, integrity } = setupPlainWrapper();
   const correctProgramHash = 0x1234n;
   const wrongProgramHash = 0x9999n;
   const fact = calculatePlainFactHash(correctProgramHash, evaluated.publicOutput.felts);
@@ -119,8 +119,8 @@ test('wrapper model rejects a fact produced by a different program hash', { skip
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: input.newTallyCommitment,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
       }),
     /FACT_HASH_BINDING_MISMATCH/,
@@ -128,20 +128,20 @@ test('wrapper model rejects a fact produced by a different program hash', { skip
 });
 
 test('wrapper model rejects a stale tally fact replay after state update', { skip: wrapperTestSkip }, () => {
-  const { input, integrity, wrapper, fact } = setupPlainWrapper();
+  const { evaluated, integrity, wrapper, fact } = setupPlainWrapper();
   integrity.registerFact(fact.factHash, 128);
 
   wrapper.submitTallyFact({
-    newTallyCommitment: input.newTallyCommitment,
-    inputHash: input.inputHash,
+    newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+    inputHash: evaluated.publicFields.inputHash,
     factHash: fact.factHash,
   });
 
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: input.newTallyCommitment,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
       }),
     /FACT_HASH_BINDING_MISMATCH/,
@@ -150,7 +150,7 @@ test('wrapper model rejects a stale tally fact replay after state update', { ski
 
 test('wrapper model supports bootloaded fact binding and verification hash', { skip: wrapperTestSkip }, () => {
   const input = loadFixture();
-  const evaluated = evaluateTallyVotes(input);
+  const evaluated = evaluateNativeTallyVotes(input);
   const integrity = new MockIntegrityRegistry();
   const tallyProgramHash = 0x1234n;
   const bootloaderProgramHash = 0x5678n;
@@ -166,7 +166,7 @@ test('wrapper model supports bootloaded fact binding and verification hash', { s
     verifierConfigHash,
     minSecurityBits,
   );
-  integrity.registerFact(fact.factHash, minSecurityBits);
+  integrity.registerVerificationHash(verificationHash);
 
   const wrapper = new TallyVotesStarkWrapperModel({
     integrity,
@@ -180,18 +180,18 @@ test('wrapper model supports bootloaded fact binding and verification hash', { s
   });
 
   const result = wrapper.submitTallyFact({
-    newTallyCommitment: input.newTallyCommitment,
-    inputHash: input.inputHash,
+    newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+    inputHash: evaluated.publicFields.inputHash,
     factHash: fact.factHash,
     verificationHash,
   });
 
-  assert.equal(result.currentTallyCommitment.toString(), input.newTallyCommitment);
+  assert.equal(result.currentTallyCommitment, evaluated.publicFields.newTallyCommitment);
 });
 
 test('wrapper model rejects a wrong bootloaded verification hash', { skip: wrapperTestSkip }, () => {
   const input = loadFixture();
-  const evaluated = evaluateTallyVotes(input);
+  const evaluated = evaluateNativeTallyVotes(input);
   const integrity = new MockIntegrityRegistry();
   const tallyProgramHash = 0x1234n;
   const bootloaderProgramHash = 0x5678n;
@@ -207,7 +207,7 @@ test('wrapper model rejects a wrong bootloaded verification hash', { skip: wrapp
     verifierConfigHash,
     minSecurityBits,
   );
-  integrity.registerFact(fact.factHash, minSecurityBits);
+  integrity.registerVerificationHash(verificationHash);
 
   const wrapper = new TallyVotesStarkWrapperModel({
     integrity,
@@ -223,8 +223,8 @@ test('wrapper model rejects a wrong bootloaded verification hash', { skip: wrapp
   assert.throws(
     () =>
       wrapper.submitTallyFact({
-        newTallyCommitment: input.newTallyCommitment,
-        inputHash: input.inputHash,
+        newTallyCommitment: evaluated.publicFields.newTallyCommitment,
+        inputHash: evaluated.publicFields.inputHash,
         factHash: fact.factHash,
         verificationHash: verificationHash + 1n,
       }),
