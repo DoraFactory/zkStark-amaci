@@ -17,11 +17,11 @@ Use these commands for the current local proof path:
   npm run prove:tally
   npm run prove:all-split-small
 
-For the current tally Stone proof path:
-  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally --layout recursive
+For the current native tally Stone proof path:
+  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally-native
   npm run stone:prove:tally -- \
-    --air-run /absolute/path/to/stone-tally/stone-air-run.json \
-    --out-dir /absolute/path/to/stone-tally-proof
+    --air-run /absolute/path/to/stone-tally-native/stone-air-run.json \
+    --out-dir /absolute/path/to/stone-tally-native-proof
 
 For the Integrity path, produce a real Stone proof first, then serialize it:
   npm run serialize:integrity-calldata -- \

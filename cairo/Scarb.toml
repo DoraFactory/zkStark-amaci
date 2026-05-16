@@ -25,6 +25,10 @@ name = "tally_votes_native"
 function = "zkstark_amaci_tally::native_tally_votes::main"
 
 [[target.executable]]
+name = "tally_votes_native_stone"
+function = "zkstark_amaci_tally::stone_native_tally_votes::tally_votes_native_stone_main"
+
+[[target.executable]]
 name = "tally_votes_stone"
 function = "zkstark_amaci_tally::stone_tally_votes::tally_votes_stone_main"
 

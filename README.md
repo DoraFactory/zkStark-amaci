@@ -521,25 +521,32 @@ npm run inspect:stone-pipeline -- \
 
 This writes `stone-pipeline-inspection.json` plus stdout/stderr captures for
 `cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`, and `proof_serializer`.
-For tally, the repository includes a proof-mode wrapper executable named
-`tally_votes_stone`. It accepts one `Array<felt252>` input and returns one
-`Array<felt252>` public output because `cairo1-run --proof_mode` only supports
-that input/output shape. Generate the tally AIR files with:
+For tally, the default Stone path now uses the native optimized circuit through
+the proof-mode wrapper executable named `tally_votes_native_stone`. It accepts
+one `Array<felt252>` input and returns one `Array<felt252>` public output
+because `cairo1-run --proof_mode` only supports that input/output shape.
+Generate the native tally AIR files with:
 
 ```sh
 npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native
+```
+
+`stone:air:tally` is an alias for the native circuit. The native default layout
+is `recursive_with_poseidon`, because the optimized circuit uses the Starknet
+Poseidon builtin. The old BN254/SHA tally wrapper is still available only as an
+explicit compatibility command:
+
+```sh
+npm run stone:air:tally-legacy -- \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-legacy \
   --layout recursive
 ```
 
-The default layout is `recursive`. The tally wrapper's Sierra entrypoint uses
-`RangeCheck` and `Bitwise`, so `plain`, `small`, and `dex` are not valid because
-they do not provide `Bitwise`. Do not use `all_cairo` for this tally wrapper:
+For the legacy wrapper, `plain`, `small`, and `dex` are not valid because they
+do not provide `Bitwise`. Do not use `all_cairo` for either tally wrapper:
 `all_cairo` expects `add_mod`/`mul_mod` builtin segments in the Stone AIR public
-input, but the current Cairo runner does not emit those segments. If you already
-generated AIR with `all_cairo` or `dex`, regenerate it with `--layout recursive`
-before running `stone:prove:tally`; changing only the prover config cannot fix
-an AIR layout mismatch.
+input, but the current Cairo runner does not emit those segments.
 
 `cairo1-run` must be able to find a development `corelib`. The script checks
 `CAIRO_CORELIB_DIR`, `CAIRO_VM_DIR`, and the default
@@ -549,8 +556,7 @@ prints `Failed to find development corelib`, run:
 ```sh
 cd ~/zkStark-amaci
 CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally \
-  --layout recursive
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native
 ```
 
 If `~/cairo-vm/cairo1-run/corelib` is missing, create it with:
@@ -576,11 +582,12 @@ air-private-input.json
 stone-air-run.json
 ```
 
-Do not pass `target/dev/tally_votes_stone.executable.json` directly to
+Do not pass `target/dev/tally_votes_native_stone.executable.json` directly to
 `cairo1-run`. Scarb executable JSON is for the Scarb/cairo-execute runner; the
-Stone AIR path uses the exported `tally_votes_stone.cairo1-run.sierra.json`.
-The generated package is intentionally narrow: it copies only the legacy tally
-modules needed by `tally_votes_stone`, which avoids `cairo1-run` metadata
+Stone AIR path uses the exported
+`tally_votes_native_stone.cairo1-run.sierra.json`. The generated package is
+intentionally narrow: it copies only the native tally modules needed by
+`tally_votes_native_stone`, which avoids `cairo1-run` metadata
 calculation over unrelated package functions.
 
 The remaining Stone/Integrity path is:
@@ -591,13 +598,13 @@ cpu_air_verifier -> local Stone proof verification
 proof_serializer -> Integrity calldata
 ```
 
-After `npm run stone:air:tally` succeeds, generate and locally verify the
-Stone proof:
+After `npm run stone:air:tally` succeeds, generate and locally verify the Stone
+proof:
 
 ```sh
 npm run stone:prove:tally -- \
-  --air-run ~/zkstark-amaci-proofs/stone-tally/stone-air-run.json \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-proof
+  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native-proof
 ```
 
 By default this uses:
@@ -616,7 +623,7 @@ FRI degree matches the AIR `n_steps`, using Stone's required relation:
 log2(last_layer_degree_bound) + sum(fri_step_list) = ceil(log2(n_steps)) + 4
 ```
 
-For the current `tally_votes_stone` small fixture this avoids the default
+For the current tally small fixture this avoids the default
 Fibonacci example mismatch where `[0, 4, 3]` and `last_layer_degree_bound=64`
 only support FRI degree `2^13`, while the tally AIR can require a much larger
 degree bound.
@@ -635,8 +642,8 @@ Override those files if the trace size requires a different parameter file:
 
 ```sh
 npm run stone:prove:tally -- \
-  --air-run ~/zkstark-amaci-proofs/stone-tally/stone-air-run.json \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-proof \
+  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native-proof \
   --prover-config ~/stone-prover/e2e_test/Cairo/cpu_air_prover_config.json \
   --parameter-file ~/stone-prover/e2e_test/Cairo/cpu_air_params.json
 ```
@@ -654,7 +661,7 @@ Then run the Integrity readiness check against the Stone proof metadata:
 
 ```sh
 npm run check:integrity -- \
-  ~/zkstark-amaci-proofs/stone-tally-proof/proof-run.json \
+  ~/zkstark-amaci-proofs/stone-tally-native-proof/proof-run.json \
   --program-hash 0x1234 \
   --proof-producer stone \
   --text
