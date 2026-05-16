@@ -1099,6 +1099,12 @@ annotations. If an older `stone-proof.json` fails with `missing field
 annotations` or `annotations are incomplete`, rerun only the Stone proof step
 against the existing AIR run:
 
+Some Stone verifier builds emit OODS values as repeated `Field Element(...)`
+annotation lines instead of one `Field Elements(...)` span. The split calldata
+wrapper normalizes that form automatically and writes
+`$STONE_OUT/integrity-split/stone-proof.integrity-normalized.json` for the
+serializer when needed.
+
 ```sh
 npm run stone:prove:tally -- \
   --air-run "$STONE_OUT/stone-air/stone-air-run.json" \

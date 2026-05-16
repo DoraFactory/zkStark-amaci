@@ -274,6 +274,12 @@ annotations. If this step fails with `missing field annotations` or
 `annotations are incomplete`, rerun only the Stone proof step against the
 existing AIR run before serializing calldata.
 
+Some Stone verifier builds emit OODS values as repeated `Field Element(...)`
+annotation lines instead of one `Field Elements(...)` span. The split calldata
+wrapper normalizes that form automatically and writes
+`$STONE_OUT/integrity-split/stone-proof.integrity-normalized.json` for the
+serializer when needed.
+
 ```sh
 export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
 

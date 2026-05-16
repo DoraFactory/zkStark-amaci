@@ -30,10 +30,24 @@ const INTEGRITY_STONE_ANNOTATIONS = [
   'P->V[96:128]: /cpu air/STARK/Out Of Domain Sampling/OODS values: Field Elements(0x7,0x8,0x9)',
 ];
 
+const INTEGRITY_STONE_SINGLE_OODS_ANNOTATIONS = [
+  ...INTEGRITY_STONE_ANNOTATIONS.slice(0, -1),
+  'P->V[96:128]: /cpu air/STARK/Out Of Domain Sampling/OODS values: 0: Field Element(0x7)',
+  'P->V[128:160]: /cpu air/STARK/Out Of Domain Sampling/OODS values: 1: Field Element(0x8)',
+  'P->V[160:192]: /cpu air/STARK/Out Of Domain Sampling/OODS values: 2: Field Element(0x9)',
+];
+
 function writeStoneProofWithIntegrityAnnotations(path) {
   writeJson(path, {
     proof: [],
     annotations: INTEGRITY_STONE_ANNOTATIONS,
+  });
+}
+
+function writeStoneProofWithSingleOodsAnnotations(path) {
+  writeJson(path, {
+    proof: [],
+    annotations: INTEGRITY_STONE_SINGLE_OODS_ANNOTATIONS,
   });
 }
 
@@ -213,6 +227,61 @@ test('runs swiftness split generator from root Cargo.toml when cli Cargo.toml is
     assert.equal(existsSync(join(outDir, 'split-calldata', 'initial')), true);
     const parsed = JSON.parse(readFileSync(out, 'utf8'));
     assert.equal(parsed.serializer.cwd, generatorDir);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test('normalizes Stone verifier singleton OODS annotations for swiftness', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-swiftness-oods-normalize-'));
+  const fakeBin = join(dir, 'bin');
+  const generatorDir = join(dir, 'integrity-calldata-generator');
+  const generatorCliDir = join(generatorDir, 'cli');
+  const argsLog = join(dir, 'cargo-args.txt');
+  const fakeCargo = join(fakeBin, 'cargo');
+  const stoneProof = join(dir, 'stone-proof.json');
+  const outDir = join(dir, 'integrity-split');
+  const out = join(dir, 'integrity-split-calldata.json');
+  const normalizedProof = join(outDir, 'stone-proof.integrity-normalized.json');
+
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(generatorCliDir, { recursive: true });
+  writeFileSync(join(generatorCliDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
+  writeStoneProofWithSingleOodsAnnotations(stoneProof);
+  writeFileSync(
+    fakeCargo,
+    [
+      '#!/usr/bin/env sh',
+      `printf "%s\\n" "$@" > ${JSON.stringify(argsLog)}`,
+      'mkdir -p calldata',
+      'printf "30\\n" > calldata/initial',
+      'printf "31\\n" > calldata/step1',
+      'printf "32\\n" > calldata/final',
+    ].join('\n') + '\n',
+  );
+  chmodSync(fakeCargo, 0o755);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${fakeBin}:${previousPath}`;
+  try {
+    const result = buildIntegritySplitCalldataPackage({
+      stoneProofPath: stoneProof,
+      calldataGeneratorDir: generatorDir,
+      outDir,
+      out,
+    });
+
+    assert.equal(result.calldataFelts, 3);
+    assert.equal(readFileSync(argsLog, 'utf8').includes(normalizedProof), true);
+    assert.equal(existsSync(normalizedProof), true);
+    const normalized = JSON.parse(readFileSync(normalizedProof, 'utf8'));
+    assert.equal(
+      normalized.annotations.some((line) => line.includes('Field Elements(0x7,0x8,0x9)')),
+      true,
+    );
+    const parsed = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(parsed.serializer.normalizedOodsValueCount, 3);
+    assert.equal(parsed.source.integrityStoneProof.exists, true);
   } finally {
     process.env.PATH = previousPath;
   }

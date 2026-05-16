@@ -23,6 +23,11 @@ const DEFAULT_SETTINGS = Object.freeze({
 });
 
 const STEP_RE = /^step([1-9][0-9]*)$/;
+const OODS_VALUES_PREFIX = '/cpu air/STARK/Out Of Domain Sampling/OODS values';
+const OODS_VALUES_SPAN_RE =
+  /^P->V\[\d+:\d+\]: \/cpu air\/STARK\/Out Of Domain Sampling\/OODS values: .*Field Elements\(/;
+const OODS_VALUES_SINGLE_RE =
+  /^P->V\[(\d+):(\d+)\]: \/cpu air\/STARK\/Out Of Domain Sampling\/OODS values: .*Field Element\(([^)]+)\)/;
 
 function sha256File(path) {
   const hash = createHash('sha256');
@@ -63,21 +68,56 @@ function readFeltFile(path) {
   };
 }
 
-function assertStoneProofHasAnnotations(path) {
-  const proof = JSON.parse(readFileSync(path, 'utf8'));
-  if (!Object.prototype.hasOwnProperty.call(proof, 'annotations')) {
-    throw new Error(
-      [
-        `Stone proof is missing annotations: ${path}`,
-        'Integrity split calldata generation requires a Stone proof produced with --generate_annotations.',
-        'Regenerate the proof with npm run stone:prove:tally using the current repository; annotations are enabled by default.',
-      ].join('\n'),
-    );
-  }
-  if (!Array.isArray(proof.annotations)) {
-    throw new Error(`Stone proof annotations must be an array: ${path}`);
+function normalizeOodsAnnotationSpan(proof) {
+  if (proof.annotations.some((line) => OODS_VALUES_SPAN_RE.test(String(line)))) {
+    return {
+      proof,
+      normalized: false,
+      normalizedOodsValueCount: 0,
+    };
   }
 
+  const oodsValues = [];
+  for (const line of proof.annotations) {
+    const match = OODS_VALUES_SINGLE_RE.exec(String(line));
+    if (!match) {
+      continue;
+    }
+    oodsValues.push({
+      start: Number(match[1]),
+      end: Number(match[2]),
+      value: match[3].trim(),
+    });
+  }
+
+  if (oodsValues.length === 0) {
+    return {
+      proof,
+      normalized: false,
+      normalizedOodsValueCount: 0,
+    };
+  }
+
+  const first = oodsValues[0];
+  const last = oodsValues.at(-1);
+  const annotations = [...proof.annotations];
+  annotations.push(
+    `P->V[${first.start}:${last.end}]: ${OODS_VALUES_PREFIX}: Field Elements(${oodsValues
+      .map(({ value }) => value)
+      .join(',')})`,
+  );
+
+  return {
+    proof: {
+      ...proof,
+      annotations,
+    },
+    normalized: true,
+    normalizedOodsValueCount: oodsValues.length,
+  };
+}
+
+function validateStoneProofHasIntegrityAnnotations(proof, path) {
   const requiredPatterns = [
     {
       label: 'interaction elements',
@@ -102,8 +142,7 @@ function assertStoneProofHasAnnotations(path) {
     },
     {
       label: 'OODS values',
-      pattern:
-        /P->V\[\d+:\d+\]: \/cpu air\/STARK\/Out Of Domain Sampling\/OODS values: .*Field Elements\(/,
+      pattern: OODS_VALUES_SPAN_RE,
       minimum: 1,
     },
   ];
@@ -126,6 +165,41 @@ function assertStoneProofHasAnnotations(path) {
       ].join('\n'),
     );
   }
+}
+
+function prepareStoneProofForIntegrity(path, outDir) {
+  const proof = JSON.parse(readFileSync(path, 'utf8'));
+  if (!Object.prototype.hasOwnProperty.call(proof, 'annotations')) {
+    throw new Error(
+      [
+        `Stone proof is missing annotations: ${path}`,
+        'Integrity split calldata generation requires a Stone proof produced with --generate_annotations.',
+        'Regenerate the proof with npm run stone:prove:tally using the current repository; annotations are enabled by default.',
+      ].join('\n'),
+    );
+  }
+  if (!Array.isArray(proof.annotations)) {
+    throw new Error(`Stone proof annotations must be an array: ${path}`);
+  }
+
+  const normalized = normalizeOodsAnnotationSpan(proof);
+  if (!normalized.normalized) {
+    validateStoneProofHasIntegrityAnnotations(normalized.proof, path);
+    return {
+      stoneProofPath: resolve(path),
+      normalizedProofPath: undefined,
+      normalizedOodsValueCount: 0,
+    };
+  }
+
+  const normalizedProofPath = resolve(outDir, 'stone-proof.integrity-normalized.json');
+  writeFileSync(normalizedProofPath, `${JSON.stringify(normalized.proof, null, 2)}\n`);
+  validateStoneProofHasIntegrityAnnotations(normalized.proof, normalizedProofPath);
+  return {
+    stoneProofPath: normalizedProofPath,
+    normalizedProofPath,
+    normalizedOodsValueCount: normalized.normalizedOodsValueCount,
+  };
 }
 
 function normalizeSettings(settings = {}) {
@@ -289,6 +363,7 @@ export function buildIntegritySplitCalldataPackage({
   const normalizedSettings = normalizeSettings(settings);
   let serializer;
   let calldataDir = splitCalldataDir ? resolve(splitCalldataDir) : undefined;
+  let integrityStoneProof;
 
   if (!calldataDir) {
     if (!stoneProofPath) {
@@ -297,17 +372,17 @@ export function buildIntegritySplitCalldataPackage({
     if (!existsSync(stoneProofPath)) {
       throw new Error(`Stone proof JSON not found: ${stoneProofPath}`);
     }
-    assertStoneProofHasAnnotations(stoneProofPath);
     if (!outDir) {
       throw new Error('outDir is required when generating split calldata');
     }
     calldataDir = resolve(outDir, 'split-calldata');
     ensureEmptyDir(calldataDir);
+    integrityStoneProof = prepareStoneProofForIntegrity(stoneProofPath, outDir);
 
     if (stoneCli) {
       const serialized = runStoneCliSerializer({
         stoneCli,
-        stoneProofPath,
+        stoneProofPath: integrityStoneProof.stoneProofPath,
         outDir: calldataDir,
         settings: normalizedSettings,
       });
@@ -327,11 +402,12 @@ export function buildIntegritySplitCalldataPackage({
       serializer = {
         mode: 'stone-cli-split',
         command: serialized.command,
+        normalizedOodsValueCount: integrityStoneProof.normalizedOodsValueCount,
       };
     } else if (calldataGeneratorDir) {
       const serialized = runSwiftnessSerializer({
         calldataGeneratorDir,
-        stoneProofPath,
+        stoneProofPath: integrityStoneProof.stoneProofPath,
         outDir: calldataDir,
         settings: normalizedSettings,
       });
@@ -355,6 +431,7 @@ export function buildIntegritySplitCalldataPackage({
         cwd: serialized.cwd,
         generatorOutDir: serialized.generatorOutDir,
         stdout: serialized.result.stdout.trim(),
+        normalizedOodsValueCount: integrityStoneProof.normalizedOodsValueCount,
       };
     } else {
       throw new Error('stoneCli or calldataGeneratorDir is required to generate split calldata');
@@ -391,6 +468,9 @@ export function buildIntegritySplitCalldataPackage({
     },
     source: {
       stoneProof: fileMetadata(stoneProofPath ? resolve(stoneProofPath) : undefined),
+      integrityStoneProof: integrityStoneProof?.normalizedProofPath
+        ? fileMetadata(integrityStoneProof.normalizedProofPath)
+        : undefined,
       splitCalldataDir: fileMetadata(calldataDir),
     },
     serializer,
