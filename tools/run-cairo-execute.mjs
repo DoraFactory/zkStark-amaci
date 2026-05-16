@@ -182,6 +182,12 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-deactivate-step-core-native': {
+    prepareCircuit: 'process-deactivate-step-core-native',
+    executable: 'process_deactivate_step_core_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
 });
 
 function usage() {

@@ -49,6 +49,8 @@ pub const PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f5349475f4e4154495645;
 pub const PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f4445435f4e4154495645;
+pub const PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f44454143545f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 
 #[derive(Copy, Drop, Serde)]
@@ -213,6 +215,38 @@ pub struct NativeProcessDeactivateDecryptPublicFields {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateStepCorePublicFields {
+    pub message_index: felt252,
+    pub deactivate_index: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub previous_message_hash: felt252,
+    pub next_message_hash: felt252,
+    pub current_active_state_root_hash: felt252,
+    pub current_deactivate_root_hash: felt252,
+    pub new_active_state_root_hash: felt252,
+    pub new_deactivate_root_hash: felt252,
+    pub current_deactivate_commitment_hash: felt252,
+    pub new_deactivate_commitment_hash: felt252,
+    pub current_state_root_hash: felt252,
+    pub expected_poll_id: felt252,
+    pub enc_pub_key_hash: felt252,
+    pub command_shared_key_hash: felt252,
+    pub signature_pub_key_hash: felt252,
+    pub signature_r8_hash: felt252,
+    pub packed_cmd_hash: felt252,
+    pub cmd_sig_s_hash: felt252,
+    pub signature_valid: felt252,
+    pub current_state_ciphertext_c1_hash: felt252,
+    pub current_state_ciphertext_c2_hash: felt252,
+    pub current_decrypt_is_odd: felt252,
+    pub new_state_ciphertext_c1_hash: felt252,
+    pub new_state_ciphertext_c2_hash: felt252,
+    pub new_decrypt_is_odd: felt252,
+    pub deactivate_pub_key_hash: felt252,
+    pub deactivate_shared_key_hash: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct NativeProcessDeactivateCoordKeyPublicOutput {
     pub magic: felt252,
     pub version: felt252,
@@ -276,6 +310,45 @@ pub struct NativeProcessDeactivateDecryptPublicOutput {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateStepCorePublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub hash_scheme: felt252,
+    pub state_tree_depth: felt252,
+    pub deactivate_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub deactivate_index: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub previous_message_hash: felt252,
+    pub next_message_hash: felt252,
+    pub current_active_state_root_hash: felt252,
+    pub current_deactivate_root_hash: felt252,
+    pub new_active_state_root_hash: felt252,
+    pub new_deactivate_root_hash: felt252,
+    pub current_deactivate_commitment_hash: felt252,
+    pub new_deactivate_commitment_hash: felt252,
+    pub current_state_root_hash: felt252,
+    pub expected_poll_id: felt252,
+    pub enc_pub_key_hash: felt252,
+    pub command_shared_key_hash: felt252,
+    pub signature_pub_key_hash: felt252,
+    pub signature_r8_hash: felt252,
+    pub packed_cmd_hash: felt252,
+    pub cmd_sig_s_hash: felt252,
+    pub signature_valid: felt252,
+    pub current_state_ciphertext_c1_hash: felt252,
+    pub current_state_ciphertext_c2_hash: felt252,
+    pub current_decrypt_is_odd: felt252,
+    pub new_state_ciphertext_c1_hash: felt252,
+    pub new_state_ciphertext_c2_hash: felt252,
+    pub new_decrypt_is_odd: felt252,
+    pub deactivate_pub_key_hash: felt252,
+    pub deactivate_shared_key_hash: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct ProcessDeactivateStepCoreWitness {
     pub is_empty_msg: u256,
     pub coord_priv_key: u256,
@@ -305,6 +378,8 @@ pub struct ProcessDeactivateStepCoreWitness {
     pub new_decrypt_is_odd: u256,
     pub signature_valid: u256,
     pub deactivate_shared_key_hash: u256,
+    pub deactivate_shared_key: U256x2,
+    pub deactivate_shared_key_hash_claim: Hash2Claim,
     pub coord_priv_key_hash: Hash2Claim,
     pub message_hash: Hash13Claim,
     pub current_deactivate_commitment: Hash2Claim,
@@ -691,6 +766,11 @@ fn felt_from_u128(value: u128) -> felt252 {
     value.into()
 }
 
+fn small_felt_to_u256(value: felt252) -> u256 {
+    let low: u128 = value.try_into().unwrap();
+    u256 { low, high: 0 }
+}
+
 fn native_hash_u256(value: u256) -> felt252 {
     poseidon_hash_span([felt_from_u128(value.low), felt_from_u128(value.high)].span())
 }
@@ -794,6 +874,191 @@ fn verify_native_process_deactivate_decrypt(
         witness.decrypt, witness.coord_priv_key, witness.c1, witness.c2,
     );
     assert(bool_to_felt(decrypt_is_odd) == fields.decrypt_is_odd, 'N_DECRYPT_ODD');
+}
+
+fn verify_native_process_deactivate_step_core(
+    fields: NativeProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+) {
+    assert_valid_deactivate_message_index(fields.message_index);
+    let deactivate_index = small_felt_to_u256(fields.deactivate_index);
+    let expected_poll_id = small_felt_to_u256(fields.expected_poll_id);
+    assert_deactivate_index(deactivate_index);
+    assert_bool_felt(fields.signature_valid);
+    assert_bool_felt(fields.current_decrypt_is_odd);
+    assert_bool_felt(fields.new_decrypt_is_odd);
+    assert_bool_u256(witness.is_empty_msg);
+    assert_u256_eq(witness.is_empty_msg, zero_u256());
+    assert(!is_zero(witness.msg.v0), 'N_EMPTY_MSG');
+
+    assert(
+        native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
+        'N_COORD_PRIV',
+    );
+    assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
+    assert(
+        native_hash_u256x2(witness.command_shared_key) == fields.command_shared_key_hash,
+        'N_CMD_SHARED',
+    );
+    assert(
+        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
+            == fields.signature_pub_key_hash,
+        'N_SIG_PUB',
+    );
+    assert(native_hash_u256x2(witness.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
+    assert(native_hash_u256x3(witness.packed_cmd) == fields.packed_cmd_hash, 'N_CMD');
+    assert(native_hash_u256(witness.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(witness.signature_valid.high == 0, 'SIG_BOOL_HIGH');
+    assert(felt_from_u128(witness.signature_valid.low) == fields.signature_valid, 'SIG_VALID');
+    assert(
+        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v5, v1: witness.state_leaf.v6 })
+            == fields.current_state_ciphertext_c1_hash,
+        'N_CUR_C1',
+    );
+    assert(
+        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v7, v1: witness.state_leaf.v8 })
+            == fields.current_state_ciphertext_c2_hash,
+        'N_CUR_C2',
+    );
+    assert(witness.current_decrypt_is_odd.high == 0, 'CUR_DEC_HIGH');
+    assert(
+        felt_from_u128(witness.current_decrypt_is_odd.low) == fields.current_decrypt_is_odd,
+        'CUR_DEC_ODD',
+    );
+    assert(native_hash_u256x2(witness.c1) == fields.new_state_ciphertext_c1_hash, 'N_NEW_C1');
+    assert(native_hash_u256x2(witness.c2) == fields.new_state_ciphertext_c2_hash, 'N_NEW_C2');
+    assert(witness.new_decrypt_is_odd.high == 0, 'NEW_DEC_HIGH');
+    assert(
+        felt_from_u128(witness.new_decrypt_is_odd.low) == fields.new_decrypt_is_odd,
+        'NEW_DEC_ODD',
+    );
+    assert(
+        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
+            == fields.deactivate_pub_key_hash,
+        'N_DEACT_PUB',
+    );
+    let deactivate_shared_key_hash = poseidon_hash2(
+        witness.deactivate_shared_key_hash_claim,
+        witness.deactivate_shared_key.v0,
+        witness.deactivate_shared_key.v1,
+    );
+    assert_u256_eq(deactivate_shared_key_hash, witness.deactivate_shared_key_hash);
+    assert(
+        native_hash_u256x2(witness.deactivate_shared_key) == fields.deactivate_shared_key_hash,
+        'N_DEACT_SHARED',
+    );
+
+    let previous_message_hash = witness.message_hash.out.inputs.v4;
+    assert(native_hash_u256(previous_message_hash) == fields.previous_message_hash, 'N_PREV_MSG');
+    let next_message_hash = process_deactivate_message_hash(
+        witness.message_hash, witness.msg, witness.enc_pub_key, previous_message_hash,
+    );
+    assert(native_hash_u256(next_message_hash) == fields.next_message_hash, 'N_NEXT_MSG');
+
+    validate_poseidon_decryption(witness.msg, witness.command_shared_key, witness.decrypted_command);
+    assert_u256_eq(witness.packed_cmd.v0, witness.decrypted_command.v0);
+    assert_u256_eq(witness.packed_cmd.v1, witness.decrypted_command.v1);
+    assert_u256_eq(witness.packed_cmd.v2, witness.decrypted_command.v2);
+    assert_u256_eq(witness.cmd_sig_r8.v0, witness.decrypted_command.v4);
+    assert_u256_eq(witness.cmd_sig_r8.v1, witness.decrypted_command.v5);
+    assert_u256_eq(witness.cmd_sig_s, witness.decrypted_command.v6);
+    let unpacked = unpack_command_data(witness.packed_cmd.v0);
+    assert_u256_eq(witness.cmd_poll_id, unpacked.v0);
+    assert_u256_eq(witness.cmd_state_index, unpacked.v5);
+    assert(witness.cmd_poll_id.high == 0, 'POLL_HIGH');
+    assert(felt_from_u128(witness.cmd_poll_id.low) == fields.expected_poll_id, 'POLL_ID');
+
+    let valid_poll_id = witness.cmd_poll_id == expected_poll_id;
+    let signature_valid = u256_bool(witness.signature_valid);
+    let current_decrypt_is_odd = u256_bool(witness.current_decrypt_is_odd);
+    let valid = signature_valid && !current_decrypt_is_odd && valid_poll_id;
+    let new_decrypt_is_odd = u256_bool(witness.new_decrypt_is_odd);
+    assert_u256_eq(bool_to_u256(valid), bool_to_u256(!new_decrypt_is_odd));
+
+    let state_index = select_u256(
+        valid_state_index(witness.cmd_state_index), STATE_TREE_MAX_INDEX, witness.cmd_state_index,
+    );
+    let state_leaf_hash = poseidon_hash10(witness.state_leaf_hash, witness.state_leaf);
+    let current_state_root = quinary_root_depth_2(
+        state_leaf_hash, witness.state_leaf_path_0, witness.state_leaf_path_1, state_index,
+    );
+    assert(native_hash_u256(current_state_root) == fields.current_state_root_hash, 'N_STATE_ROOT');
+
+    assert(!is_zero(witness.new_active_state), 'NEW_ACTIVE_ZERO');
+    let current_active_state_root = quinary_root_depth_2(
+        witness.current_active_state,
+        witness.active_state_leaf_path_0,
+        witness.active_state_leaf_path_1,
+        state_index,
+    );
+    assert(
+        native_hash_u256(current_active_state_root) == fields.current_active_state_root_hash,
+        'N_CUR_ACTIVE',
+    );
+    let active_state_leaf = select_u256(valid, witness.current_active_state, witness.new_active_state);
+    let new_active_state_root = quinary_root_depth_2(
+        active_state_leaf,
+        witness.active_state_leaf_path_0,
+        witness.active_state_leaf_path_1,
+        state_index,
+    );
+    assert(
+        native_hash_u256(new_active_state_root) == fields.new_active_state_root_hash,
+        'N_NEW_ACTIVE',
+    );
+
+    let deactivate_leaf = poseidon_hash5(
+        witness.deactivate_leaf,
+        U256x5 {
+            v0: witness.c1.v0,
+            v1: witness.c1.v1,
+            v2: witness.c2.v0,
+            v3: witness.c2.v1,
+            v4: witness.deactivate_shared_key_hash,
+        },
+    );
+    let current_deactivate_root = quinary_root_depth_4(
+        zero_u256(),
+        witness.deactivate_leaf_path_0,
+        witness.deactivate_leaf_path_1,
+        witness.deactivate_leaf_path_2,
+        witness.deactivate_leaf_path_3,
+        deactivate_index,
+    );
+    assert(
+        native_hash_u256(current_deactivate_root) == fields.current_deactivate_root_hash,
+        'N_CUR_DEACT',
+    );
+    let new_deactivate_leaf = select_u256(
+        u256_bool(witness.is_empty_msg), deactivate_leaf, zero_u256(),
+    );
+    let new_deactivate_root = quinary_root_depth_4(
+        new_deactivate_leaf,
+        witness.deactivate_leaf_path_0,
+        witness.deactivate_leaf_path_1,
+        witness.deactivate_leaf_path_2,
+        witness.deactivate_leaf_path_3,
+        deactivate_index,
+    );
+    assert(
+        native_hash_u256(new_deactivate_root) == fields.new_deactivate_root_hash,
+        'N_NEW_DEACT',
+    );
+
+    let current_deactivate_commitment = poseidon_hash2(
+        witness.current_deactivate_commitment, current_active_state_root, current_deactivate_root,
+    );
+    assert(
+        native_hash_u256(current_deactivate_commitment)
+            == fields.current_deactivate_commitment_hash,
+        'N_CUR_COMMIT',
+    );
+    let new_deactivate_commitment = poseidon_hash2(
+        witness.new_deactivate_commitment, new_active_state_root, new_deactivate_root,
+    );
+    assert(
+        native_hash_u256(new_deactivate_commitment) == fields.new_deactivate_commitment_hash,
+        'N_NEW_COMMIT',
+    );
 }
 
 fn verify_process_deactivate_coord_key(
@@ -1255,6 +1520,12 @@ fn verify_process_deactivate_step_core_claims(
         witness.deactivate_pub_key_hash, witness.state_leaf.v0, witness.state_leaf.v1,
     );
     assert_u256_eq(deactivate_pub_key_hash, fields.deactivate_pub_key_hash);
+    let deactivate_shared_key_hash = poseidon_hash2(
+        witness.deactivate_shared_key_hash_claim,
+        witness.deactivate_shared_key.v0,
+        witness.deactivate_shared_key.v1,
+    );
+    assert_u256_eq(deactivate_shared_key_hash, witness.deactivate_shared_key_hash);
     assert_u256_eq(witness.deactivate_shared_key_hash, fields.deactivate_shared_key_hash);
 }
 
@@ -1538,12 +1809,62 @@ pub fn process_deactivate_decrypt_native_main(
     build_native_process_deactivate_decrypt_public_output(fields)
 }
 
+fn build_native_process_deactivate_step_core_public_output(
+    fields: NativeProcessDeactivateStepCorePublicFields,
+) -> NativeProcessDeactivateStepCorePublicOutput {
+    NativeProcessDeactivateStepCorePublicOutput {
+        magic: crate::public_output::PUBLIC_OUTPUT_MAGIC,
+        version: NATIVE_PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
+        hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
+        state_tree_depth: 2,
+        deactivate_tree_depth: 4,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        deactivate_index: fields.deactivate_index,
+        coord_priv_key_hash: fields.coord_priv_key_hash,
+        previous_message_hash: fields.previous_message_hash,
+        next_message_hash: fields.next_message_hash,
+        current_active_state_root_hash: fields.current_active_state_root_hash,
+        current_deactivate_root_hash: fields.current_deactivate_root_hash,
+        new_active_state_root_hash: fields.new_active_state_root_hash,
+        new_deactivate_root_hash: fields.new_deactivate_root_hash,
+        current_deactivate_commitment_hash: fields.current_deactivate_commitment_hash,
+        new_deactivate_commitment_hash: fields.new_deactivate_commitment_hash,
+        current_state_root_hash: fields.current_state_root_hash,
+        expected_poll_id: fields.expected_poll_id,
+        enc_pub_key_hash: fields.enc_pub_key_hash,
+        command_shared_key_hash: fields.command_shared_key_hash,
+        signature_pub_key_hash: fields.signature_pub_key_hash,
+        signature_r8_hash: fields.signature_r8_hash,
+        packed_cmd_hash: fields.packed_cmd_hash,
+        cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        signature_valid: fields.signature_valid,
+        current_state_ciphertext_c1_hash: fields.current_state_ciphertext_c1_hash,
+        current_state_ciphertext_c2_hash: fields.current_state_ciphertext_c2_hash,
+        current_decrypt_is_odd: fields.current_decrypt_is_odd,
+        new_state_ciphertext_c1_hash: fields.new_state_ciphertext_c1_hash,
+        new_state_ciphertext_c2_hash: fields.new_state_ciphertext_c2_hash,
+        new_decrypt_is_odd: fields.new_decrypt_is_odd,
+        deactivate_pub_key_hash: fields.deactivate_pub_key_hash,
+        deactivate_shared_key_hash: fields.deactivate_shared_key_hash,
+    }
+}
+
 #[executable]
 pub fn process_deactivate_step_core_main(
     fields: ProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
 ) -> ProcessDeactivateStepCorePublicOutput {
     verify_process_deactivate_step_core(fields, witness);
     build_process_deactivate_step_core_public_output(fields)
+}
+
+#[executable]
+pub fn process_deactivate_step_core_native_main(
+    fields: NativeProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+) -> NativeProcessDeactivateStepCorePublicOutput {
+    verify_native_process_deactivate_step_core(fields, witness);
+    build_native_process_deactivate_step_core_public_output(fields)
 }
 
 #[executable]

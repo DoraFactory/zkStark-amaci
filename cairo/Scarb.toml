@@ -165,6 +165,10 @@ name = "process_deactivate_step_core"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_step_core_main"
 
 [[target.executable]]
+name = "process_deactivate_step_core_native"
+function = "zkstark_amaci_tally::process_deactivate::process_deactivate_step_core_native_main"
+
+[[target.executable]]
 name = "process_deactivate_messages_state_transition"
 function = "zkstark_amaci_tally::process_deactivate::process_deactivate_messages_state_transition_main"
 

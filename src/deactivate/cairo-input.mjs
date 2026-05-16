@@ -5,6 +5,7 @@ import {
   PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
+  PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
   PUBLIC_OUTPUT_MAGIC,
   STARKNET_POSEIDON_HASH_SCHEME,
@@ -1326,6 +1327,13 @@ export function buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex,
         new_decrypt_is_odd: splitObject(links.newDecryptIsOdd, 'newDecryptIsOdd'),
         signature_valid: splitObject(links.signatureValid, 'signatureValid'),
         deactivate_shared_key_hash: splitObject(links.deactivateSharedKeyHash, 'deactivateSharedKeyHash'),
+        deactivate_shared_key: splitVector2(transition.derived.sharedKey, 'deactivateSharedKey'),
+        deactivate_shared_key_hash_claim: hash2Claim(
+          transition.derived.sharedKey[0],
+          transition.derived.sharedKey[1],
+          links.deactivateSharedKeyHash,
+          'deactivateSharedKeyHash',
+        ),
         coord_priv_key_hash: hash2Claim(
           result.state.input.coordPrivKey,
           PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
@@ -1367,6 +1375,137 @@ export function buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex,
       processDeactivate: rawInput,
       messageIndex,
     },
+    public_output_labels: publicOutput.labels,
+    public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build native deactivate core proof for an empty message slot');
+  }
+  const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
+  const legacy = buildCairoProcessDeactivateStepCoreInput(rawInput, messageIndex, result);
+  const transition = result.state.transitions[messageIndex];
+  const input = transition.input;
+  const command = result.derived.messageCommands[messageIndex];
+  const currentDeactivateCommitment = hashLeftRight(
+    input.currentActiveStateRoot,
+    input.currentDeactivateRoot,
+  );
+  const newDeactivateCommitment = hashLeftRight(
+    transition.derived.newActiveStateRoot,
+    transition.derived.newDeactivateRoot,
+  );
+  const publicFields = {
+    message_index: BigInt(messageIndex),
+    deactivate_index: BigInt(input.deactivateIndex),
+    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+    previous_message_hash: nativeHashU256(
+      result.boundary.derived.messageHashChain[messageIndex],
+      'previousMessageHash',
+    ),
+    next_message_hash: nativeHashU256(
+      result.boundary.derived.messageHashChain[messageIndex + 1],
+      'nextMessageHash',
+    ),
+    current_active_state_root_hash: nativeHashU256(
+      input.currentActiveStateRoot,
+      'currentActiveStateRoot',
+    ),
+    current_deactivate_root_hash: nativeHashU256(
+      input.currentDeactivateRoot,
+      'currentDeactivateRoot',
+    ),
+    new_active_state_root_hash: nativeHashU256(
+      transition.derived.newActiveStateRoot,
+      'newActiveStateRoot',
+    ),
+    new_deactivate_root_hash: nativeHashU256(
+      transition.derived.newDeactivateRoot,
+      'newDeactivateRoot',
+    ),
+    current_deactivate_commitment_hash: nativeHashU256(
+      currentDeactivateCommitment,
+      'currentDeactivateCommitment',
+    ),
+    new_deactivate_commitment_hash: nativeHashU256(
+      newDeactivateCommitment,
+      'newDeactivateCommitment',
+    ),
+    current_state_root_hash: nativeHashU256(result.publicFields.currentStateRoot, 'currentStateRoot'),
+    expected_poll_id: result.publicFields.expectedPollId,
+    enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+    command_shared_key_hash: nativeHashPoint(command.sharedKey, 'commandSharedKey'),
+    signature_pub_key_hash: nativeHashPoint(input.stateLeaf.slice(0, 2), 'signaturePubKey'),
+    signature_r8_hash: nativeHashPoint(input.cmdSigR8, 'signatureR8'),
+    packed_cmd_hash: nativePackedCmdHash(input.packedCmd),
+    cmd_sig_s_hash: nativeHashU256(input.cmdSigS, 'cmdSigS'),
+    signature_valid: transition.derived.signatureValid,
+    current_state_ciphertext_c1_hash: nativeHashPoint(
+      input.stateLeaf.slice(5, 7),
+      'currentStateCiphertextC1',
+    ),
+    current_state_ciphertext_c2_hash: nativeHashPoint(
+      input.stateLeaf.slice(7, 9),
+      'currentStateCiphertextC2',
+    ),
+    current_decrypt_is_odd: transition.derived.currentStateDecrypt.isOdd,
+    new_state_ciphertext_c1_hash: nativeHashPoint(input.c1, 'newStateCiphertextC1'),
+    new_state_ciphertext_c2_hash: nativeHashPoint(input.c2, 'newStateCiphertextC2'),
+    new_decrypt_is_odd: transition.derived.newStateDecrypt.isOdd,
+    deactivate_pub_key_hash: nativeHashPoint(input.stateLeaf.slice(0, 2), 'deactivatePubKey'),
+    deactivate_shared_key_hash: nativeHashPoint(transition.derived.sharedKey, 'deactivateSharedKey'),
+  };
+  const fields = Object.fromEntries(
+    Object.entries(publicFields).map(([key, value]) => [key, feltObject(value)]),
+  );
+  const fieldLabels = [
+    'message_index',
+    'deactivate_index',
+    'coord_priv_key_hash',
+    'previous_message_hash',
+    'next_message_hash',
+    'current_active_state_root_hash',
+    'current_deactivate_root_hash',
+    'new_active_state_root_hash',
+    'new_deactivate_root_hash',
+    'current_deactivate_commitment_hash',
+    'new_deactivate_commitment_hash',
+    'current_state_root_hash',
+    'expected_poll_id',
+    'enc_pub_key_hash',
+    'command_shared_key_hash',
+    'signature_pub_key_hash',
+    'signature_r8_hash',
+    'packed_cmd_hash',
+    'cmd_sig_s_hash',
+    'signature_valid',
+    'current_state_ciphertext_c1_hash',
+    'current_state_ciphertext_c2_hash',
+    'current_decrypt_is_odd',
+    'new_state_ciphertext_c1_hash',
+    'new_state_ciphertext_c2_hash',
+    'new_decrypt_is_odd',
+    'deactivate_pub_key_hash',
+    'deactivate_shared_key_hash',
+  ];
+  const publicOutput = nativeProcessDeactivatePublicOutput(
+    PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
+    publicFields,
+    result.params,
+    fieldLabels,
+  );
+
+  return {
+    fields,
+    publicFields,
+    program_input: {
+      fields,
+      witness: legacy.program_input.witness,
+    },
+    full_witness: legacy.full_witness,
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1661,6 +1800,37 @@ function pushProcessDeactivateStepCoreFields(args, fields) {
   pushU256(args, fields.deactivate_shared_key_hash);
 }
 
+function pushNativeProcessDeactivateStepCoreFields(args, fields) {
+  pushFelt(args, fields.message_index);
+  pushFelt(args, fields.deactivate_index);
+  pushFelt(args, fields.coord_priv_key_hash);
+  pushFelt(args, fields.previous_message_hash);
+  pushFelt(args, fields.next_message_hash);
+  pushFelt(args, fields.current_active_state_root_hash);
+  pushFelt(args, fields.current_deactivate_root_hash);
+  pushFelt(args, fields.new_active_state_root_hash);
+  pushFelt(args, fields.new_deactivate_root_hash);
+  pushFelt(args, fields.current_deactivate_commitment_hash);
+  pushFelt(args, fields.new_deactivate_commitment_hash);
+  pushFelt(args, fields.current_state_root_hash);
+  pushFelt(args, fields.expected_poll_id);
+  pushFelt(args, fields.enc_pub_key_hash);
+  pushFelt(args, fields.command_shared_key_hash);
+  pushFelt(args, fields.signature_pub_key_hash);
+  pushFelt(args, fields.signature_r8_hash);
+  pushFelt(args, fields.packed_cmd_hash);
+  pushFelt(args, fields.cmd_sig_s_hash);
+  pushFelt(args, fields.signature_valid);
+  pushFelt(args, fields.current_state_ciphertext_c1_hash);
+  pushFelt(args, fields.current_state_ciphertext_c2_hash);
+  pushFelt(args, fields.current_decrypt_is_odd);
+  pushFelt(args, fields.new_state_ciphertext_c1_hash);
+  pushFelt(args, fields.new_state_ciphertext_c2_hash);
+  pushFelt(args, fields.new_decrypt_is_odd);
+  pushFelt(args, fields.deactivate_pub_key_hash);
+  pushFelt(args, fields.deactivate_shared_key_hash);
+}
+
 function pushProcessDeactivateMessagesBoundaryWitness(args, witness) {
   pushVector2(args, witness.coord_pub_key);
   pushU256(args, witness.current_active_state_root);
@@ -1796,6 +1966,8 @@ function pushProcessDeactivateStepCoreWitness(args, witness) {
   pushU256(args, witness.new_decrypt_is_odd);
   pushU256(args, witness.signature_valid);
   pushU256(args, witness.deactivate_shared_key_hash);
+  pushVector2(args, witness.deactivate_shared_key);
+  pushHash2Claim(args, witness.deactivate_shared_key_hash_claim);
   pushHash2Claim(args, witness.coord_priv_key_hash);
   pushHash13Claim(args, witness.message_hash);
   pushHash2Claim(args, witness.current_deactivate_commitment);
@@ -1893,6 +2065,13 @@ export function serializeNativeCairoProcessDeactivateDecryptExecutableArgs(cairo
 export function serializeCairoProcessDeactivateStepCoreExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateStepCoreFields(args, cairoInput.program_input.fields);
+  pushProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
+  return args.map((value) => bigintToHex(value));
+}
+
+export function serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(cairoInput) {
+  const args = [];
+  pushNativeProcessDeactivateStepCoreFields(args, cairoInput.program_input.fields);
   pushProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }

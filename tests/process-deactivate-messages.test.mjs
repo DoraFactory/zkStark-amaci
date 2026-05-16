@@ -19,6 +19,7 @@ import {
   buildNativeCairoProcessDeactivateDecryptInput,
   buildNativeCairoProcessDeactivateEcdhInput,
   buildNativeCairoProcessDeactivateSignatureInput,
+  buildNativeCairoProcessDeactivateStepCoreInput,
   serializeCairoProcessDeactivateCoordKeyExecutableArgs,
   serializeCairoProcessDeactivateDecryptExecutableArgs,
   serializeCairoProcessDeactivateEcdhExecutableArgs,
@@ -32,6 +33,7 @@ import {
   serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
   serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
   serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
+  serializeNativeCairoProcessDeactivateStepCoreExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
   buildNativeCairoProcessDeactivateBoundaryInput,
@@ -526,13 +528,16 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   const signature = buildNativeCairoProcessDeactivateSignatureInput(input, 2, evaluated);
   const currentDecrypt = buildNativeCairoProcessDeactivateDecryptInput(input, 2, 'current', evaluated);
   const newDecrypt = buildNativeCairoProcessDeactivateDecryptInput(input, 2, 'new', evaluated);
+  const core = buildNativeCairoProcessDeactivateStepCoreInput(input, 2, evaluated);
   const coordArgs = serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs(coordKey);
   const commandEcdhArgs = serializeNativeCairoProcessDeactivateEcdhExecutableArgs(commandEcdh);
   const leafEcdhArgs = serializeNativeCairoProcessDeactivateEcdhExecutableArgs(leafEcdh);
   const signatureArgs = serializeNativeCairoProcessDeactivateSignatureExecutableArgs(signature);
   const currentDecryptArgs = serializeNativeCairoProcessDeactivateDecryptExecutableArgs(currentDecrypt);
   const newDecryptArgs = serializeNativeCairoProcessDeactivateDecryptExecutableArgs(newDecrypt);
+  const coreArgs = serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(core);
   const legacyCoordKey = buildCairoProcessDeactivateCoordKeyInput(input, evaluated);
+  const legacyCore = buildCairoProcessDeactivateStepCoreInput(input, 2, evaluated);
 
   assert.equal(coordKey.public_output.length, 9);
   assert.equal(commandEcdh.public_output.length, 12);
@@ -540,16 +545,36 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(signature.public_output.length, 13);
   assert.equal(currentDecrypt.public_output.length, 13);
   assert.equal(newDecrypt.public_output.length, 13);
+  assert.equal(core.public_output.length, 35);
   assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
   assert.equal(commandEcdh.publicFields.message_index, 2n);
   assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
   assert.equal(leafEcdh.publicFields.ecdh_kind, 1n);
   assert.equal(commandEcdh.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
   assert.equal(currentDecrypt.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
+  assert.equal(core.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
+  assert.equal(core.publicFields.enc_pub_key_hash, commandEcdh.publicFields.base_hash);
+  assert.equal(core.publicFields.command_shared_key_hash, commandEcdh.publicFields.shared_key_hash);
+  assert.equal(core.publicFields.deactivate_pub_key_hash, leafEcdh.publicFields.base_hash);
+  assert.equal(core.publicFields.deactivate_shared_key_hash, leafEcdh.publicFields.shared_key_hash);
+  assert.equal(core.publicFields.signature_pub_key_hash, signature.publicFields.pub_key_hash);
+  assert.equal(core.publicFields.signature_r8_hash, signature.publicFields.r8_hash);
+  assert.equal(core.publicFields.packed_cmd_hash, signature.publicFields.packed_cmd_hash);
+  assert.equal(core.publicFields.cmd_sig_s_hash, signature.publicFields.cmd_sig_s_hash);
+  assert.equal(core.publicFields.signature_valid, signature.publicFields.signature_valid);
+  assert.equal(core.publicFields.current_state_ciphertext_c1_hash, currentDecrypt.publicFields.c1_hash);
+  assert.equal(core.publicFields.current_state_ciphertext_c2_hash, currentDecrypt.publicFields.c2_hash);
+  assert.equal(core.publicFields.current_decrypt_is_odd, currentDecrypt.publicFields.decrypt_is_odd);
+  assert.equal(core.publicFields.new_state_ciphertext_c1_hash, newDecrypt.publicFields.c1_hash);
+  assert.equal(core.publicFields.new_state_ciphertext_c2_hash, newDecrypt.publicFields.c2_hash);
+  assert.equal(core.publicFields.new_decrypt_is_odd, newDecrypt.publicFields.decrypt_is_odd);
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash, legacyCoordKey.publicFields.coordPubKeyHash);
+  assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
+  assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());
   assert.equal(signature.publicFields.signature_valid, evaluated.state.transitions[2].derived.signatureValid);
   assert.equal(currentDecrypt.publicFields.decrypt_is_odd, evaluated.state.transitions[2].derived.currentStateDecrypt.isOdd);
   assert.equal(newDecrypt.publicFields.decrypt_is_odd, evaluated.state.transitions[2].derived.newStateDecrypt.isOdd);
+  assert.ok(coreArgs.length < serializeCairoProcessDeactivateStepCoreExecutableArgs(legacyCore).length);
   assert.ok([
     ...coordArgs,
     ...commandEcdhArgs,
@@ -557,6 +582,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
     ...signatureArgs,
     ...currentDecryptArgs,
     ...newDecryptArgs,
+    ...coreArgs,
   ].every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
