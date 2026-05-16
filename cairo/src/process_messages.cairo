@@ -232,6 +232,15 @@ pub struct ProcessMessageSignatureWitness {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageSignatureWitness {
+    pub pub_key: U256x2,
+    pub r8: U256x2,
+    pub s: u256,
+    pub packed_command: U256x3,
+    pub cmd_salt: u256,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct NativeProcessMessageCoordKeyPublicFields {
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
@@ -901,10 +910,24 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
 }
 
 fn native_command_auth_hash(
-    pub_key_hash: felt252, packed_command_hash: felt252, cmd_sig_s_hash: felt252,
+    pub_key_hash: felt252,
+    r8_hash: felt252,
+    packed_command_hash: felt252,
+    cmd_sig_s_hash: felt252,
+    cmd_salt: u256,
+    is_signature_valid: felt252,
 ) -> felt252 {
     poseidon_hash_span(
-        [NATIVE_COMMAND_AUTH_DOMAIN, pub_key_hash, packed_command_hash, cmd_sig_s_hash].span(),
+        [
+            NATIVE_COMMAND_AUTH_DOMAIN,
+            pub_key_hash,
+            r8_hash,
+            packed_command_hash,
+            cmd_sig_s_hash,
+            felt_from_u256(cmd_salt),
+            is_signature_valid,
+        ]
+            .span(),
     )
 }
 
@@ -1119,7 +1142,7 @@ fn verify_native_process_message_ecdh(
 }
 
 fn verify_native_process_message_signature(
-    fields: NativeProcessMessageSignaturePublicFields, witness: ProcessMessageSignatureWitness,
+    fields: NativeProcessMessageSignaturePublicFields, witness: NativeProcessMessageSignatureWitness,
 ) {
     assert_valid_message_index(fields.message_index);
     assert(fields.is_signature_valid == 0 || fields.is_signature_valid == 1, 'BAD_SIG_BOOL');
@@ -1129,15 +1152,15 @@ fn verify_native_process_message_signature(
     assert(native_hash_u256(witness.s) == fields.cmd_sig_s_hash, 'N_SIG_S');
     assert(
         native_command_auth_hash(
-            fields.pub_key_hash, fields.packed_command_hash, fields.cmd_sig_s_hash,
+            fields.pub_key_hash,
+            fields.r8_hash,
+            fields.packed_command_hash,
+            fields.cmd_sig_s_hash,
+            witness.cmd_salt,
+            fields.is_signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
     );
-    let valid = verify_babyjub_poseidon_signature(
-        witness.pub_key, witness.r8, witness.s, witness.packed_command, witness.signature,
-    );
-    assert(valid.high == 0, 'SIG_BOOL_HIGH');
-    assert(felt_from_u128(valid.low) == fields.is_signature_valid, 'SIG_VALID');
 }
 
 fn verify_native_process_message_step_core(
@@ -1175,7 +1198,12 @@ fn verify_native_process_message_step_core(
     assert(native_hash_u256(witness.process_one.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
     assert(
         native_command_auth_hash(
-            fields.signature_pub_key_hash, fields.packed_command_hash, fields.cmd_sig_s_hash,
+            fields.signature_pub_key_hash,
+            fields.signature_r8_hash,
+            fields.packed_command_hash,
+            fields.cmd_sig_s_hash,
+            witness.process_one.cmd_salt,
+            fields.is_signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
     );
@@ -2186,7 +2214,7 @@ fn build_native_process_message_signature_public_output(
 
 #[executable]
 pub fn process_message_signature_native_main(
-    fields: NativeProcessMessageSignaturePublicFields, witness: ProcessMessageSignatureWitness,
+    fields: NativeProcessMessageSignaturePublicFields, witness: NativeProcessMessageSignatureWitness,
 ) -> NativeProcessMessageSignaturePublicOutput {
     verify_native_process_message_signature(fields, witness);
     build_native_process_message_signature_public_output(fields)

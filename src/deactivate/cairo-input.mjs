@@ -79,9 +79,17 @@ function nativePackedCmdHash(packedCmd) {
   return nativeHashFelts(packedCmd, 'packedCmd');
 }
 
-function nativeDeactivateCommandAuthHash(pubKeyHash, packedCmdHash, cmdSigSHash) {
+function nativeDeactivateCommandAuthHash(pubKeyHash, r8Hash, packedCmdHash, cmdSigSHash, cmdSalt, signatureValid) {
   return nativeHashFelts(
-    [PROCESS_DEACTIVATE_NATIVE_COMMAND_AUTH_DOMAIN, pubKeyHash, packedCmdHash, cmdSigSHash],
+    [
+      PROCESS_DEACTIVATE_NATIVE_COMMAND_AUTH_DOMAIN,
+      pubKeyHash,
+      r8Hash,
+      packedCmdHash,
+      cmdSigSHash,
+      cmdSalt,
+      signatureValid,
+    ],
     'deactivateCommandAuth',
   );
 }
@@ -1148,20 +1156,33 @@ export function buildNativeCairoProcessDeactivateEcdhInput(
 }
 
 export function buildNativeCairoProcessDeactivateSignatureInput(rawInput, messageIndex, evaluated) {
+  assertMessageIndex(messageIndex);
+  if (isEmptyDeactivateMessage(rawInput, messageIndex)) {
+    throw new Error('cannot build native deactivate signature proof for an empty message slot');
+  }
   const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
-  const legacy = buildCairoProcessDeactivateSignatureInput(rawInput, messageIndex, result);
   const transition = result.state.transitions[messageIndex];
   const input = transition.input;
+  const command = result.derived.messageCommands[messageIndex];
+  const cmdSalt = command.decryptedCommand[3];
   const pubKeyHash = nativeHashPoint(input.stateLeaf.slice(0, 2), 'pubKey');
+  const r8Hash = nativeHashPoint(input.cmdSigR8, 'r8');
   const packedCmdHash = nativePackedCmdHash(input.packedCmd);
   const cmdSigSHash = nativeHashU256(input.cmdSigS, 'cmdSigS');
   const publicFields = {
     message_index: BigInt(messageIndex),
     pub_key_hash: pubKeyHash,
-    r8_hash: nativeHashPoint(input.cmdSigR8, 'r8'),
+    r8_hash: r8Hash,
     packed_cmd_hash: packedCmdHash,
     cmd_sig_s_hash: cmdSigSHash,
-    command_auth_hash: nativeDeactivateCommandAuthHash(pubKeyHash, packedCmdHash, cmdSigSHash),
+    command_auth_hash: nativeDeactivateCommandAuthHash(
+      pubKeyHash,
+      r8Hash,
+      packedCmdHash,
+      cmdSigSHash,
+      cmdSalt,
+      transition.derived.signatureValid,
+    ),
     signature_valid: transition.derived.signatureValid,
   };
   const fields = {
@@ -1193,9 +1214,19 @@ export function buildNativeCairoProcessDeactivateSignatureInput(rawInput, messag
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        pub_key: splitVector2(input.stateLeaf.slice(0, 2), 'pubKey'),
+        r8: splitVector2(input.cmdSigR8, 'r8'),
+        s: splitObject(input.cmdSigS, 's'),
+        packed_cmd: splitVector3(input.packedCmd, 'packedCmd'),
+        cmd_salt: splitObject(cmdSalt, 'cmdSalt'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      nativeAuth: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1460,6 +1491,7 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     rawInput.batchStartHash,
   );
   const signaturePubKeyHash = nativeHashPoint(input.stateLeaf.slice(0, 2), 'signaturePubKey');
+  const signatureR8Hash = nativeHashPoint(input.cmdSigR8, 'signatureR8');
   const packedCmdHash = nativePackedCmdHash(input.packedCmd);
   const cmdSigSHash = nativeHashU256(input.cmdSigS, 'cmdSigS');
   const publicFields = {
@@ -1487,10 +1519,17 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     command_shared_key_hash: nativeHashPoint(command.sharedKey, 'commandSharedKey'),
     signature_pub_key_hash: signaturePubKeyHash,
-    signature_r8_hash: nativeHashPoint(input.cmdSigR8, 'signatureR8'),
+    signature_r8_hash: signatureR8Hash,
     packed_cmd_hash: packedCmdHash,
     cmd_sig_s_hash: cmdSigSHash,
-    command_auth_hash: nativeDeactivateCommandAuthHash(signaturePubKeyHash, packedCmdHash, cmdSigSHash),
+    command_auth_hash: nativeDeactivateCommandAuthHash(
+      signaturePubKeyHash,
+      signatureR8Hash,
+      packedCmdHash,
+      cmdSigSHash,
+      command.decryptedCommand[3],
+      transition.derived.signatureValid,
+    ),
     signature_valid: transition.derived.signatureValid,
     current_state_ciphertext_c1_hash: nativeHashPoint(
       input.stateLeaf.slice(5, 7),
@@ -1979,6 +2018,14 @@ function pushProcessDeactivateSignatureWitness(args, witness) {
   pushHash5Claim(args, witness.packed_cmd_hash);
 }
 
+function pushNativeProcessDeactivateSignatureWitness(args, witness) {
+  pushVector2(args, witness.pub_key);
+  pushVector2(args, witness.r8);
+  pushU256(args, witness.s);
+  pushVector3(args, witness.packed_cmd);
+  pushU256(args, witness.cmd_salt);
+}
+
 function pushProcessDeactivateDecryptWitness(args, witness) {
   pushU256(args, witness.coord_priv_key);
   pushVector2(args, witness.c1);
@@ -2096,7 +2143,7 @@ export function serializeCairoProcessDeactivateSignatureExecutableArgs(cairoInpu
 export function serializeNativeCairoProcessDeactivateSignatureExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessDeactivateSignatureFields(args, cairoInput.program_input.fields);
-  pushProcessDeactivateSignatureWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessDeactivateSignatureWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

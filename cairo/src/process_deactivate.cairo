@@ -170,6 +170,15 @@ pub struct ProcessDeactivateSignatureWitness {
     pub packed_cmd_hash: Hash5Claim,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateSignatureWitness {
+    pub pub_key: U256x2,
+    pub r8: U256x2,
+    pub s: u256,
+    pub packed_cmd: U256x3,
+    pub cmd_salt: u256,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessDeactivateDecryptWitness {
     pub coord_priv_key: u256,
@@ -796,10 +805,23 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
 }
 
 fn native_deactivate_command_auth_hash(
-    pub_key_hash: felt252, packed_cmd_hash: felt252, cmd_sig_s_hash: felt252,
+    pub_key_hash: felt252,
+    r8_hash: felt252,
+    packed_cmd_hash: felt252,
+    cmd_sig_s_hash: felt252,
+    cmd_salt: u256,
+    signature_valid: felt252,
 ) -> felt252 {
     poseidon_hash_span(
-        [NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN, pub_key_hash, packed_cmd_hash, cmd_sig_s_hash]
+        [
+            NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN,
+            pub_key_hash,
+            r8_hash,
+            packed_cmd_hash,
+            cmd_sig_s_hash,
+            felt_from_u256(cmd_salt),
+            signature_valid,
+        ]
             .span(),
     )
 }
@@ -949,7 +971,7 @@ fn verify_native_process_deactivate_ecdh(
 }
 
 fn verify_native_process_deactivate_signature(
-    fields: NativeProcessDeactivateSignaturePublicFields, witness: ProcessDeactivateSignatureWitness,
+    fields: NativeProcessDeactivateSignaturePublicFields, witness: NativeProcessDeactivateSignatureWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     assert_bool_felt(fields.signature_valid);
@@ -959,15 +981,15 @@ fn verify_native_process_deactivate_signature(
     assert(native_hash_u256(witness.s) == fields.cmd_sig_s_hash, 'N_SIG_S');
     assert(
         native_deactivate_command_auth_hash(
-            fields.pub_key_hash, fields.packed_cmd_hash, fields.cmd_sig_s_hash,
+            fields.pub_key_hash,
+            fields.r8_hash,
+            fields.packed_cmd_hash,
+            fields.cmd_sig_s_hash,
+            witness.cmd_salt,
+            fields.signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
     );
-    let valid = verify_babyjub_poseidon_signature(
-        witness.pub_key, witness.r8, witness.s, witness.packed_cmd, witness.signature,
-    );
-    assert(valid.high == 0, 'SIG_BOOL_HIGH');
-    assert(felt_from_u128(valid.low) == fields.signature_valid, 'SIG_VALID');
 }
 
 fn verify_native_process_deactivate_decrypt(
@@ -1021,7 +1043,12 @@ fn verify_native_process_deactivate_step_core(
     assert(native_hash_u256(witness.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
     assert(
         native_deactivate_command_auth_hash(
-            fields.signature_pub_key_hash, fields.packed_cmd_hash, fields.cmd_sig_s_hash,
+            fields.signature_pub_key_hash,
+            fields.signature_r8_hash,
+            fields.packed_cmd_hash,
+            fields.cmd_sig_s_hash,
+            witness.decrypted_command.v3,
+            fields.signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
     );
@@ -1868,7 +1895,7 @@ fn build_native_process_deactivate_signature_public_output(
 
 #[executable]
 pub fn process_deactivate_signature_native_main(
-    fields: NativeProcessDeactivateSignaturePublicFields, witness: ProcessDeactivateSignatureWitness,
+    fields: NativeProcessDeactivateSignaturePublicFields, witness: NativeProcessDeactivateSignatureWitness,
 ) -> NativeProcessDeactivateSignaturePublicOutput {
     verify_native_process_deactivate_signature(fields, witness);
     build_native_process_deactivate_signature_public_output(fields)
