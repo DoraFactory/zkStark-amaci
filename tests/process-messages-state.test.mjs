@@ -43,6 +43,7 @@ import {
   processMessageHashChain,
 } from '../src/msg/process-messages.mjs';
 import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
+import { nativeProcessMessageTransitionContexts } from '../src/msg/native-process-roots.mjs';
 import {
   evaluateProcessOneStateTransition,
   packCommandData,
@@ -514,6 +515,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   const legacyCore = buildCairoProcessMessageStepCoreInput(input, 3, evaluated);
   const nativeBoundary = evaluateNativeProcessMessagesBoundary(input);
   const transition = evaluated.state.transitions[3];
+  const nativeRoots = nativeProcessMessageTransitionContexts(evaluated.state)[3];
 
   assert.equal(coordKey.public_output.length, 9);
   assert.equal(ecdh.public_output.length, 11);
@@ -535,9 +537,11 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
   assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[3]);
   assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[4]);
-  assert.equal(core.publicFields.current_state_root_hash, toStarkFelt(transition.input.currentStateRoot));
-  assert.equal(core.publicFields.new_state_root_hash, toStarkFelt(transition.derived.newStateRoot));
-  assert.equal(core.publicFields.active_state_root_hash, toStarkFelt(evaluated.state.derived.activeStateRoot));
+  assert.equal(core.publicFields.current_state_root_hash, nativeRoots.currentStateRoot);
+  assert.equal(core.publicFields.new_state_root_hash, nativeRoots.newStateRoot);
+  assert.equal(core.publicFields.active_state_root_hash, nativeRoots.activeStateRoot);
+  assert.notEqual(core.publicFields.current_state_root_hash, toStarkFelt(transition.input.currentStateRoot));
+  assert.notEqual(core.publicFields.new_state_root_hash, toStarkFelt(transition.derived.newStateRoot));
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash.toString(), evaluated.publicFields.coordPubKeyHash.toString());
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());

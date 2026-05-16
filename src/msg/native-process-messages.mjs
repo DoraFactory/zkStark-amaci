@@ -10,6 +10,8 @@ import {
 import { decimalize } from '../compat/encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
+import { evaluateProcessMessagesStateful } from './process-messages.mjs';
+import { nativeProcessMessagesStateRoots } from './native-process-roots.mjs';
 import { packProcessMessagesVals, unpackProcessMessagesPackedVals } from './process-messages.mjs';
 
 const MSG_LENGTH = 10;
@@ -134,11 +136,14 @@ export function evaluateNativeProcessMessagesBoundary(rawInput, params = SMALL_P
 
   const packedVals = toStarkFelt(packProcessMessagesVals(unpacked), 'packedVals');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');
-  const currentStateRoot = toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
+  const nativeState = Array.isArray(rawInput.processOneWitnesses)
+    ? nativeProcessMessagesStateRoots(evaluateProcessMessagesStateful(rawInput).state)
+    : undefined;
+  const currentStateRoot = nativeState?.currentStateRoot ?? toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
   const currentStateSalt = toStarkFelt(rawInput.currentStateSalt, 'currentStateSalt');
-  const newStateRoot = toStarkFelt(rawInput.newStateRoot, 'newStateRoot');
+  const newStateRoot = nativeState?.newStateRoot ?? toStarkFelt(rawInput.newStateRoot, 'newStateRoot');
   const newStateSalt = toStarkFelt(rawInput.newStateSalt, 'newStateSalt');
-  const activeStateRoot = toStarkFelt(rawInput.activeStateRoot, 'activeStateRoot');
+  const activeStateRoot = nativeState?.activeStateRoot ?? toStarkFelt(rawInput.activeStateRoot, 'activeStateRoot');
   const deactivateRoot = toStarkFelt(rawInput.deactivateRoot, 'deactivateRoot');
   const expectedPollId = toStarkFelt(rawInput.expectedPollId, 'expectedPollId');
   const msgs = rawInput.msgs.map((row, index) => feltVector(row, MSG_LENGTH, `msgs[${index}]`));

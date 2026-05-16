@@ -895,6 +895,46 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
     )
 }
 
+fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
+    poseidon_hash_span([v0, v1, v2, v3, v4].span())
+}
+
+fn native_hash10_values(
+    v0: felt252,
+    v1: felt252,
+    v2: felt252,
+    v3: felt252,
+    v4: felt252,
+    v5: felt252,
+    v6: felt252,
+    v7: felt252,
+    v8: felt252,
+    v9: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            native_hash5_values(v0, v1, v2, v3, v4),
+            native_hash5_values(v5, v6, v7, v8, v9),
+        ]
+            .span(),
+    )
+}
+
+fn native_hash_state_leaf(value: U256x10, vote_root: felt252) -> felt252 {
+    native_hash10_values(
+        felt_from_u256(value.v0),
+        felt_from_u256(value.v1),
+        felt_from_u256(value.v2),
+        vote_root,
+        felt_from_u256(value.v4),
+        felt_from_u256(value.v5),
+        felt_from_u256(value.v6),
+        felt_from_u256(value.v7),
+        felt_from_u256(value.v8),
+        felt_from_u256(value.v9),
+    )
+}
+
 fn native_coord_priv_key_hash(coord_priv_key: u256) -> felt252 {
     poseidon_hash_span(
         [felt_from_u256(coord_priv_key), NATIVE_COORD_PRIV_KEY_HASH_DOMAIN].span(),
@@ -932,8 +972,108 @@ fn native_message_hash_or_empty(
     }
 }
 
-fn native_commitment(root: u256, salt: u256) -> felt252 {
-    poseidon_hash_span([felt_from_u256(root), felt_from_u256(salt)].span())
+fn native_felt_commitment(root: felt252, salt: u256) -> felt252 {
+    poseidon_hash_span([root, felt_from_u256(salt)].span())
+}
+
+fn native_path_hash(leaf: felt252, path_elements: U256x4, index: u128) -> felt252 {
+    let p0 = felt_from_u256(path_elements.v0);
+    let p1 = felt_from_u256(path_elements.v1);
+    let p2 = felt_from_u256(path_elements.v2);
+    let p3 = felt_from_u256(path_elements.v3);
+    if index == 0 {
+        native_hash5_values(leaf, p0, p1, p2, p3)
+    } else if index == 1 {
+        native_hash5_values(p0, leaf, p1, p2, p3)
+    } else if index == 2 {
+        native_hash5_values(p0, p1, leaf, p2, p3)
+    } else if index == 3 {
+        native_hash5_values(p0, p1, p2, leaf, p3)
+    } else {
+        native_hash5_values(p0, p1, p2, p3, leaf)
+    }
+}
+
+fn native_quinary_root_depth_1(leaf: felt252, path: U256x4, index: u256) -> felt252 {
+    native_path_hash(leaf, path, index.low)
+}
+
+fn native_quinary_root_depth_2(
+    leaf: felt252, path_0: U256x4, path_1: U256x4, index: u256,
+) -> felt252 {
+    let level_0_index = index.low % 5;
+    let level_1_index = (index.low / 5) % 5;
+    let level_0 = native_path_hash(leaf, path_0, level_0_index);
+    native_path_hash(level_0, path_1, level_1_index)
+}
+
+fn native_zero_root_depth_1() -> felt252 {
+    native_hash5_values(0, 0, 0, 0, 0)
+}
+
+fn native_process_message_roots(
+    process_one: ProcessOneStateTransitionWitness,
+) -> (felt252, felt252, felt252) {
+    let valid = is_valid_bool(process_one.is_valid);
+    let state_index = select_u256(valid, MAX_STATE_INDEX, process_one.cmd_state_index);
+    let vote_option_index = select_u256(valid, zero_u256(), process_one.cmd_vote_option_index);
+    assert_state_index(state_index);
+    assert_vote_option_index(vote_option_index);
+
+    let current_vote_root = native_quinary_root_depth_1(
+        felt_from_u256(process_one.current_vote_weight),
+        process_one.current_vote_weight_path,
+        vote_option_index,
+    );
+    let current_leaf_vote_root = if is_zero(process_one.state_leaf.v3) {
+        assert(current_vote_root == native_zero_root_depth_1(), 'N_VOTE_ZERO');
+        0
+    } else {
+        current_vote_root
+    };
+    let current_state_leaf_hash = native_hash_state_leaf(
+        process_one.state_leaf, current_leaf_vote_root,
+    );
+    let current_state_root = native_quinary_root_depth_2(
+        current_state_leaf_hash,
+        process_one.state_leaf_path_0,
+        process_one.state_leaf_path_1,
+        state_index,
+    );
+    let active_state_root = felt_from_u256(process_one.active_state_root);
+
+    let updated_vote_weight = select_u256(
+        valid, process_one.current_vote_weight, process_one.cmd_new_vote_weight,
+    );
+    let new_vote_option_root = native_quinary_root_depth_1(
+        felt_from_u256(updated_vote_weight),
+        process_one.current_vote_weight_path,
+        vote_option_index,
+    );
+    let new_leaf_vote_root = if valid {
+        new_vote_option_root
+    } else {
+        current_leaf_vote_root
+    };
+    let new_state_leaf_hash = native_hash10_values(
+        felt_from_u256(select_u256(valid, process_one.state_leaf.v0, process_one.cmd_new_pub_key.v0)),
+        felt_from_u256(select_u256(valid, process_one.state_leaf.v1, process_one.cmd_new_pub_key.v1)),
+        felt_from_u256(select_u256(valid, process_one.state_leaf.v2, process_one.new_balance)),
+        new_leaf_vote_root,
+        felt_from_u256(select_u256(valid, process_one.state_leaf.v4, process_one.new_sl_nonce)),
+        felt_from_u256(process_one.state_leaf.v5),
+        felt_from_u256(process_one.state_leaf.v6),
+        felt_from_u256(process_one.state_leaf.v7),
+        felt_from_u256(process_one.state_leaf.v8),
+        0,
+    );
+    let new_state_root = native_quinary_root_depth_2(
+        new_state_leaf_hash,
+        process_one.state_leaf_path_0,
+        process_one.state_leaf_path_1,
+        state_index,
+    );
+    (current_state_root, active_state_root, new_state_root)
 }
 
 fn verify_native_process_message_coord_key(
@@ -1025,8 +1165,10 @@ fn verify_native_process_message_step_core(
     );
     assert(next_message_hash == fields.next_message_hash, 'N_NEXT_MSG');
 
-    assert(felt_from_u256(witness.process_one.current_state_root) == fields.current_state_root_hash, 'N_CUR_ROOT');
-    assert(felt_from_u256(witness.process_one.active_state_root) == fields.active_state_root_hash, 'N_ACTIVE');
+    let (native_current_state_root, native_active_state_root, native_new_state_root) =
+        native_process_message_roots(witness.process_one);
+    assert(native_current_state_root == fields.current_state_root_hash, 'N_CUR_ROOT');
+    assert(native_active_state_root == fields.active_state_root_hash, 'N_ACTIVE');
     assert_u256_eq(witness.process_one.is_quadratic_cost, witness.is_quadratic_cost);
     assert_u256_eq(witness.process_one.num_signups, witness.num_signups);
     assert_u256_eq(witness.process_one.max_vote_options, witness.max_vote_options);
@@ -1034,28 +1176,28 @@ fn verify_native_process_message_step_core(
     assert(felt_from_u128(witness.process_one.expected_poll_id.low) == fields.expected_poll_id, 'POLL_ID');
     assert_message_matches(witness.msg, witness.process_one.msg);
 
-    let computed_new_state_root = if is_zero(witness.enc_pub_key.v0) {
+    if is_zero(witness.enc_pub_key.v0) {
         assert_u256_eq(witness.process_one.is_valid, zero_u256());
-        witness.process_one.current_state_root
     } else {
-        process_one_chain_step(
-            witness.process_one.current_state_root,
-            witness.coord_priv_key,
-            witness.process_one.active_state_root,
+        let decryption_is_odd = assert_elgamal_decrypt(
             witness.state_decrypt,
-            witness.process_one,
-        )
+            witness.coord_priv_key,
+            U256x2 { v0: witness.process_one.state_leaf.v5, v1: witness.process_one.state_leaf.v6 },
+            U256x2 { v0: witness.process_one.state_leaf.v7, v1: witness.process_one.state_leaf.v8 },
+        );
+        assert_u256_eq(witness.process_one.is_decryption_active, bool_to_u256(!decryption_is_odd));
+        let _validation = validate_process_one_command(witness.process_one);
     };
-    assert(felt_from_u256(computed_new_state_root) == fields.new_state_root_hash, 'N_NEW_ROOT');
+    assert(native_new_state_root == fields.new_state_root_hash, 'N_NEW_ROOT');
 
     if fields.message_index == 4 {
-        let current_state_commitment = native_commitment(
-            witness.process_one.current_state_root, witness.current_state_salt,
+        let current_state_commitment = native_felt_commitment(
+            native_current_state_root, witness.current_state_salt,
         );
         assert(current_state_commitment == fields.current_state_commitment_hash, 'N_CUR_COMMIT');
     }
     if fields.message_index == 0 {
-        let new_state_commitment = native_commitment(computed_new_state_root, witness.new_state_salt);
+        let new_state_commitment = native_felt_commitment(native_new_state_root, witness.new_state_salt);
         assert(new_state_commitment == fields.new_state_commitment_hash, 'N_NEW_COMMIT');
     }
 }

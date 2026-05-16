@@ -30,6 +30,7 @@ import {
   evaluateProcessMessagesStateTransitions,
   processMessageHash,
 } from './process-messages.mjs';
+import { nativeProcessMessageTransitionContexts } from './native-process-roots.mjs';
 import { evaluateProcessOneStateTransition } from './process-one.mjs';
 
 function splitObject(value, label) {
@@ -1199,25 +1200,38 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
   const transition = result.state.transitions[messageIndex];
   const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
   const nativeMsgChain = nativeMessageHashChain(rawInput.msgs, rawInput.encPubKeys, rawInput.batchStartHash);
+  const nativeContext = nativeProcessMessageTransitionContexts(result.state)[messageIndex];
+  legacy.program_input.witness.process_one.state_leaf_path_0 = splitVector4(
+    nativeContext.stateLeafPathElements[0],
+    'nativeStateLeafPathElements[0]',
+  );
+  legacy.program_input.witness.process_one.state_leaf_path_1 = splitVector4(
+    nativeContext.stateLeafPathElements[1],
+    'nativeStateLeafPathElements[1]',
+  );
+  legacy.program_input.witness.process_one.current_vote_weight_path = splitVector4(
+    nativeContext.currentVotePathElements[0],
+    'nativeCurrentVoteWeightPath',
+  );
   const publicFields = {
     message_index: BigInt(messageIndex),
     packed_vals_hash: nativeFelt(result.publicFields.packedVals, 'packedVals'),
     coord_priv_key_hash: nativeCoordPrivKeyHash(rawInput.coordPrivKey),
     previous_message_hash: nativeMsgChain[messageIndex],
     next_message_hash: nativeMsgChain[messageIndex + 1],
-    current_state_root_hash: nativeFelt(transition.input.currentStateRoot, 'currentStateRoot'),
-    new_state_root_hash: nativeFelt(transition.derived.newStateRoot, 'newStateRoot'),
+    current_state_root_hash: nativeContext.currentStateRoot,
+    new_state_root_hash: nativeContext.newStateRoot,
     current_state_commitment_hash: nativeCommitment(
-      transition.input.currentStateRoot,
+      nativeContext.currentStateRoot,
       rawInput.currentStateSalt,
       'currentStateCommitment',
     ),
     new_state_commitment_hash: nativeCommitment(
-      transition.derived.newStateRoot,
+      nativeContext.newStateRoot,
       rawInput.newStateSalt,
       'newStateCommitment',
     ),
-    active_state_root_hash: nativeFelt(result.state.derived.activeStateRoot, 'activeStateRoot'),
+    active_state_root_hash: nativeContext.activeStateRoot,
     expected_poll_id: result.publicFields.expectedPollId,
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     shared_key_hash: nativeHashPoint(transition.input.sharedKey, 'sharedKey'),
