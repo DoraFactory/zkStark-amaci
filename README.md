@@ -561,7 +561,7 @@ make deps
 ```
 
 This command prepares the small tally fixture, converts the Scarb executable
-argument JSON into the nested decimal `cairo1-run --args_file` format,
+argument JSON into the bracketed decimal `cairo1-run --args_file` format,
 exports a `cairo1-run` Sierra artifact from `zkstark_amaci_tally.sierra.json`,
 renames the Stone wrapper entrypoint to the `::main` suffix expected by
 `cairo1-run`, runs `cairo1-run --proof_mode`, and writes:
@@ -643,10 +643,9 @@ npm run check:integrity -- \
 
 Do not pass the Scarb JSON args file directly to `cairo1-run`; use
 `tools/convert-cairo1-run-args.mjs` or `npm run stone:air:tally`, because
-`cairo1-run --args_file` expects a top-level argument list. For the
-`tally_votes_stone` signature, the single `Array<felt252>` argument is written
-as `[[1 2 3]]`. Hex values from the Scarb argument JSON are converted to decimal
-before calling `cairo1-run`.
+`cairo1-run --args_file` expects whitespace-separated values and arrays are
+written as `[1 2 3]`. Hex values from the Scarb argument JSON are converted to
+decimal before calling `cairo1-run`.
 
 ### Repository Setup
 

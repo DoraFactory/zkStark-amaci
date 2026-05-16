@@ -10,11 +10,11 @@ import {
 } from '../src/cairo-run-args.mjs';
 
 test('formats cairo1-run proof-mode args as one felt array', () => {
-  assert.equal(formatCairo1RunArgs(['1', '2', '2748']), '[[1 2 2748]]\n');
+  assert.equal(formatCairo1RunArgs(['1', '2', '2748']), '[1 2 2748]\n');
 });
 
 test('formats flat cairo1-run args when requested', () => {
-  assert.equal(formatCairo1RunArgs(['1', '2'], { array: false }), '[1 2]\n');
+  assert.equal(formatCairo1RunArgs(['1', '2'], { array: false }), '1 2\n');
 });
 
 test('parses Scarb executable args JSON felts', () => {
@@ -36,5 +36,5 @@ test('converts Scarb args JSON file to cairo1-run args file', () => {
 
   assert.equal(result.feltCount, 3);
   assert.equal(result.arrayWrapped, true);
-  assert.equal(readFileSync(output, 'utf8'), '[[1 2 3]]\n');
+  assert.equal(readFileSync(output, 'utf8'), '[1 2 3]\n');
 });

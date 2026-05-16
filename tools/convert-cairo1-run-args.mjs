@@ -6,13 +6,12 @@ function usage() {
   node tools/convert-cairo1-run-args.mjs <scarb-args.json> --out <args-file> [options]
 
 Options:
-  --flat   Write a top-level flat argument list instead of one Array<felt252>.
+  --flat   Write flat whitespace-separated felts instead of one Array<felt252>.
   --text   Print a short summary.
   --help   Show this help.
 
-By default this writes a top-level argument list containing one Array<felt252>
-argument with decimal felt values, which is the input shape required by
-cairo1-run --proof_mode
+By default this writes one bracketed Array<felt252> argument with decimal felt
+values, which is the input shape required by cairo1-run --proof_mode
 entrypoints. The source JSON is the array emitted by this repository's
 --cairo-args-out tools for scarb execute.`;
 }
