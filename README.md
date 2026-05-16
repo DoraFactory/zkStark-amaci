@@ -562,10 +562,11 @@ make deps
 
 This command prepares the small tally fixture, converts the Scarb executable
 argument JSON into the bracketed decimal `cairo1-run --args_file` format,
-exports a `cairo1-run` Sierra artifact from `zkstark_amaci_tally.sierra.json`,
-renames the Stone wrapper entrypoint to the `::main` suffix expected by
-`cairo1-run`, hides any other package functions already ending in `::main`,
-runs `cairo1-run --proof_mode`, and writes:
+builds a generated minimal Stone package under the output directory, exports a
+`cairo1-run` Sierra artifact from that smaller package Sierra, renames the Stone
+wrapper entrypoint to the `::main` suffix expected by `cairo1-run`, hides any
+other package functions already ending in `::main`, runs `cairo1-run
+--proof_mode`, and writes:
 
 ```text
 trace.bin
@@ -578,6 +579,9 @@ stone-air-run.json
 Do not pass `target/dev/tally_votes_stone.executable.json` directly to
 `cairo1-run`. Scarb executable JSON is for the Scarb/cairo-execute runner; the
 Stone AIR path uses the exported `tally_votes_stone.cairo1-run.sierra.json`.
+The generated package is intentionally narrow: it copies only the legacy tally
+modules needed by `tally_votes_stone`, which avoids `cairo1-run` metadata
+calculation over unrelated package functions.
 
 The remaining Stone/Integrity path is:
 

@@ -173,8 +173,10 @@ AIR_PUBLIC_INPUT="$OUT_DIR/air-public-input.json"
 AIR_PRIVATE_INPUT="$OUT_DIR/air-private-input.json"
 RUN_JSON="$OUT_DIR/stone-air-run.json"
 RUN_LOG="$OUT_DIR/cairo1-run.log"
-EXECUTABLE_JSON="$ROOT_DIR/cairo/target/dev/tally_votes_stone.executable.json"
-PACKAGE_SIERRA_JSON="$ROOT_DIR/cairo/target/dev/zkstark_amaci_tally.sierra.json"
+STONE_PACKAGE_DIR="$OUT_DIR/cairo-stone-package"
+STONE_PACKAGE_NAME="zkstark_amaci_tally_stone"
+EXECUTABLE_JSON="$STONE_PACKAGE_DIR/target/dev/tally_votes_stone.executable.json"
+PACKAGE_SIERRA_JSON="$STONE_PACKAGE_DIR/target/dev/$STONE_PACKAGE_NAME.sierra.json"
 RUNNER_SIERRA_JSON="$OUT_DIR/tally_votes_stone.cairo1-run.sierra.json"
 CORELIB_DIR="$(detect_cairo_corelib_dir || true)"
 
@@ -206,9 +208,54 @@ node "$ROOT_DIR/tools/convert-cairo1-run-args.mjs" \
   --out "$CAIRO1_ARGS_TXT" \
   --text
 
-echo "==> Building Cairo executable"
+echo "==> Building minimal Stone Cairo package"
+rm -rf "$STONE_PACKAGE_DIR"
+mkdir -p "$STONE_PACKAGE_DIR/src"
+{
+  printf '[package]\n'
+  printf 'name = "%s"\n' "$STONE_PACKAGE_NAME"
+  printf 'version = "0.1.0"\n'
+  printf 'edition = "2024_07"\n'
+  printf '\n[cairo]\n'
+  printf 'enable-gas = false\n'
+  printf '\n[dependencies]\n'
+  printf 'cairo_execute = "2.18.0"\n'
+  printf '\n[lib]\n'
+  printf 'sierra = true\n'
+  printf 'casm = true\n'
+  printf '\n[[target.executable]]\n'
+  printf 'name = "tally_votes_stone"\n'
+  printf 'function = "%s::stone_tally_votes::tally_votes_stone_main"\n' "$STONE_PACKAGE_NAME"
+} > "$STONE_PACKAGE_DIR/Scarb.toml"
+
+{
+  printf 'mod hash_gates;\n'
+  printf 'mod poseidon_bn254;\n'
+  printf 'mod poseidon_constants;\n'
+  printf 'mod public_output;\n'
+  printf 'mod sha256_u256;\n'
+  printf 'mod stone_tally_votes;\n'
+  printf 'mod tally_votes;\n'
+  printf 'mod types;\n'
+} > "$STONE_PACKAGE_DIR/src/lib.cairo"
+
+STONE_MODULES=(
+  hash_gates
+  poseidon_bn254
+  poseidon_constants
+  public_output
+  sha256_u256
+  stone_tally_votes
+  tally_votes
+  types
+)
+
+for module in "${STONE_MODULES[@]}"; do
+  cp "$ROOT_DIR/cairo/src/$module.cairo" "$STONE_PACKAGE_DIR/src/$module.cairo"
+done
+
 (
-  cd "$ROOT_DIR/cairo"
+  cd "$STONE_PACKAGE_DIR"
   scarb build
 )
 
@@ -225,8 +272,8 @@ fi
 echo "==> Exporting cairo1-run Sierra artifact"
 node "$ROOT_DIR/tools/export-cairo1-run-sierra.mjs" \
   "$PACKAGE_SIERRA_JSON" \
-  --function "zkstark_amaci_tally::stone_tally_votes::tally_votes_stone_main" \
-  --main-name "zkstark_amaci_tally::stone_tally_votes::main" \
+  --function "$STONE_PACKAGE_NAME::stone_tally_votes::tally_votes_stone_main" \
+  --main-name "$STONE_PACKAGE_NAME::stone_tally_votes::main" \
   --out "$RUNNER_SIERRA_JSON"
 
 echo "==> Running cairo1-run proof mode for tally"
@@ -248,6 +295,7 @@ echo "cairo1-run corelib: $CORELIB_DIR"
 printf '{\n' > "$RUN_JSON"
 printf '  "circuit": "tally",\n' >> "$RUN_JSON"
 printf '  "executable": "%s",\n' "$EXECUTABLE_JSON" >> "$RUN_JSON"
+printf '  "stonePackageDir": "%s",\n' "$STONE_PACKAGE_DIR" >> "$RUN_JSON"
 printf '  "packageSierraJson": "%s",\n' "$PACKAGE_SIERRA_JSON" >> "$RUN_JSON"
 printf '  "runnerSierraJson": "%s",\n' "$RUNNER_SIERRA_JSON" >> "$RUN_JSON"
 printf '  "layout": "%s",\n' "$LAYOUT" >> "$RUN_JSON"
