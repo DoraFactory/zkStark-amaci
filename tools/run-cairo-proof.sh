@@ -23,6 +23,7 @@ Circuits:
   process-message-coord-key-native
   process-message-ecdh
   process-message-ecdh-native
+  process-message-decrypt-native
   process-message-signature
   process-message-signature-native
   process-message-step-core
@@ -53,7 +54,8 @@ Notes:
     process-messages-boundary-native,
     process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
-  - process-message-step, process-message-ecdh, process-message-signature,
+  - process-message-step, process-message-ecdh, process-message-decrypt-native,
+    process-message-signature,
     process-message-step-core, process-deactivate-step,
     process-deactivate-ecdh-*, process-deactivate-signature*,
     process-deactivate-decrypt-*, and process-deactivate-step-core require --message-index
@@ -92,6 +94,7 @@ prepare_circuit_name() {
     process-message-coord-key-native) echo "process-message-coord-key-native" ;;
     process-message-ecdh) echo "process-message-ecdh" ;;
     process-message-ecdh-native) echo "process-message-ecdh-native" ;;
+    process-message-decrypt-native) echo "process-message-decrypt-native" ;;
     process-message-signature) echo "process-message-signature" ;;
     process-message-signature-native) echo "process-message-signature-native" ;;
     process-message-step-core) echo "process-message-step-core" ;;
@@ -132,6 +135,7 @@ executable_name() {
     process-message-coord-key-native) echo "process_message_coord_key_native" ;;
     process-message-ecdh) echo "process_message_ecdh" ;;
     process-message-ecdh-native) echo "process_message_ecdh_native" ;;
+    process-message-decrypt-native) echo "process_message_decrypt_native" ;;
     process-message-signature) echo "process_message_signature" ;;
     process-message-signature-native) echo "process_message_signature_native" ;;
     process-message-step-core) echo "process_message_step_core" ;;
@@ -160,7 +164,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|add-new-key-native|process-messages|process-messages-boundary|process-messages-boundary-native|process-message-step|process-message-coord-key|process-message-coord-key-native|process-message-ecdh|process-message-ecdh-native|process-message-signature|process-message-signature-native|process-message-step-core|process-message-step-core-native|process-deactivate-boundary|process-deactivate-boundary-native|process-deactivate-step|process-deactivate-coord-key|process-deactivate-coord-key-native|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature|process-deactivate-signature-native|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core|process-deactivate-step-core-native|process-deactivate) return 0 ;;
+    add-new-key|add-new-key-native|process-messages|process-messages-boundary|process-messages-boundary-native|process-message-step|process-message-coord-key|process-message-coord-key-native|process-message-ecdh|process-message-ecdh-native|process-message-decrypt-native|process-message-signature|process-message-signature-native|process-message-step-core|process-message-step-core-native|process-deactivate-boundary|process-deactivate-boundary-native|process-deactivate-step|process-deactivate-coord-key|process-deactivate-coord-key-native|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature|process-deactivate-signature-native|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core|process-deactivate-step-core-native|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -252,7 +256,7 @@ run_one() {
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
 
-  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-ecdh-native" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-signature-native" || "$circuit" == "process-message-step-core" || "$circuit" == "process-message-step-core-native" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-ecdh-command-native" || "$circuit" == "process-deactivate-ecdh-leaf-native" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-signature-native" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-decrypt-current-native" || "$circuit" == "process-deactivate-decrypt-new-native" || "$circuit" == "process-deactivate-step-core" || "$circuit" == "process-deactivate-step-core-native" ]]; then
+  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-ecdh-native" || "$circuit" == "process-message-decrypt-native" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-signature-native" || "$circuit" == "process-message-step-core" || "$circuit" == "process-message-step-core-native" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-ecdh-command-native" || "$circuit" == "process-deactivate-ecdh-leaf-native" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-signature-native" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-decrypt-current-native" || "$circuit" == "process-deactivate-decrypt-new-native" || "$circuit" == "process-deactivate-step-core" || "$circuit" == "process-deactivate-step-core-native" ]]; then
     if [[ -z "$message_index" ]]; then
       echo "$circuit requires --message-index" >&2
       exit 1

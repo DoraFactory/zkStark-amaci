@@ -6,6 +6,7 @@ import test from 'node:test';
 import { buildSmallSyntheticFixture } from '../src/fixtures/small-amaci-fixtures.mjs';
 import {
   buildNativeCairoProcessMessageCoordKeyInput,
+  buildNativeCairoProcessMessageDecryptInput,
   buildNativeCairoProcessMessageEcdhInput,
   buildNativeCairoProcessMessageSignatureInput,
   buildNativeCairoProcessMessageStepCoreInput,
@@ -90,6 +91,7 @@ function writeProcessMessagesManifest(root) {
       stateful.publicFields,
     ),
     ecdh: [],
+    decrypt: [],
     signatures: [],
     cores: [],
   };
@@ -100,6 +102,13 @@ function writeProcessMessagesManifest(root) {
       `ecdh-${index}`,
       'process-message-ecdh-native',
       buildNativeCairoProcessMessageEcdhInput(input, index, stateful),
+      stateful.publicFields,
+    ));
+    manifest.decrypt.push(writePreparedRun(
+      root,
+      `decrypt-${index}`,
+      'process-message-decrypt-native',
+      buildNativeCairoProcessMessageDecryptInput(input, index, stateful),
       stateful.publicFields,
     ));
     manifest.signatures.push(writePreparedRun(
@@ -214,7 +223,7 @@ test('validates native ProcessMessages split proof links and detects tampering',
   const report = createNativeSplitLinkReport(manifestPath);
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.name).join('\n'));
   assert.equal(report.kind, 'processMessages');
-  assert.equal(report.counts.proofRuns, 17);
+  assert.equal(report.counts.proofRuns, 22);
   assert.equal(report.counts.failedChecks, 0);
 
   tamperRunField(manifest.ecdh[2], 'shared_key_hash');

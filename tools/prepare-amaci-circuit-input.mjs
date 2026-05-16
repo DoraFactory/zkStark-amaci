@@ -20,6 +20,7 @@ import {
   buildCairoProcessMessagesStatefulWithEcdhInput,
   buildCairoProcessMessagesStatefulWithEcdhSignatureInput,
   buildNativeCairoProcessMessageCoordKeyInput,
+  buildNativeCairoProcessMessageDecryptInput,
   buildNativeCairoProcessMessageEcdhInput,
   buildNativeCairoProcessMessageSignatureInput,
   buildNativeCairoProcessMessageStepCoreInput,
@@ -33,6 +34,7 @@ import {
   serializeCairoProcessMessagesStatefulWithEcdhExecutableArgs,
   serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs,
   serializeNativeCairoProcessMessageCoordKeyExecutableArgs,
+  serializeNativeCairoProcessMessageDecryptExecutableArgs,
   serializeNativeCairoProcessMessageEcdhExecutableArgs,
   serializeNativeCairoProcessMessageSignatureExecutableArgs,
   serializeNativeCairoProcessMessageStepCoreExecutableArgs,
@@ -172,6 +174,14 @@ const PREPARERS = {
     build: (input, evaluated, options) =>
       buildNativeCairoProcessMessageEcdhInput(input, options.messageIndex, evaluated),
     serialize: serializeNativeCairoProcessMessageEcdhExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-decrypt-native': {
+    executable: 'process_message_decrypt_native',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessMessageDecryptInput(input, options.messageIndex, evaluated),
+    serialize: serializeNativeCairoProcessMessageDecryptExecutableArgs,
     requiresMessageIndex: true,
   },
   'process-message-signature': {

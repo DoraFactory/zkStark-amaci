@@ -215,13 +215,15 @@ function buildProcessMessagesReport(manifestPath, manifest) {
   const boundary = loadManifestRun(manifestPath, manifest.boundary, 'boundary');
   const coordKey = loadManifestRun(manifestPath, manifest.coordKey, 'coordKey');
   const ecdh = loadManifestRunArray(manifestPath, manifest, 'ecdh', BATCH_SIZE, checks);
+  const decrypt = loadManifestRunArray(manifestPath, manifest, 'decrypt', BATCH_SIZE, checks);
   const signatures = loadManifestRunArray(manifestPath, manifest, 'signatures', BATCH_SIZE, checks);
   const cores = loadManifestRunArray(manifestPath, manifest, 'cores', BATCH_SIZE, checks);
-  const runs = [boundary, coordKey, ...ecdh, ...signatures, ...cores];
+  const runs = [boundary, coordKey, ...ecdh, ...decrypt, ...signatures, ...cores];
 
   expectCircuit(checks, boundary, 'process-messages-boundary-native');
   expectCircuit(checks, coordKey, 'process-message-coord-key-native');
   ecdh.forEach((run) => expectCircuit(checks, run, 'process-message-ecdh-native'));
+  decrypt.forEach((run) => expectCircuit(checks, run, 'process-message-decrypt-native'));
   signatures.forEach((run) => expectCircuit(checks, run, 'process-message-signature-native'));
   cores.forEach((run) => expectCircuit(checks, run, 'process-message-step-core-native'));
 
@@ -237,13 +239,15 @@ function buildProcessMessagesReport(manifestPath, manifest) {
 
   for (let index = 0; index < BATCH_SIZE; index += 1) {
     const ecdhRun = ecdh[index];
+    const decryptRun = decrypt[index];
     const signatureRun = signatures[index];
     const coreRun = cores[index];
-    if (!ecdhRun || !signatureRun || !coreRun) {
+    if (!ecdhRun || !decryptRun || !signatureRun || !coreRun) {
       continue;
     }
 
     expectLiteral(checks, `ecdh[${index}] message index`, ecdhRun, 'message_index', index);
+    expectLiteral(checks, `decrypt[${index}] message index`, decryptRun, 'message_index', index);
     expectLiteral(checks, `signature[${index}] message index`, signatureRun, 'message_index', index);
     expectLiteral(checks, `core[${index}] message index`, coreRun, 'message_index', index);
 
@@ -263,6 +267,14 @@ function buildProcessMessagesReport(manifestPath, manifest) {
       coreRun,
       'coord_priv_key_hash',
     );
+    expectFieldEq(
+      checks,
+      `coord private key links coord-key to decrypt[${index}]`,
+      coordKey,
+      'coord_priv_key_hash',
+      decryptRun,
+      'coord_priv_key_hash',
+    );
     expectFieldEq(checks, `ecdh[${index}] enc public key links to core`, ecdhRun, 'enc_pub_key_hash', coreRun, 'enc_pub_key_hash');
     expectFieldEq(checks, `ecdh[${index}] shared key links to core`, ecdhRun, 'shared_key_hash', coreRun, 'shared_key_hash');
     expectFieldEq(
@@ -272,6 +284,24 @@ function buildProcessMessagesReport(manifestPath, manifest) {
       'shared_key_binding_hash',
       coreRun,
       'shared_key_binding_hash',
+    );
+    expectFieldEq(checks, `decrypt[${index}] c1 links to core`, decryptRun, 'c1_hash', coreRun, 'state_ciphertext_c1_hash');
+    expectFieldEq(checks, `decrypt[${index}] c2 links to core`, decryptRun, 'c2_hash', coreRun, 'state_ciphertext_c2_hash');
+    expectFieldEq(
+      checks,
+      `decrypt[${index}] odd flag links to core`,
+      decryptRun,
+      'decrypt_is_odd',
+      coreRun,
+      'state_decrypt_is_odd',
+    );
+    expectFieldEq(
+      checks,
+      `decrypt[${index}] binding links to core`,
+      decryptRun,
+      'decrypt_binding_hash',
+      coreRun,
+      'state_decrypt_binding_hash',
     );
     expectFieldEq(checks, `signature[${index}] public key links to core`, signatureRun, 'pub_key_hash', coreRun, 'signature_pub_key_hash');
     expectFieldEq(checks, `signature[${index}] r8 links to core`, signatureRun, 'r8_hash', coreRun, 'signature_r8_hash');

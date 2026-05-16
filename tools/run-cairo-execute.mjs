@@ -66,6 +66,12 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-decrypt-native': {
+    prepareCircuit: 'process-message-decrypt-native',
+    executable: 'process_message_decrypt_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-message-signature': {
     prepareCircuit: 'process-message-signature',
     executable: 'process_message_signature',

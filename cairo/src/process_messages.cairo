@@ -46,6 +46,8 @@ pub const PROCESS_MESSAGE_COORD_KEY_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f434f4f52445f4e4154495645;
 pub const PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f454344485f4e4154495645;
+pub const PROCESS_MESSAGE_DECRYPT_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f504d53475f4445435f4e4154495645;
 pub const PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f5349475f4e4154495645;
 pub const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
@@ -56,6 +58,8 @@ pub const NATIVE_COORD_KEY_BINDING_DOMAIN: felt252 =
 pub const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
 pub const NATIVE_COMMAND_PLAINTEXT_DOMAIN: felt252 =
     0x414d4143495f504d53475f434d445f504c41494e;
+pub const NATIVE_DECRYPT_BINDING_DOMAIN: felt252 =
+    0x414d4143495f504d53475f4445435f42494e44;
 pub const NATIVE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f504d53475f534841524544;
 
 #[derive(Copy, Drop, Serde)]
@@ -237,6 +241,13 @@ pub struct NativeProcessMessageEcdhWitness {
     pub shared_key: U256x2,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageDecryptWitness {
+    pub coord_priv_key: u256,
+    pub c1: U256x2,
+    pub c2: U256x2,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessMessageSignatureWitness {
     pub pub_key: U256x2,
@@ -275,6 +286,16 @@ pub struct NativeProcessMessageEcdhPublicFields {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageDecryptPublicFields {
+    pub message_index: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub c1_hash: felt252,
+    pub c2_hash: felt252,
+    pub decrypt_is_odd: felt252,
+    pub decrypt_binding_hash: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct NativeProcessMessageSignaturePublicFields {
     pub message_index: felt252,
     pub pub_key_hash: felt252,
@@ -301,6 +322,10 @@ pub struct NativeProcessMessageStepCorePublicFields {
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
     pub shared_key_binding_hash: felt252,
+    pub state_ciphertext_c1_hash: felt252,
+    pub state_ciphertext_c2_hash: felt252,
+    pub state_decrypt_is_odd: felt252,
+    pub state_decrypt_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
@@ -338,6 +363,23 @@ pub struct NativeProcessMessageEcdhPublicOutput {
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
     pub shared_key_binding_hash: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageDecryptPublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub hash_scheme: felt252,
+    pub state_tree_depth: felt252,
+    pub vote_option_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub c1_hash: felt252,
+    pub c2_hash: felt252,
+    pub decrypt_is_odd: felt252,
+    pub decrypt_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -381,6 +423,10 @@ pub struct NativeProcessMessageStepCorePublicOutput {
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
     pub shared_key_binding_hash: felt252,
+    pub state_ciphertext_c1_hash: felt252,
+    pub state_ciphertext_c2_hash: felt252,
+    pub state_decrypt_is_odd: felt252,
+    pub state_decrypt_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
@@ -423,7 +469,6 @@ pub struct NativeProcessMessageStepCoreWitness {
     pub coord_priv_key: u256,
     pub current_state_salt: u256,
     pub new_state_salt: u256,
-    pub state_decrypt: ElGamalDecryptWitness,
     pub process_one: ProcessOneStateTransitionWitness,
 }
 
@@ -995,6 +1040,24 @@ fn native_command_plaintext_binding_hash(
     )
 }
 
+fn native_decrypt_binding_hash(
+    coord_priv_key_hash: felt252,
+    c1_hash: felt252,
+    c2_hash: felt252,
+    decrypt_is_odd: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_DECRYPT_BINDING_DOMAIN,
+            coord_priv_key_hash,
+            c1_hash,
+            c2_hash,
+            decrypt_is_odd,
+        ]
+            .span(),
+    )
+}
+
 fn native_coord_key_binding_hash(
     coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
 ) -> felt252 {
@@ -1225,6 +1288,28 @@ fn verify_native_process_message_ecdh(
     );
 }
 
+fn verify_native_process_message_decrypt(
+    fields: NativeProcessMessageDecryptPublicFields, witness: NativeProcessMessageDecryptWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    assert(fields.decrypt_is_odd == 0 || fields.decrypt_is_odd == 1, 'BAD_DEC_BOOL');
+    assert(
+        native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
+        'N_COORD_PRIV',
+    );
+    assert(native_hash_u256x2(witness.c1) == fields.c1_hash, 'N_C1');
+    assert(native_hash_u256x2(witness.c2) == fields.c2_hash, 'N_C2');
+    assert(
+        native_decrypt_binding_hash(
+            fields.coord_priv_key_hash,
+            fields.c1_hash,
+            fields.c2_hash,
+            fields.decrypt_is_odd,
+        ) == fields.decrypt_binding_hash,
+        'N_DECRYPT_BIND',
+    );
+}
+
 fn verify_native_process_message_signature(
     fields: NativeProcessMessageSignaturePublicFields, witness: NativeProcessMessageSignatureWitness,
 ) {
@@ -1273,6 +1358,28 @@ fn verify_native_process_message_step_core(
             fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.shared_key_hash,
         ) == fields.shared_key_binding_hash,
         'N_SHARED_BIND',
+    );
+    assert(fields.state_decrypt_is_odd == 0 || fields.state_decrypt_is_odd == 1, 'BAD_DEC_BOOL');
+    assert(
+        native_hash_u256x2(
+            U256x2 { v0: witness.process_one.state_leaf.v5, v1: witness.process_one.state_leaf.v6 },
+        ) == fields.state_ciphertext_c1_hash,
+        'N_STATE_C1',
+    );
+    assert(
+        native_hash_u256x2(
+            U256x2 { v0: witness.process_one.state_leaf.v7, v1: witness.process_one.state_leaf.v8 },
+        ) == fields.state_ciphertext_c2_hash,
+        'N_STATE_C2',
+    );
+    assert(
+        native_decrypt_binding_hash(
+            fields.coord_priv_key_hash,
+            fields.state_ciphertext_c1_hash,
+            fields.state_ciphertext_c2_hash,
+            fields.state_decrypt_is_odd,
+        ) == fields.state_decrypt_binding_hash,
+        'N_STATE_DEC_BIND',
     );
     assert(
         native_hash_u256x2(
@@ -1334,13 +1441,12 @@ fn verify_native_process_message_step_core(
     if is_zero(witness.enc_pub_key.v0) {
         assert_u256_eq(witness.process_one.is_valid, zero_u256());
     } else {
-        let decryption_is_odd = assert_elgamal_decrypt(
-            witness.state_decrypt,
-            witness.coord_priv_key,
-            U256x2 { v0: witness.process_one.state_leaf.v5, v1: witness.process_one.state_leaf.v6 },
-            U256x2 { v0: witness.process_one.state_leaf.v7, v1: witness.process_one.state_leaf.v8 },
+        assert(witness.process_one.is_decryption_active.high == 0, 'DEC_BOOL_HIGH');
+        assert(
+            felt_from_u128(witness.process_one.is_decryption_active.low)
+                == 1 - fields.state_decrypt_is_odd,
+            'DEC_ACTIVE',
         );
-        assert_u256_eq(witness.process_one.is_decryption_active, bool_to_u256(!decryption_is_odd));
         let _validation = validate_process_one_command(witness.process_one);
     };
     assert(native_new_state_root == fields.new_state_root_hash, 'N_NEW_ROOT');
@@ -2287,6 +2393,34 @@ pub fn process_message_ecdh_native_main(
     build_native_process_message_ecdh_public_output(fields)
 }
 
+fn build_native_process_message_decrypt_public_output(
+    fields: NativeProcessMessageDecryptPublicFields,
+) -> NativeProcessMessageDecryptPublicOutput {
+    NativeProcessMessageDecryptPublicOutput {
+        magic: crate::public_output::PUBLIC_OUTPUT_MAGIC,
+        version: NATIVE_PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_MESSAGE_DECRYPT_NATIVE_CIRCUIT_ID,
+        hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
+        state_tree_depth: 2,
+        vote_option_tree_depth: 1,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        coord_priv_key_hash: fields.coord_priv_key_hash,
+        c1_hash: fields.c1_hash,
+        c2_hash: fields.c2_hash,
+        decrypt_is_odd: fields.decrypt_is_odd,
+        decrypt_binding_hash: fields.decrypt_binding_hash,
+    }
+}
+
+#[executable]
+pub fn process_message_decrypt_native_main(
+    fields: NativeProcessMessageDecryptPublicFields, witness: NativeProcessMessageDecryptWitness,
+) -> NativeProcessMessageDecryptPublicOutput {
+    verify_native_process_message_decrypt(fields, witness);
+    build_native_process_message_decrypt_public_output(fields)
+}
+
 #[executable]
 pub fn process_message_signature_main(
     fields: ProcessMessageSignaturePublicFields, witness: ProcessMessageSignatureWitness,
@@ -2349,6 +2483,10 @@ fn build_native_process_message_step_core_public_output(
         enc_pub_key_hash: fields.enc_pub_key_hash,
         shared_key_hash: fields.shared_key_hash,
         shared_key_binding_hash: fields.shared_key_binding_hash,
+        state_ciphertext_c1_hash: fields.state_ciphertext_c1_hash,
+        state_ciphertext_c2_hash: fields.state_ciphertext_c2_hash,
+        state_decrypt_is_odd: fields.state_decrypt_is_odd,
+        state_decrypt_binding_hash: fields.state_decrypt_binding_hash,
         signature_pub_key_hash: fields.signature_pub_key_hash,
         signature_r8_hash: fields.signature_r8_hash,
         packed_command_hash: fields.packed_command_hash,

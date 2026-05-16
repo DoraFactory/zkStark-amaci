@@ -82,10 +82,12 @@ test(
   () => {
     const coordKey = runCircuit('process-message-coord-key-native');
     const ecdh = runCircuit('process-message-ecdh-native', { messageIndex: 3 });
+    const decrypt = runCircuit('process-message-decrypt-native', { messageIndex: 3 });
     const signature = runCircuit('process-message-signature-native', { messageIndex: 3 });
     const core = runCircuit('process-message-step-core-native', { messageIndex: 3 });
     assert.equal(coordKey.executable, 'process_message_coord_key_native');
     assert.equal(ecdh.executable, 'process_message_ecdh_native');
+    assert.equal(decrypt.executable, 'process_message_decrypt_native');
     assert.equal(signature.executable, 'process_message_signature_native');
     assert.equal(core.executable, 'process_message_step_core_native');
   },

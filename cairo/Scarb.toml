@@ -81,6 +81,10 @@ name = "process_message_ecdh_native"
 function = "zkstark_amaci_tally::process_messages::process_message_ecdh_native_main"
 
 [[target.executable]]
+name = "process_message_decrypt_native"
+function = "zkstark_amaci_tally::process_messages::process_message_decrypt_native_main"
+
+[[target.executable]]
 name = "process_message_signature"
 function = "zkstark_amaci_tally::process_messages::process_message_signature_main"
 

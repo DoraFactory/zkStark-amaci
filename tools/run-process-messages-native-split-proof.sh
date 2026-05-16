@@ -12,8 +12,9 @@ This proves the small ProcessMessages relation as Starknet-native linked pieces:
   1. one process-messages-boundary-native proof
   2. one process-message-coord-key-native proof
   3. five process-message-ecdh-native proofs
-  4. five process-message-signature-native proofs
-  5. five process-message-step-core-native proofs
+  4. five process-message-decrypt-native proofs
+  5. five process-message-signature-native proofs
+  6. five process-message-step-core-native proofs
 
 If --input is omitted, the current small synthetic ProcessMessages fixture is
 generated under the output directory.
@@ -72,6 +73,12 @@ for message_index in 0 1 2 3 4; do
     --out-dir "$OUT_DIR/ecdh-$message_index"
 
   "$ROOT_DIR/tools/run-cairo-proof.sh" \
+    --circuit process-message-decrypt-native \
+    --input "$INPUT_PATH" \
+    --message-index "$message_index" \
+    --out-dir "$OUT_DIR/decrypt-$message_index"
+
+  "$ROOT_DIR/tools/run-cairo-proof.sh" \
     --circuit process-message-signature-native \
     --input "$INPUT_PATH" \
     --message-index "$message_index" \
@@ -94,6 +101,15 @@ for message_index in 0 1 2 3 4; do
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/ecdh-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-messages-native-proofs.json"
+done
+printf '  ],\n' >> "$OUT_DIR/split-process-messages-native-proofs.json"
+printf '  "decrypt": [\n' >> "$OUT_DIR/split-process-messages-native-proofs.json"
+for message_index in 0 1 2 3 4; do
+  suffix=","
+  if [[ "$message_index" == "4" ]]; then
+    suffix=""
+  fi
+  printf '    "%s"%s\n' "$OUT_DIR/decrypt-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-messages-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-messages-native-proofs.json"
 printf '  "signatures": [\n' >> "$OUT_DIR/split-process-messages-native-proofs.json"
