@@ -132,8 +132,26 @@ function runStoneCliSerializer({ stoneCli, stoneProofPath, outDir, settings }) {
   return { command, result };
 }
 
+function resolveSwiftnessCargoDir(calldataGeneratorDir) {
+  const root = resolve(calldataGeneratorDir);
+  const candidates = [join(root, 'cli'), root];
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'Cargo.toml'))) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    [
+      'could not locate integrity calldata generator Cargo.toml',
+      `checked: ${candidates.map((candidate) => join(candidate, 'Cargo.toml')).join(', ')}`,
+      'clone https://github.com/HerodotusDev/integrity-calldata-generator.git or pass the directory that contains its Cargo.toml',
+    ].join('\n'),
+  );
+}
+
 function runSwiftnessSerializer({ calldataGeneratorDir, stoneProofPath, outDir, settings }) {
-  const cwd = join(resolve(calldataGeneratorDir), 'cli');
+  const cwd = resolveSwiftnessCargoDir(calldataGeneratorDir);
   const generatorOutDir = join(cwd, 'calldata');
   ensureEmptyDir(generatorOutDir);
   const command = [

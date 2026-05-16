@@ -118,6 +118,7 @@ test('runs swiftness split generator and copies cli/calldata output', () => {
 
   mkdirSync(fakeBin, { recursive: true });
   mkdirSync(generatorCliDir, { recursive: true });
+  writeFileSync(join(generatorCliDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
   writeFileSync(stoneProof, '{"proof":[]}\n');
   writeFileSync(
     fakeCargo,
@@ -149,6 +150,52 @@ test('runs swiftness split generator and copies cli/calldata output', () => {
     const parsed = JSON.parse(readFileSync(out, 'utf8'));
     assert.equal(parsed.serializer.mode, 'swiftness-split');
     assert.equal(parsed.files.full.feltCount, 4);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test('runs swiftness split generator from root Cargo.toml when cli Cargo.toml is absent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-swiftness-root-calldata-'));
+  const fakeBin = join(dir, 'bin');
+  const generatorDir = join(dir, 'integrity-calldata-generator');
+  const argsLog = join(dir, 'cargo-args.txt');
+  const fakeCargo = join(fakeBin, 'cargo');
+  const stoneProof = join(dir, 'stone-proof.json');
+  const outDir = join(dir, 'integrity-split');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(generatorDir, { recursive: true });
+  writeFileSync(join(generatorDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
+  writeFileSync(stoneProof, '{"proof":[]}\n');
+  writeFileSync(
+    fakeCargo,
+    [
+      '#!/usr/bin/env sh',
+      `printf "%s\\n" "$@" > ${JSON.stringify(argsLog)}`,
+      'mkdir -p calldata',
+      'printf "20\\n" > calldata/initial',
+      'printf "21 22\\n" > calldata/step1',
+      'printf "23\\n" > calldata/final',
+    ].join('\n') + '\n',
+  );
+  chmodSync(fakeCargo, 0o755);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${fakeBin}:${previousPath}`;
+  try {
+    const result = buildIntegritySplitCalldataPackage({
+      stoneProofPath: stoneProof,
+      calldataGeneratorDir: generatorDir,
+      outDir,
+      out,
+    });
+
+    assert.equal(result.calldataFelts, 4);
+    assert.equal(existsSync(join(outDir, 'split-calldata', 'initial')), true);
+    const parsed = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(parsed.serializer.cwd, generatorDir);
   } finally {
     process.env.PATH = previousPath;
   }
