@@ -54,6 +54,8 @@ pub const PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 pub const NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f44454143545f41555448;
+pub const NATIVE_DEACTIVATE_COORD_KEY_BINDING_DOMAIN: felt252 =
+    0x414d4143495f44454143545f434f4f52445f42494e44;
 pub const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
     0x414d4143495f44454143545f534841524544;
 pub const NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN: felt252 =
@@ -152,6 +154,12 @@ pub struct ProcessDeactivateCoordKeyWitness {
     pub coord_priv_key_hash: Hash2Claim,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateCoordKeyWitness {
+    pub coord_priv_key: u256,
+    pub coord_pub_key: U256x2,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessDeactivateEcdhWitness {
     pub coord_priv_key: u256,
@@ -212,6 +220,7 @@ pub struct NativeProcessDeactivateDecryptWitness {
 pub struct NativeProcessDeactivateCoordKeyPublicFields {
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
+    pub coord_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -294,6 +303,7 @@ pub struct NativeProcessDeactivateCoordKeyPublicOutput {
     pub message_batch_size: felt252,
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
+    pub coord_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -856,6 +866,19 @@ fn native_deactivate_command_auth_hash(
     )
 }
 
+fn native_deactivate_coord_key_binding_hash(
+    coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_DEACTIVATE_COORD_KEY_BINDING_DOMAIN,
+            coord_pub_key_hash,
+            coord_priv_key_hash,
+        ]
+            .span(),
+    )
+}
+
 fn native_deactivate_shared_key_binding_hash(
     ecdh_kind: felt252,
     coord_priv_key_hash: felt252,
@@ -1009,15 +1032,18 @@ fn native_quinary_root_depth_4(
 }
 
 fn verify_native_process_deactivate_coord_key(
-    fields: NativeProcessDeactivateCoordKeyPublicFields, witness: ProcessDeactivateCoordKeyWitness,
+    fields: NativeProcessDeactivateCoordKeyPublicFields, witness: NativeProcessDeactivateCoordKeyWitness,
 ) {
-    assert_coord_pub_key_matches_private_key(
-        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
-    );
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(
         native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
         'N_COORD_PRIV',
+    );
+    assert(
+        native_deactivate_coord_key_binding_hash(
+            fields.coord_pub_key_hash, fields.coord_priv_key_hash,
+        ) == fields.coord_key_binding_hash,
+        'N_COORD_BIND',
     );
 }
 
@@ -1935,12 +1961,14 @@ fn build_native_process_deactivate_coord_key_public_output(
         message_batch_size: 5,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
+        coord_key_binding_hash: fields.coord_key_binding_hash,
     }
 }
 
 #[executable]
 pub fn process_deactivate_coord_key_native_main(
-    fields: NativeProcessDeactivateCoordKeyPublicFields, witness: ProcessDeactivateCoordKeyWitness,
+    fields: NativeProcessDeactivateCoordKeyPublicFields,
+    witness: NativeProcessDeactivateCoordKeyWitness,
 ) -> NativeProcessDeactivateCoordKeyPublicOutput {
     verify_native_process_deactivate_coord_key(fields, witness);
     build_native_process_deactivate_coord_key_public_output(fields)

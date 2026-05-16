@@ -5,6 +5,7 @@ import {
   PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_NATIVE_COMMAND_AUTH_DOMAIN,
+  PROCESS_DEACTIVATE_NATIVE_COORD_KEY_BINDING_DOMAIN,
   PROCESS_DEACTIVATE_NATIVE_DECRYPT_BINDING_DOMAIN,
   PROCESS_DEACTIVATE_NATIVE_SHARED_KEY_DOMAIN,
   PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
@@ -72,6 +73,13 @@ function nativeHashPoint(values, label) {
 
 function nativeCoordPrivKeyHash(coordPrivKey) {
   return nativeHashFelts([coordPrivKey, PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN], 'coordPrivKey');
+}
+
+function nativeDeactivateCoordKeyBindingHash(coordPubKeyHash, coordPrivKeyHash) {
+  return nativeHashFelts(
+    [PROCESS_DEACTIVATE_NATIVE_COORD_KEY_BINDING_DOMAIN, coordPubKeyHash, coordPrivKeyHash],
+    'deactivateCoordKeyBinding',
+  );
 }
 
 function nativePackedCmdHash(packedCmd) {
@@ -1107,20 +1115,23 @@ export function buildCairoProcessDeactivateDecryptInput(
 
 export function buildNativeCairoProcessDeactivateCoordKeyInput(rawInput, evaluated) {
   const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
-  const legacy = buildCairoProcessDeactivateCoordKeyInput(rawInput, result);
+  const coordPubKeyHash = nativeHashPoint(rawInput.coordPubKey, 'coordPubKey');
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(result.state.input.coordPrivKey);
   const publicFields = {
-    coord_pub_key_hash: nativeHashPoint(rawInput.coordPubKey, 'coordPubKey'),
-    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+    coord_pub_key_hash: coordPubKeyHash,
+    coord_priv_key_hash: coordPrivKeyHash,
+    coord_key_binding_hash: nativeDeactivateCoordKeyBindingHash(coordPubKeyHash, coordPrivKeyHash),
   };
   const fields = {
     coord_pub_key_hash: feltObject(publicFields.coord_pub_key_hash),
     coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
+    coord_key_binding_hash: feltObject(publicFields.coord_key_binding_hash),
   };
   const publicOutput = nativeProcessDeactivatePublicOutput(
     PROCESS_DEACTIVATE_COORD_KEY_NATIVE_CIRCUIT_ID,
     publicFields,
     result.params,
-    ['coord_pub_key_hash', 'coord_priv_key_hash'],
+    ['coord_pub_key_hash', 'coord_priv_key_hash', 'coord_key_binding_hash'],
   );
 
   return {
@@ -1128,9 +1139,15 @@ export function buildNativeCairoProcessDeactivateCoordKeyInput(rawInput, evaluat
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processDeactivate: rawInput,
+      nativeCoordKeyBinding: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1918,6 +1935,7 @@ function pushProcessDeactivateCoordKeyFields(args, fields) {
 function pushNativeProcessDeactivateCoordKeyFields(args, fields) {
   pushFelt(args, fields.coord_pub_key_hash);
   pushFelt(args, fields.coord_priv_key_hash);
+  pushFelt(args, fields.coord_key_binding_hash);
 }
 
 function pushProcessDeactivateEcdhFields(args, fields) {
@@ -2131,6 +2149,11 @@ function pushProcessDeactivateCoordKeyWitness(args, witness) {
   pushHash2Claim(args, witness.coord_priv_key_hash);
 }
 
+function pushNativeProcessDeactivateCoordKeyWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.coord_pub_key);
+}
+
 function pushProcessDeactivateEcdhWitness(args, witness) {
   pushU256(args, witness.coord_priv_key);
   pushVector2(args, witness.base);
@@ -2248,7 +2271,7 @@ export function serializeCairoProcessDeactivateCoordKeyExecutableArgs(cairoInput
 export function serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessDeactivateCoordKeyFields(args, cairoInput.program_input.fields);
-  pushProcessDeactivateCoordKeyWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessDeactivateCoordKeyWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

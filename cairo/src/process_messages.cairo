@@ -51,6 +51,8 @@ pub const PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
 pub const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
+pub const NATIVE_COORD_KEY_BINDING_DOMAIN: felt252 =
+    0x414d4143495f504d53475f434f4f52445f42494e44;
 pub const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
 pub const NATIVE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f504d53475f534841524544;
 
@@ -210,6 +212,12 @@ pub struct ProcessMessageCoordKeyWitness {
     pub coord_priv_key_hash: Hash2Claim,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageCoordKeyWitness {
+    pub coord_priv_key: u256,
+    pub coord_pub_key: U256x2,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessMessageEcdhWitness {
     pub coord_priv_key: u256,
@@ -252,6 +260,7 @@ pub struct NativeProcessMessageSignatureWitness {
 pub struct NativeProcessMessageCoordKeyPublicFields {
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
+    pub coord_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -309,6 +318,7 @@ pub struct NativeProcessMessageCoordKeyPublicOutput {
     pub message_batch_size: felt252,
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
+    pub coord_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -943,6 +953,14 @@ fn native_command_auth_hash(
     )
 }
 
+fn native_coord_key_binding_hash(
+    coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [NATIVE_COORD_KEY_BINDING_DOMAIN, coord_pub_key_hash, coord_priv_key_hash].span(),
+    )
+}
+
 fn native_shared_key_binding_hash(
     coord_priv_key_hash: felt252, enc_pub_key_hash: felt252, shared_key_hash: felt252,
 ) -> felt252 {
@@ -1133,15 +1151,17 @@ fn native_process_message_roots(
 }
 
 fn verify_native_process_message_coord_key(
-    fields: NativeProcessMessageCoordKeyPublicFields, witness: ProcessMessageCoordKeyWitness,
+    fields: NativeProcessMessageCoordKeyPublicFields, witness: NativeProcessMessageCoordKeyWitness,
 ) {
-    assert_coord_pub_key_matches_private_key(
-        witness.coord_priv_key, witness.coord_pub_key, witness.coord_pub_key_scalar_mul,
-    );
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(
         native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
         'N_COORD_PRIV',
+    );
+    assert(
+        native_coord_key_binding_hash(fields.coord_pub_key_hash, fields.coord_priv_key_hash)
+            == fields.coord_key_binding_hash,
+        'N_COORD_BIND',
     );
 }
 
@@ -2166,12 +2186,13 @@ fn build_native_process_message_coord_key_public_output(
         message_batch_size: 5,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
+        coord_key_binding_hash: fields.coord_key_binding_hash,
     }
 }
 
 #[executable]
 pub fn process_message_coord_key_native_main(
-    fields: NativeProcessMessageCoordKeyPublicFields, witness: ProcessMessageCoordKeyWitness,
+    fields: NativeProcessMessageCoordKeyPublicFields, witness: NativeProcessMessageCoordKeyWitness,
 ) -> NativeProcessMessageCoordKeyPublicOutput {
     verify_native_process_message_coord_key(fields, witness);
     build_native_process_message_coord_key_public_output(fields)

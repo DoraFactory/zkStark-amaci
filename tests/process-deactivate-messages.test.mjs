@@ -544,7 +544,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   const transition = evaluated.state.transitions[2];
   const nativeRoots = nativeProcessDeactivateTransitionContexts(evaluated.state)[2];
 
-  assert.equal(coordKey.public_output.length, 9);
+  assert.equal(coordKey.public_output.length, 10);
   assert.equal(commandEcdh.public_output.length, 13);
   assert.equal(leafEcdh.public_output.length, 13);
   assert.equal(signature.public_output.length, 14);
@@ -558,6 +558,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(commandEcdh.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
   assert.equal(currentDecrypt.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
   assert.equal(core.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
+  assert.ok(coordKey.publicFields.coord_key_binding_hash > 0n);
   assert.equal(core.publicFields.enc_pub_key_hash, commandEcdh.publicFields.base_hash);
   assert.equal(core.publicFields.command_shared_key_hash, commandEcdh.publicFields.shared_key_hash);
   assert.equal(core.publicFields.command_shared_key_binding_hash, commandEcdh.publicFields.shared_key_binding_hash);

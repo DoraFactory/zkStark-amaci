@@ -133,6 +133,18 @@ function expectFieldEq(checks, name, leftRun, leftAliases, rightRun, rightAliase
   );
 }
 
+function expectFieldPresent(checks, name, run, aliases) {
+  addCheck(checks, name, () => {
+    const value = getField(run, aliases);
+    checks.push({
+      name,
+      ok: true,
+      actual: formatValue(value),
+      actualField: `${run.role}.${Array.isArray(aliases) ? aliases[0] : aliases}`,
+    });
+  });
+}
+
 function expectLiteral(checks, name, run, aliases, expected) {
   expectEq(
     checks,
@@ -221,6 +233,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
     coordKey,
     'coord_pub_key_hash',
   );
+  expectFieldPresent(checks, 'coord-key binding is present', coordKey, 'coord_key_binding_hash');
 
   for (let index = 0; index < BATCH_SIZE; index += 1) {
     const ecdhRun = ecdh[index];
@@ -410,6 +423,7 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     coordKey,
     'coord_pub_key_hash',
   );
+  expectFieldPresent(checks, 'coord-key binding is present', coordKey, 'coord_key_binding_hash');
 
   for (let index = 0; index < BATCH_SIZE; index += 1) {
     const commandRun = commandEcdh[index];

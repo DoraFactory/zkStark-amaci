@@ -4,6 +4,7 @@ import {
   PROCESS_MESSAGE_COORD_KEY_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
   PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID,
+  PROCESS_MESSAGE_NATIVE_COORD_KEY_BINDING_DOMAIN,
   PROCESS_MESSAGE_NATIVE_COMMAND_AUTH_DOMAIN,
   PROCESS_MESSAGE_NATIVE_SHARED_KEY_DOMAIN,
   PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID,
@@ -68,6 +69,13 @@ function nativeHashPoint(values, label) {
 
 function nativeCoordPrivKeyHash(coordPrivKey) {
   return nativeHashFelts([coordPrivKey, PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN], 'coordPrivKey');
+}
+
+function nativeCoordKeyBindingHash(coordPubKeyHash, coordPrivKeyHash) {
+  return nativeHashFelts(
+    [PROCESS_MESSAGE_NATIVE_COORD_KEY_BINDING_DOMAIN, coordPubKeyHash, coordPrivKeyHash],
+    'coordKeyBinding',
+  );
 }
 
 function nativePackedCommandHash(packedCommand) {
@@ -955,21 +963,24 @@ export function buildCairoProcessMessageSignatureInput(rawInput, messageIndex, e
 }
 
 export function buildNativeCairoProcessMessageCoordKeyInput(rawInput, evaluated) {
-  const legacy = buildCairoProcessMessageCoordKeyInput(rawInput, evaluated);
   const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
+  const coordPubKeyHash = nativeHashPoint(rawInput.coordPubKey, 'coordPubKey');
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(rawInput.coordPrivKey);
   const publicFields = {
-    coord_pub_key_hash: nativeHashPoint(rawInput.coordPubKey, 'coordPubKey'),
-    coord_priv_key_hash: nativeCoordPrivKeyHash(rawInput.coordPrivKey),
+    coord_pub_key_hash: coordPubKeyHash,
+    coord_priv_key_hash: coordPrivKeyHash,
+    coord_key_binding_hash: nativeCoordKeyBindingHash(coordPubKeyHash, coordPrivKeyHash),
   };
   const fields = {
     coord_pub_key_hash: feltObject(publicFields.coord_pub_key_hash),
     coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
+    coord_key_binding_hash: feltObject(publicFields.coord_key_binding_hash),
   };
   const publicOutput = nativeProcessMessagePublicOutput(
     PROCESS_MESSAGE_COORD_KEY_NATIVE_CIRCUIT_ID,
     publicFields,
     result.params,
-    ['coord_pub_key_hash', 'coord_priv_key_hash'],
+    ['coord_pub_key_hash', 'coord_priv_key_hash', 'coord_key_binding_hash'],
   );
 
   return {
@@ -977,9 +988,15 @@ export function buildNativeCairoProcessMessageCoordKeyInput(rawInput, evaluated)
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        coord_pub_key: splitVector2(rawInput.coordPubKey, 'coordPubKey'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processMessages: rawInput,
+      nativeCoordKeyBinding: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1694,6 +1711,7 @@ function pushProcessMessageSignatureFields(args, fields) {
 function pushNativeProcessMessageCoordKeyFields(args, fields) {
   pushFelt(args, fields.coord_pub_key_hash);
   pushFelt(args, fields.coord_priv_key_hash);
+  pushFelt(args, fields.coord_key_binding_hash);
 }
 
 function pushNativeProcessMessageEcdhFields(args, fields) {
@@ -1910,6 +1928,11 @@ function pushProcessMessageCoordKeyWitness(args, witness) {
   pushHash2Claim(args, witness.coord_priv_key_hash);
 }
 
+function pushNativeProcessMessageCoordKeyWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.coord_pub_key);
+}
+
 function pushProcessMessageEcdhWitness(args, witness) {
   pushU256(args, witness.coord_priv_key);
   pushVector2(args, witness.enc_pub_key);
@@ -2065,7 +2088,7 @@ export function serializeCairoProcessMessageSignatureExecutableArgs(cairoInput) 
 export function serializeNativeCairoProcessMessageCoordKeyExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessMessageCoordKeyFields(args, cairoInput.program_input.fields);
-  pushProcessMessageCoordKeyWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessMessageCoordKeyWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

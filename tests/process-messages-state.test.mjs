@@ -517,7 +517,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   const transition = evaluated.state.transitions[3];
   const nativeRoots = nativeProcessMessageTransitionContexts(evaluated.state)[3];
 
-  assert.equal(coordKey.public_output.length, 9);
+  assert.equal(coordKey.public_output.length, 10);
   assert.equal(ecdh.public_output.length, 12);
   assert.equal(signature.public_output.length, 14);
   assert.equal(core.public_output.length, 27);
@@ -527,6 +527,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(core.publicFields.message_index, 3n);
   assert.equal(coordKey.publicFields.coord_priv_key_hash, ecdh.publicFields.coord_priv_key_hash);
   assert.equal(coordKey.publicFields.coord_priv_key_hash, core.publicFields.coord_priv_key_hash);
+  assert.ok(coordKey.publicFields.coord_key_binding_hash > 0n);
   assert.equal(ecdh.publicFields.enc_pub_key_hash, core.publicFields.enc_pub_key_hash);
   assert.equal(ecdh.publicFields.shared_key_hash, core.publicFields.shared_key_hash);
   assert.equal(ecdh.publicFields.shared_key_binding_hash, core.publicFields.shared_key_binding_hash);
