@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TREE_ARITY } from '../src/constants.mjs';
+import { ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN, TREE_ARITY } from '../src/constants.mjs';
 import { addNewKeyInputHash } from '../src/compat/encoding.mjs';
 import { BABYJUB_BASE8, babyjubAdd, babyjubScalarMul } from '../src/compat/babyjub.mjs';
 import { hash5, hashLeftRight } from '../src/compat/poseidon.mjs';
+import { poseidonManyFelts } from '../src/integrity/hashes.mjs';
+import { toStarkFelt } from '../src/tally/native-tally-votes.mjs';
 import { evaluateAddNewKey } from '../src/add-new-key/add-new-key.mjs';
 import {
   buildCairoAddNewKeyInput,
@@ -141,10 +143,17 @@ test('builds native public hash arguments for AddNewKey', () => {
   const cairoInput = buildNativeCairoAddNewKeyInput(input, evaluated);
   const legacyInput = buildCairoAddNewKeyInput(input, evaluated);
   const args = serializeNativeCairoAddNewKeyExecutableArgs(cairoInput);
+  const expectedNativeNullifier = poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+    toStarkFelt(evaluated.input.oldPrivateKey),
+    toStarkFelt(evaluated.input.pollId),
+  ]);
 
   assert.equal(cairoInput.public_output.length, 14);
   assert.ok(cairoInput.public_output_labels.includes('hash_scheme'));
+  assert.equal(cairoInput.publicFields.deactivate_root_hash, toStarkFelt(evaluated.input.deactivateRoot));
   assert.equal(cairoInput.publicFields.poll_id, evaluated.input.pollId);
+  assert.equal(cairoInput.publicFields.nullifier, expectedNativeNullifier);
   assert.notEqual(cairoInput.publicFields.coord_pub_key_hash, evaluated.publicFields.coordPubKeyHash);
   assert.notEqual(cairoInput.publicFields.new_pub_key_hash, evaluated.publicFields.newPubKeyHash);
   assert.notEqual(cairoInput.publicFields.input_hash, evaluated.publicFields.inputHash);

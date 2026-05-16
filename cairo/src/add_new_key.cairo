@@ -22,6 +22,7 @@ pub const ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e41544956455f494e505554;
 pub const ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e554c4c4946494552;
+pub const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 
 #[derive(Copy, Drop, Serde)]
 pub struct AddNewKeyHashTranscript {
@@ -196,30 +197,20 @@ fn felt_from_u128(value: u128) -> felt252 {
     value.into()
 }
 
-fn native_hash_u256(value: u256) -> felt252 {
-    poseidon_hash_span([felt_from_u128(value.low), felt_from_u128(value.high)].span())
+fn felt_from_u256(value: u256) -> felt252 {
+    felt_from_u128(value.low) + felt_from_u128(value.high) * FELT_TWO_POW_128
 }
 
 fn native_hash_u256x2(value: U256x2) -> felt252 {
-    poseidon_hash_span(
-        [
-            felt_from_u128(value.v0.low),
-            felt_from_u128(value.v0.high),
-            felt_from_u128(value.v1.low),
-            felt_from_u128(value.v1.high),
-        ]
-            .span(),
-    )
+    poseidon_hash_span([felt_from_u256(value.v0), felt_from_u256(value.v1)].span())
 }
 
 fn native_nullifier(old_private_key: u256, poll_id: u256) -> felt252 {
     poseidon_hash_span(
         [
             ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
-            felt_from_u128(old_private_key.low),
-            felt_from_u128(old_private_key.high),
-            felt_from_u128(poll_id.low),
-            felt_from_u128(poll_id.high),
+            felt_from_u256(old_private_key),
+            felt_from_u256(poll_id),
         ]
             .span(),
     )
@@ -278,7 +269,7 @@ fn verify_native_add_new_key(fields: NativeAddNewKeyPublicFields, witness: Nativ
         legacy.deactivate_leaf_path_3,
         legacy.deactivate_index,
     );
-    assert(native_hash_u256(deactivate_root) == fields.deactivate_root_hash, 'N_DEACT_ROOT');
+    assert(felt_from_u256(deactivate_root) == fields.deactivate_root_hash, 'N_DEACT_ROOT');
 
     assert_rerandomize(
         legacy.random_val,

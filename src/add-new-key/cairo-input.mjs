@@ -13,6 +13,7 @@ import {
   buildCairoEcdhSharedKeyInput,
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8 } from '../compat/babyjub.mjs';
+import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import { evaluateAddNewKey } from './add-new-key.mjs';
 
 function splitObject(value, label) {
@@ -27,31 +28,27 @@ function feltObject(value) {
   return value.toString();
 }
 
-function u256Limbs(value, label) {
-  const { low, high } = splitU256ToU128(value, label);
-  return [low, high];
+function nativeFelt(value, label) {
+  return toStarkFelt(value, label);
 }
 
-function nativeHashU256(value, label) {
-  return poseidonManyFelts(u256Limbs(value, label));
+function nativeHashFelts(values, label) {
+  return poseidonManyFelts(values.map((value, index) => nativeFelt(value, `${label}[${index}]`)));
 }
 
 function nativeHashPoint(values, label) {
   if (!Array.isArray(values) || values.length !== 2) {
     throw new Error(`${label} must contain two values`);
   }
-  return poseidonManyFelts([
-    ...u256Limbs(values[0], `${label}[0]`),
-    ...u256Limbs(values[1], `${label}[1]`),
-  ]);
+  return nativeHashFelts(values, label);
 }
 
 function nativeNullifier(oldPrivateKey, pollId) {
-  return poseidonManyFelts([
+  return nativeHashFelts([
     ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
-    ...u256Limbs(oldPrivateKey, 'oldPrivateKey'),
-    ...u256Limbs(pollId, 'pollId'),
-  ]);
+    oldPrivateKey,
+    pollId,
+  ], 'nullifier');
 }
 
 function nativeInputHash(fields) {
@@ -293,7 +290,7 @@ export function buildNativeCairoAddNewKeyInput(rawInput, evaluated) {
   const legacy = buildCairoAddNewKeyInput(rawInput, result);
   const input = result.input;
   const publicFields = {
-    deactivate_root_hash: nativeHashU256(input.deactivateRoot, 'deactivateRoot'),
+    deactivate_root_hash: nativeFelt(input.deactivateRoot, 'deactivateRoot'),
     coord_pub_key_hash: nativeHashPoint(input.coordPubKey, 'coordPubKey'),
     nullifier: nativeNullifier(input.oldPrivateKey, input.pollId),
     d1_hash: nativeHashPoint(input.d1, 'd1'),
