@@ -164,4 +164,9 @@ done
 printf '  ]\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '}\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 
+node "$ROOT_DIR/tools/check-native-split-links.mjs" \
+  "$OUT_DIR/split-process-deactivate-native-proofs.json" \
+  --out "$OUT_DIR/native-split-link-report.json" \
+  --text
+
 echo "Native split ProcessDeactivate proof metadata written to: $OUT_DIR/split-process-deactivate-native-proofs.json"

@@ -86,6 +86,7 @@
     "prove:process-deactivate-decrypt-current-native": "tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-current-native",
     "prove:process-deactivate-decrypt-new-native": "tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-new-native",
     "prove:process-deactivate-step-core-native": "tools/run-cairo-proof.sh --circuit process-deactivate-step-core-native",
+    "check:native-split-links": "node tools/check-native-split-links.mjs",
     "check:integrity": "node tools/check-integrity-compatibility.mjs",
     "check:integrity:tally": "node tools/check-integrity-compatibility.mjs target/cairo-proof/tally/proof-run.json",
     "export:integrity-handoff": "node tools/export-integrity-handoff.mjs",
