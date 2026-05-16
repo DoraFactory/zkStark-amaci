@@ -1755,17 +1755,51 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     result.params,
     fieldLabels,
   );
+  const nativeWitness = buildNativeProcessDeactivateStepCoreWitness(legacy.program_input.witness);
 
   return {
     fields,
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: nativeWitness,
     },
     full_witness: legacy.full_witness,
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
+  };
+}
+
+function buildNativeProcessDeactivateStepCoreWitness(witness) {
+  return {
+    is_empty_msg: witness.is_empty_msg,
+    coord_priv_key: witness.coord_priv_key,
+    msg: witness.msg,
+    enc_pub_key: witness.enc_pub_key,
+    command_shared_key: witness.command_shared_key,
+    decrypted_command: witness.decrypted_command,
+    c1: witness.c1,
+    c2: witness.c2,
+    state_leaf: witness.state_leaf,
+    state_leaf_path_0: witness.state_leaf_path_0,
+    state_leaf_path_1: witness.state_leaf_path_1,
+    active_state_leaf_path_0: witness.active_state_leaf_path_0,
+    active_state_leaf_path_1: witness.active_state_leaf_path_1,
+    current_active_state: witness.current_active_state,
+    new_active_state: witness.new_active_state,
+    cmd_state_index: witness.cmd_state_index,
+    cmd_poll_id: witness.cmd_poll_id,
+    cmd_sig_r8: witness.cmd_sig_r8,
+    cmd_sig_s: witness.cmd_sig_s,
+    packed_cmd: witness.packed_cmd,
+    deactivate_leaf_path_0: witness.deactivate_leaf_path_0,
+    deactivate_leaf_path_1: witness.deactivate_leaf_path_1,
+    deactivate_leaf_path_2: witness.deactivate_leaf_path_2,
+    deactivate_leaf_path_3: witness.deactivate_leaf_path_3,
+    current_decrypt_is_odd: witness.current_decrypt_is_odd,
+    new_decrypt_is_odd: witness.new_decrypt_is_odd,
+    signature_valid: witness.signature_valid,
+    deactivate_shared_key: witness.deactivate_shared_key,
   };
 }
 
@@ -2279,6 +2313,37 @@ function pushProcessDeactivateStepCoreWitness(args, witness) {
   pushHash5Claim(args, witness.deactivate_leaf);
 }
 
+function pushNativeProcessDeactivateStepCoreWitness(args, witness) {
+  pushU256(args, witness.is_empty_msg);
+  pushU256(args, witness.coord_priv_key);
+  pushVector10(args, witness.msg);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector2(args, witness.command_shared_key);
+  pushVector7(args, witness.decrypted_command);
+  pushVector2(args, witness.c1);
+  pushVector2(args, witness.c2);
+  pushVector10(args, witness.state_leaf);
+  pushVector4(args, witness.state_leaf_path_0);
+  pushVector4(args, witness.state_leaf_path_1);
+  pushVector4(args, witness.active_state_leaf_path_0);
+  pushVector4(args, witness.active_state_leaf_path_1);
+  pushU256(args, witness.current_active_state);
+  pushU256(args, witness.new_active_state);
+  pushU256(args, witness.cmd_state_index);
+  pushU256(args, witness.cmd_poll_id);
+  pushVector2(args, witness.cmd_sig_r8);
+  pushU256(args, witness.cmd_sig_s);
+  pushVector3(args, witness.packed_cmd);
+  pushVector4(args, witness.deactivate_leaf_path_0);
+  pushVector4(args, witness.deactivate_leaf_path_1);
+  pushVector4(args, witness.deactivate_leaf_path_2);
+  pushVector4(args, witness.deactivate_leaf_path_3);
+  pushU256(args, witness.current_decrypt_is_odd);
+  pushU256(args, witness.new_decrypt_is_odd);
+  pushU256(args, witness.signature_valid);
+  pushVector2(args, witness.deactivate_shared_key);
+}
+
 export function serializeCairoProcessDeactivateOneExecutableArgs(cairoInput) {
   const args = [];
   pushProcessDeactivateOneWitness(args, cairoInput.program_input.witness);
@@ -2365,7 +2430,7 @@ export function serializeCairoProcessDeactivateStepCoreExecutableArgs(cairoInput
 export function serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessDeactivateStepCoreFields(args, cairoInput.program_input.fields);
-  pushProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

@@ -414,6 +414,20 @@ pub struct ProcessMessageStepCoreWitness {
 }
 
 #[derive(Drop, Serde)]
+pub struct NativeProcessMessageStepCoreWitness {
+    pub is_quadratic_cost: u256,
+    pub num_signups: u256,
+    pub max_vote_options: u256,
+    pub enc_pub_key: U256x2,
+    pub msg: U256x10,
+    pub coord_priv_key: u256,
+    pub current_state_salt: u256,
+    pub new_state_salt: u256,
+    pub state_decrypt: ElGamalDecryptWitness,
+    pub process_one: ProcessOneStateTransitionWitness,
+}
+
+#[derive(Drop, Serde)]
 pub struct ProcessMessagesStatefulWithEcdhWitness {
     pub boundary: ProcessMessagesBoundaryWitness,
     pub state_transition: ProcessMessagesStateTransitionWitness,
@@ -1234,7 +1248,7 @@ fn verify_native_process_message_signature(
 }
 
 fn verify_native_process_message_step_core(
-    fields: NativeProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+    fields: NativeProcessMessageStepCorePublicFields, witness: NativeProcessMessageStepCoreWitness,
 ) {
     assert_valid_message_index(fields.message_index);
     assert_bool_u256(witness.is_quadratic_cost);
@@ -2355,7 +2369,7 @@ pub fn process_message_step_core_main(
 
 #[executable]
 pub fn process_message_step_core_native_main(
-    fields: NativeProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+    fields: NativeProcessMessageStepCorePublicFields, witness: NativeProcessMessageStepCoreWitness,
 ) -> NativeProcessMessageStepCorePublicOutput {
     verify_native_process_message_step_core(fields, witness);
     build_native_process_message_step_core_public_output(fields)

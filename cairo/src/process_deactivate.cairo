@@ -458,6 +458,38 @@ pub struct ProcessDeactivateStepCoreWitness {
 }
 
 #[derive(Drop, Serde)]
+pub struct NativeProcessDeactivateStepCoreWitness {
+    pub is_empty_msg: u256,
+    pub coord_priv_key: u256,
+    pub msg: U256x10,
+    pub enc_pub_key: U256x2,
+    pub command_shared_key: U256x2,
+    pub decrypted_command: U256x7,
+    pub c1: U256x2,
+    pub c2: U256x2,
+    pub state_leaf: U256x10,
+    pub state_leaf_path_0: U256x4,
+    pub state_leaf_path_1: U256x4,
+    pub active_state_leaf_path_0: U256x4,
+    pub active_state_leaf_path_1: U256x4,
+    pub current_active_state: u256,
+    pub new_active_state: u256,
+    pub cmd_state_index: u256,
+    pub cmd_poll_id: u256,
+    pub cmd_sig_r8: U256x2,
+    pub cmd_sig_s: u256,
+    pub packed_cmd: U256x3,
+    pub deactivate_leaf_path_0: U256x4,
+    pub deactivate_leaf_path_1: U256x4,
+    pub deactivate_leaf_path_2: U256x4,
+    pub deactivate_leaf_path_3: U256x4,
+    pub current_decrypt_is_odd: u256,
+    pub new_decrypt_is_odd: u256,
+    pub signature_valid: u256,
+    pub deactivate_shared_key: U256x2,
+}
+
+#[derive(Drop, Serde)]
 pub struct ElGamalDecryptWitness {
     pub scalar_mul: BabyJubJubScalarMulWitness,
     pub decrypted_point: U256x2,
@@ -1144,7 +1176,7 @@ fn verify_native_process_deactivate_decrypt(
 }
 
 fn verify_native_process_deactivate_step_core(
-    fields: NativeProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+    fields: NativeProcessDeactivateStepCorePublicFields, witness: NativeProcessDeactivateStepCoreWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     let deactivate_index = small_felt_to_u256(fields.deactivate_index);
@@ -1255,12 +1287,6 @@ fn verify_native_process_deactivate_step_core(
             == fields.deactivate_pub_key_hash,
         'N_DEACT_PUB',
     );
-    let deactivate_shared_key_hash = poseidon_hash2(
-        witness.deactivate_shared_key_hash_claim,
-        witness.deactivate_shared_key.v0,
-        witness.deactivate_shared_key.v1,
-    );
-    assert_u256_eq(deactivate_shared_key_hash, witness.deactivate_shared_key_hash);
     assert(
         native_hash_u256x2(witness.deactivate_shared_key) == fields.deactivate_shared_key_hash,
         'N_DEACT_SHARED',
@@ -2182,7 +2208,7 @@ pub fn process_deactivate_step_core_main(
 
 #[executable]
 pub fn process_deactivate_step_core_native_main(
-    fields: NativeProcessDeactivateStepCorePublicFields, witness: ProcessDeactivateStepCoreWitness,
+    fields: NativeProcessDeactivateStepCorePublicFields, witness: NativeProcessDeactivateStepCoreWitness,
 ) -> NativeProcessDeactivateStepCorePublicOutput {
     verify_native_process_deactivate_step_core(fields, witness);
     build_native_process_deactivate_step_core_public_output(fields)

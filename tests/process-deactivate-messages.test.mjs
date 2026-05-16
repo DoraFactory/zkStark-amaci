@@ -552,6 +552,9 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(newDecrypt.public_output.length, 14);
   assert.equal(core.public_output.length, 41);
   assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
+  assert.equal(core.program_input.witness.coord_priv_key_hash, undefined);
+  assert.equal(core.program_input.witness.deactivate_shared_key_hash_claim, undefined);
+  assert.equal(core.program_input.witness.state_leaf_hash, undefined);
   assert.equal(commandEcdh.publicFields.message_index, 2n);
   assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
   assert.equal(leafEcdh.publicFields.ecdh_kind, 1n);

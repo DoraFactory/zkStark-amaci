@@ -1418,17 +1418,33 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     result.params,
     fieldLabels,
   );
+  const nativeWitness = buildNativeProcessMessageStepCoreWitness(legacy.program_input.witness);
 
   return {
     fields,
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: nativeWitness,
     },
     full_witness: legacy.full_witness,
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
+  };
+}
+
+function buildNativeProcessMessageStepCoreWitness(witness) {
+  return {
+    is_quadratic_cost: witness.is_quadratic_cost,
+    num_signups: witness.num_signups,
+    max_vote_options: witness.max_vote_options,
+    enc_pub_key: witness.enc_pub_key,
+    msg: witness.msg,
+    coord_priv_key: witness.coord_priv_key,
+    current_state_salt: witness.current_state_salt,
+    new_state_salt: witness.new_state_salt,
+    state_decrypt: witness.state_decrypt,
+    process_one: witness.process_one,
   };
 }
 
@@ -2021,6 +2037,19 @@ function pushProcessMessageStepCoreWitness(args, witness) {
   pushProcessOneStateTransitionWitness(args, witness.process_one);
 }
 
+function pushNativeProcessMessageStepCoreWitness(args, witness) {
+  pushU256(args, witness.is_quadratic_cost);
+  pushU256(args, witness.num_signups);
+  pushU256(args, witness.max_vote_options);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector10(args, witness.msg);
+  pushU256(args, witness.coord_priv_key);
+  pushU256(args, witness.current_state_salt);
+  pushU256(args, witness.new_state_salt);
+  pushElGamalDecryptWitness(args, witness.state_decrypt);
+  pushProcessOneStateTransitionWitness(args, witness.process_one);
+}
+
 function pushProcessMessagesStateTransitionWitness(args, witness) {
   pushU256(args, witness.current_state_root);
   pushU256(args, witness.new_state_root);
@@ -2154,7 +2183,7 @@ export function serializeCairoProcessMessageStepCoreExecutableArgs(cairoInput) {
 export function serializeNativeCairoProcessMessageStepCoreExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessMessageStepCoreFields(args, cairoInput.program_input.fields);
-  pushProcessMessageStepCoreWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessMessageStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

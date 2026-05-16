@@ -522,6 +522,8 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(signature.public_output.length, 14);
   assert.equal(core.public_output.length, 28);
   assert.equal(coordKey.public_output_labels[3], 'hash_scheme');
+  assert.equal(core.program_input.witness.coord_priv_key_hash, undefined);
+  assert.equal(core.program_input.witness.message_hash, undefined);
   assert.equal(ecdh.publicFields.message_index, 3n);
   assert.equal(signature.publicFields.message_index, 3n);
   assert.equal(core.publicFields.message_index, 3n);
