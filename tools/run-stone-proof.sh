@@ -375,7 +375,8 @@ const verifierExtraOutputPresent =
 const output = {
   circuit: airRun.circuit ?? 'tally',
   executable: airRun.stoneExecutable ?? 'tally_votes_stone',
-  sourceExecutable: executable,
+  sourceExecutable: airRun.sourceExecutable ?? executable,
+  sourceExecutableJson: executable,
   runnerSierraJson,
   inputPath,
   proofProducer: 'stone',

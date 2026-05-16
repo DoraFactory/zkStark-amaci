@@ -6,18 +6,35 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  tools/run-stone-air.sh --circuit tally-native [--input <tally-input.json>] [--out-dir <dir>] [--layout <layout>]
+  tools/run-stone-air.sh --circuit <native-circuit> [--input <input.json>] [--out-dir <dir>] [--message-index <n>] [--layout <layout>]
   tools/run-stone-air.sh --circuit tally [--input <tally-input.json>] [--out-dir <dir>] [--layout <layout>]
 
 Generates Stone AIR input files for a Cairo proof-mode executable. This does
 not run cpu_air_prover yet.
 
-Current support:
-  --circuit tally-native
-  --circuit tally
+Supported native circuits:
+  tally-native
+  add-new-key-native
+  process-messages-boundary-native
+  process-message-coord-key-native
+  process-message-ecdh-native
+  process-message-decrypt-native
+  process-message-signature-native
+  process-message-step-core-native
+  process-deactivate-boundary-native
+  process-deactivate-coord-key-native
+  process-deactivate-ecdh-command-native
+  process-deactivate-ecdh-leaf-native
+  process-deactivate-signature-native
+  process-deactivate-decrypt-current-native
+  process-deactivate-decrypt-new-native
+  process-deactivate-step-core-native
+
+Legacy compatibility:
+  tally
 
 Default layout:
-  tally-native: recursive_with_poseidon
+  native circuits: recursive_with_poseidon
   tally: recursive
 
 Outputs:
@@ -87,6 +104,7 @@ CIRCUIT=""
 INPUT_PATH=""
 OUT_DIR=""
 LAYOUT=""
+MESSAGE_INDEX=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -106,6 +124,10 @@ while [[ $# -gt 0 ]]; do
       LAYOUT="${2:-}"
       shift 2
       ;;
+    --message-index)
+      MESSAGE_INDEX="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -118,27 +140,299 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "$CIRCUIT" in
-  tally|tally-native)
-    ;;
-  *)
-    echo "--circuit tally-native or --circuit tally is required" >&2
-    usage >&2
-    exit 1
-    ;;
-esac
-
-if [[ -z "$LAYOUT" ]]; then
-  case "$CIRCUIT" in
-    tally-native) LAYOUT="recursive_with_poseidon" ;;
-    tally) LAYOUT="recursive" ;;
+is_supported_circuit() {
+  case "$1" in
+    tally|tally-native|add-new-key-native|process-messages-boundary-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    *) return 1 ;;
   esac
+}
+
+is_message_index_circuit() {
+  case "$1" in
+    process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+prepare_circuit_name() {
+  case "$1" in
+    tally) echo "tally" ;;
+    tally-native) echo "tally-native" ;;
+    add-new-key-native) echo "add-new-key-native" ;;
+    process-messages-boundary-native) echo "process-messages-boundary-native" ;;
+    process-message-coord-key-native) echo "process-message-coord-key-native" ;;
+    process-message-ecdh-native) echo "process-message-ecdh-native" ;;
+    process-message-decrypt-native) echo "process-message-decrypt-native" ;;
+    process-message-signature-native) echo "process-message-signature-native" ;;
+    process-message-step-core-native) echo "process-message-step-core-native" ;;
+    process-deactivate-boundary-native) echo "process-deactivate-boundary-native" ;;
+    process-deactivate-coord-key-native) echo "process-deactivate-coord-key-native" ;;
+    process-deactivate-ecdh-command-native) echo "process-deactivate-ecdh-command-native" ;;
+    process-deactivate-ecdh-leaf-native) echo "process-deactivate-ecdh-leaf-native" ;;
+    process-deactivate-signature-native) echo "process-deactivate-signature-native" ;;
+    process-deactivate-decrypt-current-native) echo "process-deactivate-decrypt-current-native" ;;
+    process-deactivate-decrypt-new-native) echo "process-deactivate-decrypt-new-native" ;;
+    process-deactivate-step-core-native) echo "process-deactivate-step-core-native" ;;
+    *) echo "unsupported circuit: $1" >&2; exit 1 ;;
+  esac
+}
+
+source_executable_name() {
+  case "$1" in
+    tally) echo "tally_votes" ;;
+    tally-native) echo "tally_votes_native" ;;
+    add-new-key-native) echo "add_new_key_native" ;;
+    process-messages-boundary-native) echo "process_messages_native_boundary" ;;
+    process-message-coord-key-native) echo "process_message_coord_key_native" ;;
+    process-message-ecdh-native) echo "process_message_ecdh_native" ;;
+    process-message-decrypt-native) echo "process_message_decrypt_native" ;;
+    process-message-signature-native) echo "process_message_signature_native" ;;
+    process-message-step-core-native) echo "process_message_step_core_native" ;;
+    process-deactivate-boundary-native) echo "process_deactivate_native_boundary" ;;
+    process-deactivate-coord-key-native) echo "process_deactivate_coord_key_native" ;;
+    process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native) echo "process_deactivate_ecdh_native" ;;
+    process-deactivate-signature-native) echo "process_deactivate_signature_native" ;;
+    process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native) echo "process_deactivate_decrypt_native" ;;
+    process-deactivate-step-core-native) echo "process_deactivate_step_core_native" ;;
+    *) echo "unsupported circuit: $1" >&2; exit 1 ;;
+  esac
+}
+
+fixture_circuit_name() {
+  case "$1" in
+    add-new-key-native) echo "add-new-key" ;;
+    process-messages-boundary-native|process-message-*) echo "process-messages" ;;
+    process-deactivate-boundary-native|process-deactivate-*) echo "process-deactivate" ;;
+    *) echo "" ;;
+  esac
+}
+
+wrapper_imports() {
+  case "$1" in
+    tally)
+      cat <<'EOF'
+use crate::public_output::{TallyPublicFields, TallyPublicOutput};
+use crate::tally_votes::{TallyWitness, main as target_main};
+EOF
+      ;;
+    tally-native)
+      cat <<'EOF'
+use crate::native_tally_votes::{
+    TallyNativePublicFields as FieldsType, TallyNativeWitness as WitnessType,
+    TallyNativePublicOutput as OutputType, main as target_main,
+};
+EOF
+      ;;
+    add-new-key-native)
+      cat <<'EOF'
+use crate::add_new_key::{
+    NativeAddNewKeyPublicFields as FieldsType, NativeAddNewKeyWitness as WitnessType,
+    NativeAddNewKeyPublicOutput as OutputType, add_new_key_native_main as target_main,
+};
+EOF
+      ;;
+    process-messages-boundary-native)
+      cat <<'EOF'
+use crate::native_process_messages::{
+    ProcessMessagesNativePublicFields as FieldsType,
+    ProcessMessagesNativeBoundaryWitness as WitnessType,
+    ProcessMessagesNativePublicOutput as OutputType,
+    process_messages_native_boundary_main as target_main,
+};
+EOF
+      ;;
+    process-message-coord-key-native)
+      cat <<'EOF'
+use crate::process_messages::{
+    NativeProcessMessageCoordKeyPublicFields as FieldsType,
+    NativeProcessMessageCoordKeyWitness as WitnessType,
+    NativeProcessMessageCoordKeyPublicOutput as OutputType,
+    process_message_coord_key_native_main as target_main,
+};
+EOF
+      ;;
+    process-message-ecdh-native)
+      cat <<'EOF'
+use crate::process_messages::{
+    NativeProcessMessageEcdhPublicFields as FieldsType,
+    NativeProcessMessageEcdhWitness as WitnessType,
+    NativeProcessMessageEcdhPublicOutput as OutputType,
+    process_message_ecdh_native_main as target_main,
+};
+EOF
+      ;;
+    process-message-decrypt-native)
+      cat <<'EOF'
+use crate::process_messages::{
+    NativeProcessMessageDecryptPublicFields as FieldsType,
+    NativeProcessMessageDecryptWitness as WitnessType,
+    NativeProcessMessageDecryptPublicOutput as OutputType,
+    process_message_decrypt_native_main as target_main,
+};
+EOF
+      ;;
+    process-message-signature-native)
+      cat <<'EOF'
+use crate::process_messages::{
+    NativeProcessMessageSignaturePublicFields as FieldsType,
+    NativeProcessMessageSignatureWitness as WitnessType,
+    NativeProcessMessageSignaturePublicOutput as OutputType,
+    process_message_signature_native_main as target_main,
+};
+EOF
+      ;;
+    process-message-step-core-native)
+      cat <<'EOF'
+use crate::process_messages::{
+    NativeProcessMessageStepCorePublicFields as FieldsType,
+    NativeProcessMessageStepCoreWitness as WitnessType,
+    NativeProcessMessageStepCorePublicOutput as OutputType,
+    process_message_step_core_native_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-boundary-native)
+      cat <<'EOF'
+use crate::native_process_deactivate::{
+    ProcessDeactivateNativePublicFields as FieldsType,
+    ProcessDeactivateNativeBoundaryWitness as WitnessType,
+    ProcessDeactivateNativePublicOutput as OutputType,
+    process_deactivate_native_boundary_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-coord-key-native)
+      cat <<'EOF'
+use crate::process_deactivate::{
+    NativeProcessDeactivateCoordKeyPublicFields as FieldsType,
+    NativeProcessDeactivateCoordKeyWitness as WitnessType,
+    NativeProcessDeactivateCoordKeyPublicOutput as OutputType,
+    process_deactivate_coord_key_native_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native)
+      cat <<'EOF'
+use crate::process_deactivate::{
+    NativeProcessDeactivateEcdhPublicFields as FieldsType,
+    NativeProcessDeactivateEcdhWitness as WitnessType,
+    NativeProcessDeactivateEcdhPublicOutput as OutputType,
+    process_deactivate_ecdh_native_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-signature-native)
+      cat <<'EOF'
+use crate::process_deactivate::{
+    NativeProcessDeactivateSignaturePublicFields as FieldsType,
+    NativeProcessDeactivateSignatureWitness as WitnessType,
+    NativeProcessDeactivateSignaturePublicOutput as OutputType,
+    process_deactivate_signature_native_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native)
+      cat <<'EOF'
+use crate::process_deactivate::{
+    NativeProcessDeactivateDecryptPublicFields as FieldsType,
+    NativeProcessDeactivateDecryptWitness as WitnessType,
+    NativeProcessDeactivateDecryptPublicOutput as OutputType,
+    process_deactivate_decrypt_native_main as target_main,
+};
+EOF
+      ;;
+    process-deactivate-step-core-native)
+      cat <<'EOF'
+use crate::process_deactivate::{
+    NativeProcessDeactivateStepCorePublicFields as FieldsType,
+    NativeProcessDeactivateStepCoreWitness as WitnessType,
+    NativeProcessDeactivateStepCorePublicOutput as OutputType,
+    process_deactivate_step_core_native_main as target_main,
+};
+EOF
+      ;;
+    *) echo "unsupported circuit: $1" >&2; exit 1 ;;
+  esac
+}
+
+write_stone_wrapper() {
+  local circuit="$1"
+  local wrapper_file="$2"
+
+  if [[ "$circuit" == "tally" ]]; then
+    {
+      wrapper_imports "$circuit"
+      cat <<'EOF'
+
+#[executable]
+pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
+    let mut serialized = input.span();
+    let fields: TallyPublicFields = Serde::<TallyPublicFields>::deserialize(ref serialized)
+        .expect('STONE_FIELDS');
+    let witness: TallyWitness = Serde::<TallyWitness>::deserialize(ref serialized)
+        .expect('STONE_WITNESS');
+    assert(serialized.len() == 0, 'STONE_ARGS');
+
+    let output: TallyPublicOutput = target_main(fields, witness);
+    let mut serialized_output = array![];
+    output.serialize(ref serialized_output);
+    serialized_output
+}
+EOF
+    } > "$wrapper_file"
+  else
+    {
+      wrapper_imports "$circuit"
+      cat <<'EOF'
+
+#[executable]
+pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
+    let mut serialized = input.span();
+    let fields: FieldsType = Serde::<FieldsType>::deserialize(ref serialized)
+        .expect('STONE_FIELDS');
+    let witness: WitnessType = Serde::<WitnessType>::deserialize(ref serialized)
+        .expect('STONE_WITNESS');
+    assert(serialized.len() == 0, 'STONE_ARGS');
+
+    let output: OutputType = target_main(fields, witness);
+    let mut serialized_output = array![];
+    output.serialize(ref serialized_output);
+    serialized_output
+}
+EOF
+    } > "$wrapper_file"
+  fi
+}
+
+if ! is_supported_circuit "$CIRCUIT"; then
+  echo "--circuit must be one of the supported native circuits or tally" >&2
+  usage >&2
+  exit 1
 fi
 
-if [[ "$CIRCUIT" == "tally-native" ]]; then
+if is_message_index_circuit "$CIRCUIT"; then
+  if [[ -z "$MESSAGE_INDEX" ]]; then
+    echo "$CIRCUIT requires --message-index" >&2
+    exit 1
+  fi
+  if ! [[ "$MESSAGE_INDEX" =~ ^[0-4]$ ]]; then
+    echo "--message-index must be an integer in [0, 4]" >&2
+    exit 1
+  fi
+fi
+
+if [[ -z "$LAYOUT" ]]; then
+  if [[ "$CIRCUIT" == "tally" ]]; then
+    LAYOUT="recursive"
+  else
+    LAYOUT="recursive_with_poseidon"
+  fi
+fi
+
+if [[ "$CIRCUIT" != "tally" ]]; then
   if [[ "$LAYOUT" != "recursive_with_poseidon" ]]; then
-    echo "layout '$LAYOUT' is not compatible with tally-native Stone AIR" >&2
-    echo "native tally uses the Starknet Poseidon builtin; use --layout recursive_with_poseidon" >&2
+    echo "layout '$LAYOUT' is not compatible with native Stone AIR" >&2
+    echo "native AMACI circuits use the Starknet Poseidon builtin; use --layout recursive_with_poseidon" >&2
     exit 1
   fi
 else
@@ -157,63 +451,105 @@ else
   esac
 fi
 
-INPUT_PATH="${INPUT_PATH:-$ROOT_DIR/fixtures/tally-small/000000.json}"
+if [[ -z "$INPUT_PATH" ]]; then
+  case "$CIRCUIT" in
+    tally|tally-native)
+      INPUT_PATH="$ROOT_DIR/fixtures/tally-small/000000.json"
+      ;;
+  esac
+fi
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/target/stone-air/$CIRCUIT}"
 
 require_tool node
 require_tool scarb
 require_tool cairo1-run
 
+PREPARE_CIRCUIT="$(prepare_circuit_name "$CIRCUIT")"
+SOURCE_EXECUTABLE_NAME="$(source_executable_name "$CIRCUIT")"
+STONE_PACKAGE_NAME="zkstark_amaci_$(printf '%s' "$CIRCUIT" | tr '-' '_')_stone"
+STONE_EXECUTABLE_NAME="${SOURCE_EXECUTABLE_NAME}_stone"
+STONE_ENTRY_MODULE="stone_entry"
+STONE_ENTRY_FUNCTION="stone_main"
 case "$CIRCUIT" in
   tally-native)
-    STONE_PACKAGE_NAME="zkstark_amaci_tally_native_stone"
-    STONE_EXECUTABLE_NAME="tally_votes_native_stone"
-    STONE_ENTRY_MODULE="stone_native_tally_votes"
-    STONE_ENTRY_FUNCTION="tally_votes_native_stone_main"
-    PREPARE_TOOL="prepare-native-tally-input.mjs"
-    STONE_MODULES=(
-      native_tally_votes
-      stone_native_tally_votes
-    )
+    STONE_MODULES=(native_tally_votes "$STONE_ENTRY_MODULE")
     ;;
   tally)
-    STONE_PACKAGE_NAME="zkstark_amaci_tally_stone"
-    STONE_EXECUTABLE_NAME="tally_votes_stone"
-    STONE_ENTRY_MODULE="stone_tally_votes"
-    STONE_ENTRY_FUNCTION="tally_votes_stone_main"
-    PREPARE_TOOL="prepare-tally-input.mjs"
     STONE_MODULES=(
       hash_gates
       poseidon_bn254
       poseidon_constants
       public_output
       sha256_u256
-      stone_tally_votes
       tally_votes
       types
+      "$STONE_ENTRY_MODULE"
     )
+    ;;
+  process-messages-boundary-native)
+    STONE_MODULES=(native_process_messages "$STONE_ENTRY_MODULE")
+    ;;
+  process-deactivate-boundary-native)
+    STONE_MODULES=(native_process_deactivate "$STONE_ENTRY_MODULE")
+    ;;
+  add-new-key-native)
+    STONE_MODULES=(
+      add_new_key
+      babyjub
+      hash_gates
+      poseidon_bn254
+      poseidon_constants
+      public_output
+      sha256_u256
+      types
+      "$STONE_ENTRY_MODULE"
+    )
+    ;;
+  process-message-*)
+    STONE_MODULES=(
+      babyjub
+      hash_gates
+      poseidon_bn254
+      poseidon_constants
+      process_messages
+      public_output
+      sha256_u256
+      types
+      "$STONE_ENTRY_MODULE"
+    )
+    ;;
+  process-deactivate-*)
+    STONE_MODULES=(
+      babyjub
+      hash_gates
+      poseidon_bn254
+      poseidon_constants
+      process_deactivate
+      public_output
+      sha256_u256
+      types
+      "$STONE_ENTRY_MODULE"
+    )
+    ;;
+  *)
+    echo "unsupported circuit: $CIRCUIT" >&2
+    exit 1
     ;;
 esac
 
-if ! grep -q "name = \"$STONE_EXECUTABLE_NAME\"" "$ROOT_DIR/cairo/Scarb.toml" \
-  || ! grep -q "$STONE_ENTRY_MODULE" "$ROOT_DIR/cairo/src/lib.cairo" \
-  || [[ ! -f "$ROOT_DIR/cairo/src/$STONE_ENTRY_MODULE.cairo" ]]; then
-  cat >&2 <<EOF
-Stone $CIRCUIT executable source is incomplete.
-
-Expected:
-  - cairo/Scarb.toml contains target executable $STONE_EXECUTABLE_NAME
-  - cairo/src/lib.cairo declares mod $STONE_ENTRY_MODULE
-  - cairo/src/$STONE_ENTRY_MODULE.cairo exists
-
-Your checkout likely has tools/run-stone-air.sh but not the matching Cairo
-proof-mode wrapper files. Pull or apply the full Stone AIR entrypoint changes.
-EOF
-  exit 1
-fi
-
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+GENERATED_INPUT=false
+if [[ -z "$INPUT_PATH" ]]; then
+  FIXTURE_CIRCUIT="$(fixture_circuit_name "$CIRCUIT")"
+  if [[ -z "$FIXTURE_CIRCUIT" ]]; then
+    echo "$CIRCUIT requires --input" >&2
+    exit 1
+  fi
+  INPUT_PATH="$OUT_DIR/$CIRCUIT-small-input.json"
+  node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$FIXTURE_CIRCUIT" --out "$INPUT_PATH"
+  GENERATED_INPUT=true
+fi
 INPUT_PATH="$(cd "$(dirname "$INPUT_PATH")" && pwd)/$(basename "$INPUT_PATH")"
 
 PREPARED_JSON="$OUT_DIR/prepared.json"
@@ -248,11 +584,18 @@ fi
 CORELIB_PARENT="$(cd "$CORELIB_DIR/.." && pwd)"
 
 echo "==> Preparing $CIRCUIT input"
-node "$ROOT_DIR/tools/$PREPARE_TOOL" \
+PREPARE_ARGS=(
+  "$ROOT_DIR/tools/prepare-amaci-circuit-input.mjs"
+  --circuit "$PREPARE_CIRCUIT"
   "$INPUT_PATH" \
   --out "$PREPARED_JSON" \
   --cairo-input-out "$CAIRO_INPUT_JSON" \
   --cairo-args-out "$SCARB_ARGS_JSON"
+)
+if [[ -n "$MESSAGE_INDEX" ]]; then
+  PREPARE_ARGS+=(--message-index "$MESSAGE_INDEX")
+fi
+node "${PREPARE_ARGS[@]}"
 
 echo "==> Converting args for cairo1-run proof mode"
 node "$ROOT_DIR/tools/convert-cairo1-run-args.mjs" \
@@ -287,7 +630,11 @@ mkdir -p "$STONE_PACKAGE_DIR/src"
 } > "$STONE_PACKAGE_DIR/src/lib.cairo"
 
 for module in "${STONE_MODULES[@]}"; do
-  cp "$ROOT_DIR/cairo/src/$module.cairo" "$STONE_PACKAGE_DIR/src/$module.cairo"
+  if [[ "$module" == "$STONE_ENTRY_MODULE" ]]; then
+    write_stone_wrapper "$CIRCUIT" "$STONE_PACKAGE_DIR/src/$module.cairo"
+  else
+    cp "$ROOT_DIR/cairo/src/$module.cairo" "$STONE_PACKAGE_DIR/src/$module.cairo"
+  fi
 done
 
 (
@@ -330,8 +677,14 @@ echo "cairo1-run corelib: $CORELIB_DIR"
 
 printf '{\n' > "$RUN_JSON"
 printf '  "circuit": "%s",\n' "$CIRCUIT" >> "$RUN_JSON"
+printf '  "prepareCircuit": "%s",\n' "$PREPARE_CIRCUIT" >> "$RUN_JSON"
+printf '  "sourceExecutable": "%s",\n' "$SOURCE_EXECUTABLE_NAME" >> "$RUN_JSON"
 printf '  "stoneExecutable": "%s",\n' "$STONE_EXECUTABLE_NAME" >> "$RUN_JSON"
 printf '  "executable": "%s",\n' "$EXECUTABLE_JSON" >> "$RUN_JSON"
+printf '  "generatedInput": %s,\n' "$GENERATED_INPUT" >> "$RUN_JSON"
+if [[ -n "$MESSAGE_INDEX" ]]; then
+  printf '  "messageIndex": %s,\n' "$MESSAGE_INDEX" >> "$RUN_JSON"
+fi
 printf '  "stonePackageDir": "%s",\n' "$STONE_PACKAGE_DIR" >> "$RUN_JSON"
 printf '  "packageSierraJson": "%s",\n' "$PACKAGE_SIERRA_JSON" >> "$RUN_JSON"
 printf '  "runnerSierraJson": "%s",\n' "$RUNNER_SIERRA_JSON" >> "$RUN_JSON"

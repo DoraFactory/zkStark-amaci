@@ -369,6 +369,46 @@ npm run export:wrapper-call -- \
   --text
 ```
 
+## Full Native Stone Split
+
+The native Stone runner now covers the same split circuit set as the local
+Scarb/Stwo native split flow:
+
+- `tally-native`
+- `add-new-key-native`
+- ProcessMessages boundary, coord-key, ECDH, decrypt, signature, and core
+- ProcessDeactivate boundary, coord-key, command ECDH, signature, current/new
+  decrypt, leaf ECDH, and core
+
+Run the full small native Stone split set on a machine with `cairo1-run`,
+`cpu_air_prover`, and `cpu_air_verifier`:
+
+```sh
+export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-all-$(date +%Y%m%d-%H%M%S)
+mkdir -p "$STONE_OUT"
+
+CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib \
+/usr/bin/time -v npm run stone:prove:all-native-split-small -- \
+  --tally-input fixtures/tally-small/000000.json \
+  --out-dir "$STONE_OUT/all-native-stone-split" \
+  2>&1 | tee "$STONE_OUT/all-native-stone-split.log"
+```
+
+For a single circuit:
+
+```sh
+npm run stone:prove:circuit -- \
+  --circuit process-message-step-core-native \
+  --message-index 0 \
+  --out-dir "$STONE_OUT/process-message-step-core-native-0"
+```
+
+Each circuit directory contains `stone-air/stone-air-run.json` and
+`stone-proof/proof-run.json`. The split runners also write link reports:
+
+- `process-messages-native-stone-split/native-stone-split-link-report.json`
+- `process-deactivate-native-stone-split/native-stone-split-link-report.json`
+
 ## References
 
 - Herodotus Integrity docs:
