@@ -1,4 +1,5 @@
-use core::poseidon::poseidon_hash_span;
+use core::hash::HashStateTrait;
+use core::poseidon::PoseidonTrait;
 
 pub const BATCH_SIZE: u32 = 5;
 pub const TWO_POW_32: felt252 = 0x100000000;
@@ -93,11 +94,20 @@ fn assert_supported_batch_num(batch_num: u32) {
 }
 
 fn hash2(left: felt252, right: felt252) -> felt252 {
-    poseidon_hash_span([left, right].span())
+    let mut state = PoseidonTrait::new();
+    state = state.update(left);
+    state = state.update(right);
+    state.finalize()
 }
 
 fn hash5(values: Felt5) -> felt252 {
-    poseidon_hash_span([values.v0, values.v1, values.v2, values.v3, values.v4].span())
+    let mut state = PoseidonTrait::new();
+    state = state.update(values.v0);
+    state = state.update(values.v1);
+    state = state.update(values.v2);
+    state = state.update(values.v3);
+    state = state.update(values.v4);
+    state.finalize()
 }
 
 fn hash10(values: Felt10) -> felt252 {
@@ -239,15 +249,14 @@ fn compute_new_results(witness: TallyNativeWitness, is_first_batch: bool) -> Fel
 }
 
 fn input_hash(fields: TallyNativePublicFields) -> felt252 {
-    poseidon_hash_span(
-        [
-            TALLY_NATIVE_INPUT_HASH_DOMAIN,
-            fields.packed_vals,
-            fields.state_commitment,
-            fields.current_tally_commitment,
-            fields.new_tally_commitment,
-        ]
-            .span(),
+    hash5(
+        Felt5 {
+            v0: TALLY_NATIVE_INPUT_HASH_DOMAIN,
+            v1: fields.packed_vals,
+            v2: fields.state_commitment,
+            v3: fields.current_tally_commitment,
+            v4: fields.new_tally_commitment,
+        },
     )
 }
 
