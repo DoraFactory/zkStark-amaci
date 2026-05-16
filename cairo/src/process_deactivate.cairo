@@ -56,6 +56,8 @@ pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445
 pub const NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f44454143545f41555448;
 pub const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
     0x414d4143495f44454143545f534841524544;
+pub const NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN: felt252 =
+    0x414d4143495f44454143545f4445435f42494e44;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessDeactivateOneHashTranscript {
@@ -200,6 +202,13 @@ pub struct ProcessDeactivateDecryptWitness {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateDecryptWitness {
+    pub coord_priv_key: u256,
+    pub c1: U256x2,
+    pub c2: U256x2,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct NativeProcessDeactivateCoordKeyPublicFields {
     pub coord_pub_key_hash: felt252,
     pub coord_priv_key_hash: felt252,
@@ -234,6 +243,7 @@ pub struct NativeProcessDeactivateDecryptPublicFields {
     pub c1_hash: felt252,
     pub c2_hash: felt252,
     pub decrypt_is_odd: felt252,
+    pub decrypt_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -263,9 +273,11 @@ pub struct NativeProcessDeactivateStepCorePublicFields {
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
     pub current_decrypt_is_odd: felt252,
+    pub current_decrypt_binding_hash: felt252,
     pub new_state_ciphertext_c1_hash: felt252,
     pub new_state_ciphertext_c2_hash: felt252,
     pub new_decrypt_is_odd: felt252,
+    pub new_decrypt_binding_hash: felt252,
     pub deactivate_pub_key_hash: felt252,
     pub deactivate_shared_key_hash: felt252,
     pub deactivate_shared_key_binding_hash: felt252,
@@ -334,6 +346,7 @@ pub struct NativeProcessDeactivateDecryptPublicOutput {
     pub c1_hash: felt252,
     pub c2_hash: felt252,
     pub decrypt_is_odd: felt252,
+    pub decrypt_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -370,9 +383,11 @@ pub struct NativeProcessDeactivateStepCorePublicOutput {
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
     pub current_decrypt_is_odd: felt252,
+    pub current_decrypt_binding_hash: felt252,
     pub new_state_ciphertext_c1_hash: felt252,
     pub new_state_ciphertext_c2_hash: felt252,
     pub new_decrypt_is_odd: felt252,
+    pub new_decrypt_binding_hash: felt252,
     pub deactivate_pub_key_hash: felt252,
     pub deactivate_shared_key_hash: felt252,
     pub deactivate_shared_key_binding_hash: felt252,
@@ -859,6 +874,26 @@ fn native_deactivate_shared_key_binding_hash(
     )
 }
 
+fn native_deactivate_decrypt_binding_hash(
+    decrypt_kind: felt252,
+    coord_priv_key_hash: felt252,
+    c1_hash: felt252,
+    c2_hash: felt252,
+    decrypt_is_odd: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN,
+            decrypt_kind,
+            coord_priv_key_hash,
+            c1_hash,
+            c2_hash,
+            decrypt_is_odd,
+        ]
+            .span(),
+    )
+}
+
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
     poseidon_hash_span([v0, v1, v2, v3, v4].span())
 }
@@ -1031,7 +1066,7 @@ fn verify_native_process_deactivate_signature(
 }
 
 fn verify_native_process_deactivate_decrypt(
-    fields: NativeProcessDeactivateDecryptPublicFields, witness: ProcessDeactivateDecryptWitness,
+    fields: NativeProcessDeactivateDecryptPublicFields, witness: NativeProcessDeactivateDecryptWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     assert_valid_deactivate_decrypt_kind(fields.decrypt_kind);
@@ -1042,10 +1077,16 @@ fn verify_native_process_deactivate_decrypt(
     );
     assert(native_hash_u256x2(witness.c1) == fields.c1_hash, 'N_C1');
     assert(native_hash_u256x2(witness.c2) == fields.c2_hash, 'N_C2');
-    let decrypt_is_odd = assert_elgamal_decrypt(
-        witness.decrypt, witness.coord_priv_key, witness.c1, witness.c2,
+    assert(
+        native_deactivate_decrypt_binding_hash(
+            fields.decrypt_kind,
+            fields.coord_priv_key_hash,
+            fields.c1_hash,
+            fields.c2_hash,
+            fields.decrypt_is_odd,
+        ) == fields.decrypt_binding_hash,
+        'N_DECRYPT_BIND',
     );
-    assert(bool_to_felt(decrypt_is_odd) == fields.decrypt_is_odd, 'N_DECRYPT_ODD');
 }
 
 fn verify_native_process_deactivate_step_core(
@@ -1116,12 +1157,32 @@ fn verify_native_process_deactivate_step_core(
         felt_from_u128(witness.current_decrypt_is_odd.low) == fields.current_decrypt_is_odd,
         'CUR_DEC_ODD',
     );
+    assert(
+        native_deactivate_decrypt_binding_hash(
+            0,
+            fields.coord_priv_key_hash,
+            fields.current_state_ciphertext_c1_hash,
+            fields.current_state_ciphertext_c2_hash,
+            fields.current_decrypt_is_odd,
+        ) == fields.current_decrypt_binding_hash,
+        'N_CUR_DEC_BIND',
+    );
     assert(native_hash_u256x2(witness.c1) == fields.new_state_ciphertext_c1_hash, 'N_NEW_C1');
     assert(native_hash_u256x2(witness.c2) == fields.new_state_ciphertext_c2_hash, 'N_NEW_C2');
     assert(witness.new_decrypt_is_odd.high == 0, 'NEW_DEC_HIGH');
     assert(
         felt_from_u128(witness.new_decrypt_is_odd.low) == fields.new_decrypt_is_odd,
         'NEW_DEC_ODD',
+    );
+    assert(
+        native_deactivate_decrypt_binding_hash(
+            1,
+            fields.coord_priv_key_hash,
+            fields.new_state_ciphertext_c1_hash,
+            fields.new_state_ciphertext_c2_hash,
+            fields.new_decrypt_is_odd,
+        ) == fields.new_decrypt_binding_hash,
+        'N_NEW_DEC_BIND',
     );
     assert(
         native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
@@ -1983,12 +2044,13 @@ fn build_native_process_deactivate_decrypt_public_output(
         c1_hash: fields.c1_hash,
         c2_hash: fields.c2_hash,
         decrypt_is_odd: fields.decrypt_is_odd,
+        decrypt_binding_hash: fields.decrypt_binding_hash,
     }
 }
 
 #[executable]
 pub fn process_deactivate_decrypt_native_main(
-    fields: NativeProcessDeactivateDecryptPublicFields, witness: ProcessDeactivateDecryptWitness,
+    fields: NativeProcessDeactivateDecryptPublicFields, witness: NativeProcessDeactivateDecryptWitness,
 ) -> NativeProcessDeactivateDecryptPublicOutput {
     verify_native_process_deactivate_decrypt(fields, witness);
     build_native_process_deactivate_decrypt_public_output(fields)
@@ -2030,9 +2092,11 @@ fn build_native_process_deactivate_step_core_public_output(
         current_state_ciphertext_c1_hash: fields.current_state_ciphertext_c1_hash,
         current_state_ciphertext_c2_hash: fields.current_state_ciphertext_c2_hash,
         current_decrypt_is_odd: fields.current_decrypt_is_odd,
+        current_decrypt_binding_hash: fields.current_decrypt_binding_hash,
         new_state_ciphertext_c1_hash: fields.new_state_ciphertext_c1_hash,
         new_state_ciphertext_c2_hash: fields.new_state_ciphertext_c2_hash,
         new_decrypt_is_odd: fields.new_decrypt_is_odd,
+        new_decrypt_binding_hash: fields.new_decrypt_binding_hash,
         deactivate_pub_key_hash: fields.deactivate_pub_key_hash,
         deactivate_shared_key_hash: fields.deactivate_shared_key_hash,
         deactivate_shared_key_binding_hash: fields.deactivate_shared_key_binding_hash,

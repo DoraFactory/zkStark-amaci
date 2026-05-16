@@ -510,6 +510,14 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     );
     expectFieldEq(
       checks,
+      `currentDecrypt[${index}] decrypt binding links to core`,
+      currentDecryptRun,
+      'decrypt_binding_hash',
+      coreRun,
+      'current_decrypt_binding_hash',
+    );
+    expectFieldEq(
+      checks,
       `newDecrypt[${index}] c1 links to core`,
       newDecryptRun,
       'c1_hash',
@@ -531,6 +539,14 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
       'decrypt_is_odd',
       coreRun,
       'new_decrypt_is_odd',
+    );
+    expectFieldEq(
+      checks,
+      `newDecrypt[${index}] decrypt binding links to core`,
+      newDecryptRun,
+      'decrypt_binding_hash',
+      coreRun,
+      'new_decrypt_binding_hash',
     );
     expectFieldEq(
       checks,

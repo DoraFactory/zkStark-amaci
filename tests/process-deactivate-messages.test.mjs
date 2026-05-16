@@ -548,9 +548,9 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(commandEcdh.public_output.length, 13);
   assert.equal(leafEcdh.public_output.length, 13);
   assert.equal(signature.public_output.length, 14);
-  assert.equal(currentDecrypt.public_output.length, 13);
-  assert.equal(newDecrypt.public_output.length, 13);
-  assert.equal(core.public_output.length, 38);
+  assert.equal(currentDecrypt.public_output.length, 14);
+  assert.equal(newDecrypt.public_output.length, 14);
+  assert.equal(core.public_output.length, 40);
   assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
   assert.equal(commandEcdh.publicFields.message_index, 2n);
   assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
@@ -573,9 +573,11 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(core.publicFields.current_state_ciphertext_c1_hash, currentDecrypt.publicFields.c1_hash);
   assert.equal(core.publicFields.current_state_ciphertext_c2_hash, currentDecrypt.publicFields.c2_hash);
   assert.equal(core.publicFields.current_decrypt_is_odd, currentDecrypt.publicFields.decrypt_is_odd);
+  assert.equal(core.publicFields.current_decrypt_binding_hash, currentDecrypt.publicFields.decrypt_binding_hash);
   assert.equal(core.publicFields.new_state_ciphertext_c1_hash, newDecrypt.publicFields.c1_hash);
   assert.equal(core.publicFields.new_state_ciphertext_c2_hash, newDecrypt.publicFields.c2_hash);
   assert.equal(core.publicFields.new_decrypt_is_odd, newDecrypt.publicFields.decrypt_is_odd);
+  assert.equal(core.publicFields.new_decrypt_binding_hash, newDecrypt.publicFields.decrypt_binding_hash);
   assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
   assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[2]);
   assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[3]);

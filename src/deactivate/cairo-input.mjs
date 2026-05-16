@@ -5,6 +5,7 @@ import {
   PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_NATIVE_COMMAND_AUTH_DOMAIN,
+  PROCESS_DEACTIVATE_NATIVE_DECRYPT_BINDING_DOMAIN,
   PROCESS_DEACTIVATE_NATIVE_SHARED_KEY_DOMAIN,
   PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
@@ -105,6 +106,20 @@ function nativeDeactivateSharedKeyBindingHash(ecdhKind, coordPrivKeyHash, baseHa
       sharedKeyHash,
     ],
     'deactivateSharedKeyBinding',
+  );
+}
+
+function nativeDeactivateDecryptBindingHash(decryptKind, coordPrivKeyHash, c1Hash, c2Hash, decryptIsOdd) {
+  return nativeHashFelts(
+    [
+      PROCESS_DEACTIVATE_NATIVE_DECRYPT_BINDING_DOMAIN,
+      decryptKind,
+      coordPrivKeyHash,
+      c1Hash,
+      c2Hash,
+      decryptIsOdd,
+    ],
+    'deactivateDecryptBinding',
   );
 }
 
@@ -1279,19 +1294,29 @@ export function buildNativeCairoProcessDeactivateDecryptInput(
   evaluated,
 ) {
   const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
-  const legacy = buildCairoProcessDeactivateDecryptInput(rawInput, messageIndex, decryptKind, result);
   const transition = result.state.transitions[messageIndex];
   const current = decryptKind === 'current';
   const c1 = current ? transition.input.stateLeaf.slice(5, 7) : transition.input.c1;
   const c2 = current ? transition.input.stateLeaf.slice(7, 9) : transition.input.c2;
   const decrypt = current ? transition.derived.currentStateDecrypt : transition.derived.newStateDecrypt;
+  const decryptKindFelt = current ? 0n : 1n;
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(result.state.input.coordPrivKey);
+  const c1Hash = nativeHashPoint(c1, 'c1');
+  const c2Hash = nativeHashPoint(c2, 'c2');
   const publicFields = {
     message_index: BigInt(messageIndex),
-    decrypt_kind: current ? 0n : 1n,
-    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
-    c1_hash: nativeHashPoint(c1, 'c1'),
-    c2_hash: nativeHashPoint(c2, 'c2'),
+    decrypt_kind: decryptKindFelt,
+    coord_priv_key_hash: coordPrivKeyHash,
+    c1_hash: c1Hash,
+    c2_hash: c2Hash,
     decrypt_is_odd: decrypt.isOdd,
+    decrypt_binding_hash: nativeDeactivateDecryptBindingHash(
+      decryptKindFelt,
+      coordPrivKeyHash,
+      c1Hash,
+      c2Hash,
+      decrypt.isOdd,
+    ),
   };
   const fields = {
     message_index: feltObject(publicFields.message_index),
@@ -1300,6 +1325,7 @@ export function buildNativeCairoProcessDeactivateDecryptInput(
     c1_hash: feltObject(publicFields.c1_hash),
     c2_hash: feltObject(publicFields.c2_hash),
     decrypt_is_odd: feltObject(publicFields.decrypt_is_odd),
+    decrypt_binding_hash: feltObject(publicFields.decrypt_binding_hash),
   };
   const publicOutput = nativeProcessDeactivatePublicOutput(
     PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
@@ -1312,6 +1338,7 @@ export function buildNativeCairoProcessDeactivateDecryptInput(
       'c1_hash',
       'c2_hash',
       'decrypt_is_odd',
+      'decrypt_binding_hash',
     ],
   );
 
@@ -1320,9 +1347,18 @@ export function buildNativeCairoProcessDeactivateDecryptInput(
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        c1: splitVector2(c1, 'c1'),
+        c2: splitVector2(c2, 'c2'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      decryptKind,
+      nativeDecryptBinding: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1539,6 +1575,16 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
   const commandSharedKeyHash = nativeHashPoint(command.sharedKey, 'commandSharedKey');
   const deactivatePubKeyHash = nativeHashPoint(input.stateLeaf.slice(0, 2), 'deactivatePubKey');
   const deactivateSharedKeyHash = nativeHashPoint(transition.derived.sharedKey, 'deactivateSharedKey');
+  const currentStateCiphertextC1Hash = nativeHashPoint(
+    input.stateLeaf.slice(5, 7),
+    'currentStateCiphertextC1',
+  );
+  const currentStateCiphertextC2Hash = nativeHashPoint(
+    input.stateLeaf.slice(7, 9),
+    'currentStateCiphertextC2',
+  );
+  const newStateCiphertextC1Hash = nativeHashPoint(input.c1, 'newStateCiphertextC1');
+  const newStateCiphertextC2Hash = nativeHashPoint(input.c2, 'newStateCiphertextC2');
   const publicFields = {
     message_index: BigInt(messageIndex),
     deactivate_index: BigInt(input.deactivateIndex),
@@ -1582,18 +1628,26 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
       transition.derived.signatureValid,
     ),
     signature_valid: transition.derived.signatureValid,
-    current_state_ciphertext_c1_hash: nativeHashPoint(
-      input.stateLeaf.slice(5, 7),
-      'currentStateCiphertextC1',
-    ),
-    current_state_ciphertext_c2_hash: nativeHashPoint(
-      input.stateLeaf.slice(7, 9),
-      'currentStateCiphertextC2',
-    ),
+    current_state_ciphertext_c1_hash: currentStateCiphertextC1Hash,
+    current_state_ciphertext_c2_hash: currentStateCiphertextC2Hash,
     current_decrypt_is_odd: transition.derived.currentStateDecrypt.isOdd,
-    new_state_ciphertext_c1_hash: nativeHashPoint(input.c1, 'newStateCiphertextC1'),
-    new_state_ciphertext_c2_hash: nativeHashPoint(input.c2, 'newStateCiphertextC2'),
+    current_decrypt_binding_hash: nativeDeactivateDecryptBindingHash(
+      0n,
+      coordPrivKeyHash,
+      currentStateCiphertextC1Hash,
+      currentStateCiphertextC2Hash,
+      transition.derived.currentStateDecrypt.isOdd,
+    ),
+    new_state_ciphertext_c1_hash: newStateCiphertextC1Hash,
+    new_state_ciphertext_c2_hash: newStateCiphertextC2Hash,
     new_decrypt_is_odd: transition.derived.newStateDecrypt.isOdd,
+    new_decrypt_binding_hash: nativeDeactivateDecryptBindingHash(
+      1n,
+      coordPrivKeyHash,
+      newStateCiphertextC1Hash,
+      newStateCiphertextC2Hash,
+      transition.derived.newStateDecrypt.isOdd,
+    ),
     deactivate_pub_key_hash: deactivatePubKeyHash,
     deactivate_shared_key_hash: deactivateSharedKeyHash,
     deactivate_shared_key_binding_hash: nativeDeactivateSharedKeyBindingHash(
@@ -1632,9 +1686,11 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     'current_state_ciphertext_c1_hash',
     'current_state_ciphertext_c2_hash',
     'current_decrypt_is_odd',
+    'current_decrypt_binding_hash',
     'new_state_ciphertext_c1_hash',
     'new_state_ciphertext_c2_hash',
     'new_decrypt_is_odd',
+    'new_decrypt_binding_hash',
     'deactivate_pub_key_hash',
     'deactivate_shared_key_hash',
     'deactivate_shared_key_binding_hash',
@@ -1922,6 +1978,13 @@ function pushNativeProcessDeactivateDecryptFields(args, fields) {
   pushFelt(args, fields.c1_hash);
   pushFelt(args, fields.c2_hash);
   pushFelt(args, fields.decrypt_is_odd);
+  pushFelt(args, fields.decrypt_binding_hash);
+}
+
+function pushNativeProcessDeactivateDecryptWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.c1);
+  pushVector2(args, witness.c2);
 }
 
 function pushProcessDeactivateStepCoreFields(args, fields) {
@@ -1982,9 +2045,11 @@ function pushNativeProcessDeactivateStepCoreFields(args, fields) {
   pushFelt(args, fields.current_state_ciphertext_c1_hash);
   pushFelt(args, fields.current_state_ciphertext_c2_hash);
   pushFelt(args, fields.current_decrypt_is_odd);
+  pushFelt(args, fields.current_decrypt_binding_hash);
   pushFelt(args, fields.new_state_ciphertext_c1_hash);
   pushFelt(args, fields.new_state_ciphertext_c2_hash);
   pushFelt(args, fields.new_decrypt_is_odd);
+  pushFelt(args, fields.new_decrypt_binding_hash);
   pushFelt(args, fields.deactivate_pub_key_hash);
   pushFelt(args, fields.deactivate_shared_key_hash);
   pushFelt(args, fields.deactivate_shared_key_binding_hash);
@@ -2225,7 +2290,7 @@ export function serializeCairoProcessDeactivateDecryptExecutableArgs(cairoInput)
 export function serializeNativeCairoProcessDeactivateDecryptExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessDeactivateDecryptFields(args, cairoInput.program_input.fields);
-  pushProcessDeactivateDecryptWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessDeactivateDecryptWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 
