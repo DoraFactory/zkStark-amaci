@@ -790,6 +790,32 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
     )
 }
 
+fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
+    poseidon_hash_span([v0, v1, v2, v3, v4].span())
+}
+
+fn native_hash10_u256(value: U256x10) -> felt252 {
+    poseidon_hash_span(
+        [
+            native_hash5_values(
+                felt_from_u256(value.v0),
+                felt_from_u256(value.v1),
+                felt_from_u256(value.v2),
+                felt_from_u256(value.v3),
+                felt_from_u256(value.v4),
+            ),
+            native_hash5_values(
+                felt_from_u256(value.v5),
+                felt_from_u256(value.v6),
+                felt_from_u256(value.v7),
+                felt_from_u256(value.v8),
+                felt_from_u256(value.v9),
+            ),
+        ]
+            .span(),
+    )
+}
+
 fn native_coord_priv_key_hash(coord_priv_key: u256) -> felt252 {
     poseidon_hash_span(
         [felt_from_u256(coord_priv_key), NATIVE_COORD_PRIV_KEY_HASH_DOMAIN].span(),
@@ -829,8 +855,53 @@ fn native_deactivate_message_hash_or_empty(
     }
 }
 
-fn native_commitment(left: u256, right: u256) -> felt252 {
-    poseidon_hash_span([felt_from_u256(left), felt_from_u256(right)].span())
+fn native_commitment(left: felt252, right: felt252) -> felt252 {
+    poseidon_hash_span([left, right].span())
+}
+
+fn native_path_hash(leaf: felt252, path_elements: U256x4, index: u128) -> felt252 {
+    let p0 = felt_from_u256(path_elements.v0);
+    let p1 = felt_from_u256(path_elements.v1);
+    let p2 = felt_from_u256(path_elements.v2);
+    let p3 = felt_from_u256(path_elements.v3);
+    if index == 0 {
+        native_hash5_values(leaf, p0, p1, p2, p3)
+    } else if index == 1 {
+        native_hash5_values(p0, leaf, p1, p2, p3)
+    } else if index == 2 {
+        native_hash5_values(p0, p1, leaf, p2, p3)
+    } else if index == 3 {
+        native_hash5_values(p0, p1, p2, leaf, p3)
+    } else {
+        native_hash5_values(p0, p1, p2, p3, leaf)
+    }
+}
+
+fn native_quinary_root_depth_2(
+    leaf: felt252, path_0: U256x4, path_1: U256x4, index: u256,
+) -> felt252 {
+    let level_0_index = index.low % 5;
+    let level_1_index = (index.low / 5) % 5;
+    let level_0 = native_path_hash(leaf, path_0, level_0_index);
+    native_path_hash(level_0, path_1, level_1_index)
+}
+
+fn native_quinary_root_depth_4(
+    leaf: felt252,
+    path_0: U256x4,
+    path_1: U256x4,
+    path_2: U256x4,
+    path_3: U256x4,
+    index: u256,
+) -> felt252 {
+    let level_0_index = index.low % 5;
+    let level_1_index = (index.low / 5) % 5;
+    let level_2_index = (index.low / 25) % 5;
+    let level_3_index = (index.low / 125) % 5;
+    let level_0 = native_path_hash(leaf, path_0, level_0_index);
+    let level_1 = native_path_hash(level_0, path_1, level_1_index);
+    let level_2 = native_path_hash(level_1, path_2, level_2_index);
+    native_path_hash(level_2, path_3, level_3_index)
 }
 
 fn verify_native_process_deactivate_coord_key(
@@ -996,61 +1067,51 @@ fn verify_native_process_deactivate_step_core(
     let state_index = select_u256(
         valid_state_index(witness.cmd_state_index), STATE_TREE_MAX_INDEX, witness.cmd_state_index,
     );
-    let state_leaf_hash = poseidon_hash10(witness.state_leaf_hash, witness.state_leaf);
-    let current_state_root = quinary_root_depth_2(
+    let state_leaf_hash = native_hash10_u256(witness.state_leaf);
+    let current_state_root = native_quinary_root_depth_2(
         state_leaf_hash, witness.state_leaf_path_0, witness.state_leaf_path_1, state_index,
     );
-    assert(felt_from_u256(current_state_root) == fields.current_state_root_hash, 'N_STATE_ROOT');
+    assert(current_state_root == fields.current_state_root_hash, 'N_STATE_ROOT');
 
     assert(!is_zero(witness.new_active_state), 'NEW_ACTIVE_ZERO');
-    let current_active_state_root = quinary_root_depth_2(
-        witness.current_active_state,
+    let current_active_state_root = native_quinary_root_depth_2(
+        felt_from_u256(witness.current_active_state),
         witness.active_state_leaf_path_0,
         witness.active_state_leaf_path_1,
         state_index,
     );
-    assert(
-        felt_from_u256(current_active_state_root) == fields.current_active_state_root_hash,
-        'N_CUR_ACTIVE',
-    );
+    assert(current_active_state_root == fields.current_active_state_root_hash, 'N_CUR_ACTIVE');
     let active_state_leaf = select_u256(valid, witness.current_active_state, witness.new_active_state);
-    let new_active_state_root = quinary_root_depth_2(
-        active_state_leaf,
+    let new_active_state_root = native_quinary_root_depth_2(
+        felt_from_u256(active_state_leaf),
         witness.active_state_leaf_path_0,
         witness.active_state_leaf_path_1,
         state_index,
     );
-    assert(
-        felt_from_u256(new_active_state_root) == fields.new_active_state_root_hash,
-        'N_NEW_ACTIVE',
-    );
+    assert(new_active_state_root == fields.new_active_state_root_hash, 'N_NEW_ACTIVE');
 
-    let deactivate_leaf = poseidon_hash5(
-        witness.deactivate_leaf,
-        U256x5 {
-            v0: witness.c1.v0,
-            v1: witness.c1.v1,
-            v2: witness.c2.v0,
-            v3: witness.c2.v1,
-            v4: witness.deactivate_shared_key_hash,
-        },
+    let deactivate_leaf = native_hash5_values(
+        felt_from_u256(witness.c1.v0),
+        felt_from_u256(witness.c1.v1),
+        felt_from_u256(witness.c2.v0),
+        felt_from_u256(witness.c2.v1),
+        fields.deactivate_shared_key_hash,
     );
-    let current_deactivate_root = quinary_root_depth_4(
-        zero_u256(),
+    let current_deactivate_root = native_quinary_root_depth_4(
+        0,
         witness.deactivate_leaf_path_0,
         witness.deactivate_leaf_path_1,
         witness.deactivate_leaf_path_2,
         witness.deactivate_leaf_path_3,
         deactivate_index,
     );
-    assert(
-        felt_from_u256(current_deactivate_root) == fields.current_deactivate_root_hash,
-        'N_CUR_DEACT',
-    );
-    let new_deactivate_leaf = select_u256(
-        u256_bool(witness.is_empty_msg), deactivate_leaf, zero_u256(),
-    );
-    let new_deactivate_root = quinary_root_depth_4(
+    assert(current_deactivate_root == fields.current_deactivate_root_hash, 'N_CUR_DEACT');
+    let new_deactivate_leaf = if u256_bool(witness.is_empty_msg) {
+        0
+    } else {
+        deactivate_leaf
+    };
+    let new_deactivate_root = native_quinary_root_depth_4(
         new_deactivate_leaf,
         witness.deactivate_leaf_path_0,
         witness.deactivate_leaf_path_1,
@@ -1058,10 +1119,7 @@ fn verify_native_process_deactivate_step_core(
         witness.deactivate_leaf_path_3,
         deactivate_index,
     );
-    assert(
-        felt_from_u256(new_deactivate_root) == fields.new_deactivate_root_hash,
-        'N_NEW_DEACT',
-    );
+    assert(new_deactivate_root == fields.new_deactivate_root_hash, 'N_NEW_DEACT');
 
     let current_deactivate_commitment = native_commitment(
         current_active_state_root, current_deactivate_root,

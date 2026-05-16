@@ -42,6 +42,7 @@ import {
 import { isIntegrityHashingAvailable } from '../src/integrity/hashes.mjs';
 import { STARK_FIELD } from '../src/constants.mjs';
 import { evaluateNativeProcessDeactivateMessagesBoundary } from '../src/deactivate/native-process-deactivate-messages.mjs';
+import { nativeProcessDeactivateTransitionContexts } from '../src/deactivate/native-process-roots.mjs';
 import { toStarkFelt } from '../src/tally/native-tally-votes.mjs';
 import {
   evaluateProcessDeactivateMessages,
@@ -541,6 +542,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   const legacyCore = buildCairoProcessDeactivateStepCoreInput(input, 2, evaluated);
   const nativeBoundary = evaluateNativeProcessDeactivateMessagesBoundary(input);
   const transition = evaluated.state.transitions[2];
+  const nativeRoots = nativeProcessDeactivateTransitionContexts(evaluated.state)[2];
 
   assert.equal(coordKey.public_output.length, 9);
   assert.equal(commandEcdh.public_output.length, 12);
@@ -574,11 +576,14 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
   assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[2]);
   assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[3]);
+  assert.equal(core.publicFields.current_state_root_hash, nativeRoots.currentStateRoot);
   assert.equal(core.publicFields.current_state_root_hash, nativeBoundary.publicFields.currentStateRoot);
-  assert.equal(core.publicFields.current_active_state_root_hash, toStarkFelt(transition.input.currentActiveStateRoot));
-  assert.equal(core.publicFields.current_deactivate_root_hash, toStarkFelt(transition.input.currentDeactivateRoot));
-  assert.equal(core.publicFields.new_active_state_root_hash, toStarkFelt(transition.derived.newActiveStateRoot));
-  assert.equal(core.publicFields.new_deactivate_root_hash, toStarkFelt(transition.derived.newDeactivateRoot));
+  assert.equal(core.publicFields.current_active_state_root_hash, nativeRoots.currentActiveStateRoot);
+  assert.equal(core.publicFields.current_deactivate_root_hash, nativeRoots.currentDeactivateRoot);
+  assert.equal(core.publicFields.new_active_state_root_hash, nativeRoots.newActiveStateRoot);
+  assert.equal(core.publicFields.new_deactivate_root_hash, nativeRoots.newDeactivateRoot);
+  assert.notEqual(core.publicFields.current_active_state_root_hash, toStarkFelt(transition.input.currentActiveStateRoot));
+  assert.notEqual(core.publicFields.new_deactivate_root_hash, toStarkFelt(transition.derived.newDeactivateRoot));
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash, legacyCoordKey.publicFields.coordPubKeyHash);
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());

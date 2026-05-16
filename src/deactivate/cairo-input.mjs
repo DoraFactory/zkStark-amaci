@@ -32,6 +32,7 @@ import {
   evaluateProcessDeactivateMessagesStateful,
   processDeactivateMessageHash,
 } from './process-deactivate-messages.mjs';
+import { nativeProcessDeactivateTransitionContexts } from './native-process-roots.mjs';
 import { poseidonDecryptWithoutCheck7 } from '../msg/process-one.mjs';
 import { evaluateProcessDeactivateOne } from './process-deactivate-one.mjs';
 
@@ -1406,6 +1407,39 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
   const transition = result.state.transitions[messageIndex];
   const input = transition.input;
   const command = result.derived.messageCommands[messageIndex];
+  const nativeContext = nativeProcessDeactivateTransitionContexts(result.state)[messageIndex];
+  legacy.program_input.witness.state_leaf_path_0 = splitVector4(
+    nativeContext.stateLeafPathElements[0],
+    'nativeStateLeafPathElements[0]',
+  );
+  legacy.program_input.witness.state_leaf_path_1 = splitVector4(
+    nativeContext.stateLeafPathElements[1],
+    'nativeStateLeafPathElements[1]',
+  );
+  legacy.program_input.witness.active_state_leaf_path_0 = splitVector4(
+    nativeContext.activeStateLeafPathElements[0],
+    'nativeActiveStateLeafPathElements[0]',
+  );
+  legacy.program_input.witness.active_state_leaf_path_1 = splitVector4(
+    nativeContext.activeStateLeafPathElements[1],
+    'nativeActiveStateLeafPathElements[1]',
+  );
+  legacy.program_input.witness.deactivate_leaf_path_0 = splitVector4(
+    nativeContext.deactivateLeafPathElements[0],
+    'nativeDeactivateLeafPathElements[0]',
+  );
+  legacy.program_input.witness.deactivate_leaf_path_1 = splitVector4(
+    nativeContext.deactivateLeafPathElements[1],
+    'nativeDeactivateLeafPathElements[1]',
+  );
+  legacy.program_input.witness.deactivate_leaf_path_2 = splitVector4(
+    nativeContext.deactivateLeafPathElements[2],
+    'nativeDeactivateLeafPathElements[2]',
+  );
+  legacy.program_input.witness.deactivate_leaf_path_3 = splitVector4(
+    nativeContext.deactivateLeafPathElements[3],
+    'nativeDeactivateLeafPathElements[3]',
+  );
   const nativeMsgChain = nativeDeactivateMessageHashChain(
     rawInput.msgs,
     rawInput.encPubKeys,
@@ -1417,21 +1451,21 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
     previous_message_hash: nativeMsgChain[messageIndex],
     next_message_hash: nativeMsgChain[messageIndex + 1],
-    current_active_state_root_hash: nativeFelt(input.currentActiveStateRoot, 'currentActiveStateRoot'),
-    current_deactivate_root_hash: nativeFelt(input.currentDeactivateRoot, 'currentDeactivateRoot'),
-    new_active_state_root_hash: nativeFelt(transition.derived.newActiveStateRoot, 'newActiveStateRoot'),
-    new_deactivate_root_hash: nativeFelt(transition.derived.newDeactivateRoot, 'newDeactivateRoot'),
+    current_active_state_root_hash: nativeContext.currentActiveStateRoot,
+    current_deactivate_root_hash: nativeContext.currentDeactivateRoot,
+    new_active_state_root_hash: nativeContext.newActiveStateRoot,
+    new_deactivate_root_hash: nativeContext.newDeactivateRoot,
     current_deactivate_commitment_hash: nativeCommitment(
-      input.currentActiveStateRoot,
-      input.currentDeactivateRoot,
+      nativeContext.currentActiveStateRoot,
+      nativeContext.currentDeactivateRoot,
       'currentDeactivateCommitment',
     ),
     new_deactivate_commitment_hash: nativeCommitment(
-      transition.derived.newActiveStateRoot,
-      transition.derived.newDeactivateRoot,
+      nativeContext.newActiveStateRoot,
+      nativeContext.newDeactivateRoot,
       'newDeactivateCommitment',
     ),
-    current_state_root_hash: nativeFelt(result.publicFields.currentStateRoot, 'currentStateRoot'),
+    current_state_root_hash: nativeContext.currentStateRoot,
     expected_poll_id: result.publicFields.expectedPollId,
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     command_shared_key_hash: nativeHashPoint(command.sharedKey, 'commandSharedKey'),

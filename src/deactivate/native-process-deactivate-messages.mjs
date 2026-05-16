@@ -9,6 +9,8 @@ import {
 import { decimalize } from '../compat/encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
+import { evaluateProcessDeactivateMessagesStateful } from './process-deactivate-messages.mjs';
+import { nativeProcessDeactivateStateRoots } from './native-process-roots.mjs';
 
 const MSG_LENGTH = 10;
 const ENC_PUB_KEY_LENGTH = 2;
@@ -110,12 +112,18 @@ export function evaluateNativeProcessDeactivateMessagesBoundary(
   expectMatrixShape(rawInput.msgs, batchSize, MSG_LENGTH, 'msgs');
   expectMatrixShape(rawInput.encPubKeys, batchSize, ENC_PUB_KEY_LENGTH, 'encPubKeys');
 
-  const newDeactivateRoot = toStarkFelt(rawInput.newDeactivateRoot, 'newDeactivateRoot');
+  const nativeState = Array.isArray(rawInput.processOneWitnesses)
+    ? nativeProcessDeactivateStateRoots(evaluateProcessDeactivateMessagesStateful(rawInput).state)
+    : undefined;
+  const newDeactivateRoot = nativeState?.newDeactivateRoot ?? toStarkFelt(rawInput.newDeactivateRoot, 'newDeactivateRoot');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');
-  const currentActiveStateRoot = toStarkFelt(rawInput.currentActiveStateRoot, 'currentActiveStateRoot');
-  const currentDeactivateRoot = toStarkFelt(rawInput.currentDeactivateRoot, 'currentDeactivateRoot');
-  const newActiveStateRoot = toStarkFelt(rawInput.newActiveStateRoot, 'newActiveStateRoot');
-  const currentStateRoot = toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
+  const currentActiveStateRoot = nativeState?.currentActiveStateRoot
+    ?? toStarkFelt(rawInput.currentActiveStateRoot, 'currentActiveStateRoot');
+  const currentDeactivateRoot = nativeState?.currentDeactivateRoot
+    ?? toStarkFelt(rawInput.currentDeactivateRoot, 'currentDeactivateRoot');
+  const newActiveStateRoot = nativeState?.newActiveStateRoot
+    ?? toStarkFelt(rawInput.newActiveStateRoot, 'newActiveStateRoot');
+  const currentStateRoot = nativeState?.currentStateRoot ?? toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
   const expectedPollId = toStarkFelt(rawInput.expectedPollId, 'expectedPollId');
   const msgs = rawInput.msgs.map((row, index) => feltVector(row, MSG_LENGTH, `msgs[${index}]`));
   const encPubKeys = rawInput.encPubKeys.map((row, index) =>
