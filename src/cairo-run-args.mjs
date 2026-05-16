@@ -43,7 +43,7 @@ export function parseScarbArgsJson(source) {
 export function formatCairo1RunArgs(felts, options = {}) {
   const { array = true, trailingNewline = true } = options;
   const body = felts.join(' ');
-  const text = array ? `[${body}]` : body;
+  const text = array ? `[[${body}]]` : `[${body}]`;
   return trailingNewline ? `${text}\n` : text;
 }
 
