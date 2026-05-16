@@ -52,6 +52,7 @@ pub const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 pub const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
+pub const NATIVE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f504d53475f534841524544;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessMessagesHashTranscript {
@@ -219,6 +220,13 @@ pub struct ProcessMessageEcdhWitness {
     pub shared_key_hash: Hash2Claim,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageEcdhWitness {
+    pub coord_priv_key: u256,
+    pub enc_pub_key: U256x2,
+    pub shared_key: U256x2,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessMessageSignatureWitness {
     pub pub_key: U256x2,
@@ -252,6 +260,7 @@ pub struct NativeProcessMessageEcdhPublicFields {
     pub coord_priv_key_hash: felt252,
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -280,6 +289,7 @@ pub struct NativeProcessMessageStepCorePublicFields {
     pub expected_poll_id: felt252,
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
@@ -314,6 +324,7 @@ pub struct NativeProcessMessageEcdhPublicOutput {
     pub coord_priv_key_hash: felt252,
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -356,6 +367,7 @@ pub struct NativeProcessMessageStepCorePublicOutput {
     pub expected_poll_id: felt252,
     pub enc_pub_key_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
@@ -931,6 +943,14 @@ fn native_command_auth_hash(
     )
 }
 
+fn native_shared_key_binding_hash(
+    coord_priv_key_hash: felt252, enc_pub_key_hash: felt252, shared_key_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [NATIVE_SHARED_KEY_DOMAIN, coord_priv_key_hash, enc_pub_key_hash, shared_key_hash].span(),
+    )
+}
+
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
     poseidon_hash_span([v0, v1, v2, v3, v4].span())
 }
@@ -1126,7 +1146,7 @@ fn verify_native_process_message_coord_key(
 }
 
 fn verify_native_process_message_ecdh(
-    fields: NativeProcessMessageEcdhPublicFields, witness: ProcessMessageEcdhWitness,
+    fields: NativeProcessMessageEcdhPublicFields, witness: NativeProcessMessageEcdhWitness,
 ) {
     assert_valid_message_index(fields.message_index);
     assert(
@@ -1134,11 +1154,13 @@ fn verify_native_process_message_ecdh(
         'N_COORD_PRIV',
     );
     assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
-    assert_u256_eq(witness.ecdh.scalar, witness.coord_priv_key);
-    assert_u256_eq(witness.ecdh.base.v0, witness.enc_pub_key.v0);
-    assert_u256_eq(witness.ecdh.base.v1, witness.enc_pub_key.v1);
-    let shared_key = verify_babyjub_scalar_mul(witness.ecdh);
-    assert(native_hash_u256x2(shared_key) == fields.shared_key_hash, 'N_SHARED_KEY');
+    assert(native_hash_u256x2(witness.shared_key) == fields.shared_key_hash, 'N_SHARED_KEY');
+    assert(
+        native_shared_key_binding_hash(
+            fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.shared_key_hash,
+        ) == fields.shared_key_binding_hash,
+        'N_SHARED_BIND',
+    );
 }
 
 fn verify_native_process_message_signature(
@@ -1184,6 +1206,12 @@ fn verify_native_process_message_step_core(
     );
     assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
     assert(native_hash_u256x2(witness.process_one.shared_key) == fields.shared_key_hash, 'N_SHARED');
+    assert(
+        native_shared_key_binding_hash(
+            fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.shared_key_hash,
+        ) == fields.shared_key_binding_hash,
+        'N_SHARED_BIND',
+    );
     assert(
         native_hash_u256x2(
             U256x2 { v0: witness.process_one.state_leaf.v0, v1: witness.process_one.state_leaf.v1 },
@@ -2172,12 +2200,13 @@ fn build_native_process_message_ecdh_public_output(
         coord_priv_key_hash: fields.coord_priv_key_hash,
         enc_pub_key_hash: fields.enc_pub_key_hash,
         shared_key_hash: fields.shared_key_hash,
+        shared_key_binding_hash: fields.shared_key_binding_hash,
     }
 }
 
 #[executable]
 pub fn process_message_ecdh_native_main(
-    fields: NativeProcessMessageEcdhPublicFields, witness: ProcessMessageEcdhWitness,
+    fields: NativeProcessMessageEcdhPublicFields, witness: NativeProcessMessageEcdhWitness,
 ) -> NativeProcessMessageEcdhPublicOutput {
     verify_native_process_message_ecdh(fields, witness);
     build_native_process_message_ecdh_public_output(fields)
@@ -2244,6 +2273,7 @@ fn build_native_process_message_step_core_public_output(
         expected_poll_id: fields.expected_poll_id,
         enc_pub_key_hash: fields.enc_pub_key_hash,
         shared_key_hash: fields.shared_key_hash,
+        shared_key_binding_hash: fields.shared_key_binding_hash,
         signature_pub_key_hash: fields.signature_pub_key_hash,
         signature_r8_hash: fields.signature_r8_hash,
         packed_command_hash: fields.packed_command_hash,

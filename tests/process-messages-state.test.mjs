@@ -518,9 +518,9 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   const nativeRoots = nativeProcessMessageTransitionContexts(evaluated.state)[3];
 
   assert.equal(coordKey.public_output.length, 9);
-  assert.equal(ecdh.public_output.length, 11);
+  assert.equal(ecdh.public_output.length, 12);
   assert.equal(signature.public_output.length, 14);
-  assert.equal(core.public_output.length, 26);
+  assert.equal(core.public_output.length, 27);
   assert.equal(coordKey.public_output_labels[3], 'hash_scheme');
   assert.equal(ecdh.publicFields.message_index, 3n);
   assert.equal(signature.publicFields.message_index, 3n);
@@ -529,6 +529,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(coordKey.publicFields.coord_priv_key_hash, core.publicFields.coord_priv_key_hash);
   assert.equal(ecdh.publicFields.enc_pub_key_hash, core.publicFields.enc_pub_key_hash);
   assert.equal(ecdh.publicFields.shared_key_hash, core.publicFields.shared_key_hash);
+  assert.equal(ecdh.publicFields.shared_key_binding_hash, core.publicFields.shared_key_binding_hash);
   assert.equal(signature.publicFields.pub_key_hash, core.publicFields.signature_pub_key_hash);
   assert.equal(signature.publicFields.r8_hash, core.publicFields.signature_r8_hash);
   assert.equal(signature.publicFields.packed_command_hash, core.publicFields.packed_command_hash);
@@ -546,7 +547,9 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash.toString(), evaluated.publicFields.coordPubKeyHash.toString());
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());
-  assert.ok(coordArgs.length < ecdhArgs.length);
+  assert.ok(ecdhArgs.length < serializeCairoProcessMessageEcdhExecutableArgs(
+    buildCairoProcessMessageEcdhInput(input, 3, evaluated),
+  ).length);
   assert.ok(coreArgs.length < serializeCairoProcessMessageStepCoreExecutableArgs(
     buildCairoProcessMessageStepCoreInput(input, 3, evaluated),
   ).length);

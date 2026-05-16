@@ -54,6 +54,8 @@ pub const PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 pub const NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f44454143545f41555448;
+pub const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
+    0x414d4143495f44454143545f534841524544;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessDeactivateOneHashTranscript {
@@ -158,6 +160,13 @@ pub struct ProcessDeactivateEcdhWitness {
     pub shared_key_hash: Hash2Claim,
 }
 
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessDeactivateEcdhWitness {
+    pub coord_priv_key: u256,
+    pub base: U256x2,
+    pub shared_key: U256x2,
+}
+
 #[derive(Drop, Serde)]
 pub struct ProcessDeactivateSignatureWitness {
     pub pub_key: U256x2,
@@ -203,6 +212,7 @@ pub struct NativeProcessDeactivateEcdhPublicFields {
     pub coord_priv_key_hash: felt252,
     pub base_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -243,6 +253,7 @@ pub struct NativeProcessDeactivateStepCorePublicFields {
     pub expected_poll_id: felt252,
     pub enc_pub_key_hash: felt252,
     pub command_shared_key_hash: felt252,
+    pub command_shared_key_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_cmd_hash: felt252,
@@ -257,6 +268,7 @@ pub struct NativeProcessDeactivateStepCorePublicFields {
     pub new_decrypt_is_odd: felt252,
     pub deactivate_pub_key_hash: felt252,
     pub deactivate_shared_key_hash: felt252,
+    pub deactivate_shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -286,6 +298,7 @@ pub struct NativeProcessDeactivateEcdhPublicOutput {
     pub coord_priv_key_hash: felt252,
     pub base_hash: felt252,
     pub shared_key_hash: felt252,
+    pub shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -347,6 +360,7 @@ pub struct NativeProcessDeactivateStepCorePublicOutput {
     pub expected_poll_id: felt252,
     pub enc_pub_key_hash: felt252,
     pub command_shared_key_hash: felt252,
+    pub command_shared_key_binding_hash: felt252,
     pub signature_pub_key_hash: felt252,
     pub signature_r8_hash: felt252,
     pub packed_cmd_hash: felt252,
@@ -361,6 +375,7 @@ pub struct NativeProcessDeactivateStepCorePublicOutput {
     pub new_decrypt_is_odd: felt252,
     pub deactivate_pub_key_hash: felt252,
     pub deactivate_shared_key_hash: felt252,
+    pub deactivate_shared_key_binding_hash: felt252,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -826,6 +841,24 @@ fn native_deactivate_command_auth_hash(
     )
 }
 
+fn native_deactivate_shared_key_binding_hash(
+    ecdh_kind: felt252,
+    coord_priv_key_hash: felt252,
+    base_hash: felt252,
+    shared_key_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN,
+            ecdh_kind,
+            coord_priv_key_hash,
+            base_hash,
+            shared_key_hash,
+        ]
+            .span(),
+    )
+}
+
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
     poseidon_hash_span([v0, v1, v2, v3, v4].span())
 }
@@ -954,7 +987,7 @@ fn verify_native_process_deactivate_coord_key(
 }
 
 fn verify_native_process_deactivate_ecdh(
-    fields: NativeProcessDeactivateEcdhPublicFields, witness: ProcessDeactivateEcdhWitness,
+    fields: NativeProcessDeactivateEcdhPublicFields, witness: NativeProcessDeactivateEcdhWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     assert_valid_deactivate_ecdh_kind(fields.ecdh_kind);
@@ -963,11 +996,16 @@ fn verify_native_process_deactivate_ecdh(
         'N_COORD_PRIV',
     );
     assert(native_hash_u256x2(witness.base) == fields.base_hash, 'N_BASE');
-    assert_u256_eq(witness.ecdh.scalar, witness.coord_priv_key);
-    assert_u256_eq(witness.ecdh.base.v0, witness.base.v0);
-    assert_u256_eq(witness.ecdh.base.v1, witness.base.v1);
-    let shared_key = verify_babyjub_scalar_mul(witness.ecdh);
-    assert(native_hash_u256x2(shared_key) == fields.shared_key_hash, 'N_SHARED_KEY');
+    assert(native_hash_u256x2(witness.shared_key) == fields.shared_key_hash, 'N_SHARED_KEY');
+    assert(
+        native_deactivate_shared_key_binding_hash(
+            fields.ecdh_kind,
+            fields.coord_priv_key_hash,
+            fields.base_hash,
+            fields.shared_key_hash,
+        ) == fields.shared_key_binding_hash,
+        'N_SHARED_BIND',
+    );
 }
 
 fn verify_native_process_deactivate_signature(
@@ -1034,6 +1072,15 @@ fn verify_native_process_deactivate_step_core(
         'N_CMD_SHARED',
     );
     assert(
+        native_deactivate_shared_key_binding_hash(
+            0,
+            fields.coord_priv_key_hash,
+            fields.enc_pub_key_hash,
+            fields.command_shared_key_hash,
+        ) == fields.command_shared_key_binding_hash,
+        'N_CMD_BIND',
+    );
+    assert(
         native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
             == fields.signature_pub_key_hash,
         'N_SIG_PUB',
@@ -1090,6 +1137,15 @@ fn verify_native_process_deactivate_step_core(
     assert(
         native_hash_u256x2(witness.deactivate_shared_key) == fields.deactivate_shared_key_hash,
         'N_DEACT_SHARED',
+    );
+    assert(
+        native_deactivate_shared_key_binding_hash(
+            1,
+            fields.coord_priv_key_hash,
+            fields.deactivate_pub_key_hash,
+            fields.deactivate_shared_key_hash,
+        ) == fields.deactivate_shared_key_binding_hash,
+        'N_DEACT_BIND',
     );
 
     let next_message_hash = native_deactivate_message_hash_or_empty(
@@ -1853,12 +1909,13 @@ fn build_native_process_deactivate_ecdh_public_output(
         coord_priv_key_hash: fields.coord_priv_key_hash,
         base_hash: fields.base_hash,
         shared_key_hash: fields.shared_key_hash,
+        shared_key_binding_hash: fields.shared_key_binding_hash,
     }
 }
 
 #[executable]
 pub fn process_deactivate_ecdh_native_main(
-    fields: NativeProcessDeactivateEcdhPublicFields, witness: ProcessDeactivateEcdhWitness,
+    fields: NativeProcessDeactivateEcdhPublicFields, witness: NativeProcessDeactivateEcdhWitness,
 ) -> NativeProcessDeactivateEcdhPublicOutput {
     verify_native_process_deactivate_ecdh(fields, witness);
     build_native_process_deactivate_ecdh_public_output(fields)
@@ -1963,6 +2020,7 @@ fn build_native_process_deactivate_step_core_public_output(
         expected_poll_id: fields.expected_poll_id,
         enc_pub_key_hash: fields.enc_pub_key_hash,
         command_shared_key_hash: fields.command_shared_key_hash,
+        command_shared_key_binding_hash: fields.command_shared_key_binding_hash,
         signature_pub_key_hash: fields.signature_pub_key_hash,
         signature_r8_hash: fields.signature_r8_hash,
         packed_cmd_hash: fields.packed_cmd_hash,
@@ -1977,6 +2035,7 @@ fn build_native_process_deactivate_step_core_public_output(
         new_decrypt_is_odd: fields.new_decrypt_is_odd,
         deactivate_pub_key_hash: fields.deactivate_pub_key_hash,
         deactivate_shared_key_hash: fields.deactivate_shared_key_hash,
+        deactivate_shared_key_binding_hash: fields.deactivate_shared_key_binding_hash,
     }
 }
 

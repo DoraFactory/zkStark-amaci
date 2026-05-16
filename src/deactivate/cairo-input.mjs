@@ -5,6 +5,7 @@ import {
   PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_NATIVE_COMMAND_AUTH_DOMAIN,
+  PROCESS_DEACTIVATE_NATIVE_SHARED_KEY_DOMAIN,
   PROCESS_DEACTIVATE_SIGNATURE_NATIVE_CIRCUIT_ID,
   PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
@@ -91,6 +92,19 @@ function nativeDeactivateCommandAuthHash(pubKeyHash, r8Hash, packedCmdHash, cmdS
       signatureValid,
     ],
     'deactivateCommandAuth',
+  );
+}
+
+function nativeDeactivateSharedKeyBindingHash(ecdhKind, coordPrivKeyHash, baseHash, sharedKeyHash) {
+  return nativeHashFelts(
+    [
+      PROCESS_DEACTIVATE_NATIVE_SHARED_KEY_DOMAIN,
+      ecdhKind,
+      coordPrivKeyHash,
+      baseHash,
+      sharedKeyHash,
+    ],
+    'deactivateSharedKeyBinding',
   );
 }
 
@@ -1114,19 +1128,28 @@ export function buildNativeCairoProcessDeactivateEcdhInput(
   evaluated,
 ) {
   const result = evaluated ?? evaluateProcessDeactivateMessagesStateful(rawInput);
-  const legacy = buildCairoProcessDeactivateEcdhInput(rawInput, messageIndex, ecdhKind, result);
   const transition = result.state.transitions[messageIndex];
   const command = result.derived.messageCommands[messageIndex];
+  const ecdhKindFelt = ecdhKind === 'leaf' ? 1n : 0n;
   const base = ecdhKind === 'leaf'
     ? transition.input.stateLeaf.slice(0, 2)
     : rawInput.encPubKeys[messageIndex].map(BigInt);
   const expectedSharedKey = ecdhKind === 'leaf' ? transition.derived.sharedKey : command.sharedKey;
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(result.state.input.coordPrivKey);
+  const baseHash = nativeHashPoint(base, 'base');
+  const sharedKeyHash = nativeHashPoint(expectedSharedKey, 'sharedKey');
   const publicFields = {
     message_index: BigInt(messageIndex),
-    ecdh_kind: ecdhKind === 'leaf' ? 1n : 0n,
-    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
-    base_hash: nativeHashPoint(base, 'base'),
-    shared_key_hash: nativeHashPoint(expectedSharedKey, 'sharedKey'),
+    ecdh_kind: ecdhKindFelt,
+    coord_priv_key_hash: coordPrivKeyHash,
+    base_hash: baseHash,
+    shared_key_hash: sharedKeyHash,
+    shared_key_binding_hash: nativeDeactivateSharedKeyBindingHash(
+      ecdhKindFelt,
+      coordPrivKeyHash,
+      baseHash,
+      sharedKeyHash,
+    ),
   };
   const fields = {
     message_index: feltObject(publicFields.message_index),
@@ -1134,12 +1157,20 @@ export function buildNativeCairoProcessDeactivateEcdhInput(
     coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
     base_hash: feltObject(publicFields.base_hash),
     shared_key_hash: feltObject(publicFields.shared_key_hash),
+    shared_key_binding_hash: feltObject(publicFields.shared_key_binding_hash),
   };
   const publicOutput = nativeProcessDeactivatePublicOutput(
     PROCESS_DEACTIVATE_ECDH_NATIVE_CIRCUIT_ID,
     publicFields,
     result.params,
-    ['message_index', 'ecdh_kind', 'coord_priv_key_hash', 'base_hash', 'shared_key_hash'],
+    [
+      'message_index',
+      'ecdh_kind',
+      'coord_priv_key_hash',
+      'base_hash',
+      'shared_key_hash',
+      'shared_key_binding_hash',
+    ],
   );
 
   return {
@@ -1147,9 +1178,18 @@ export function buildNativeCairoProcessDeactivateEcdhInput(
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        coord_priv_key: splitObject(result.state.input.coordPrivKey, 'coordPrivKey'),
+        base: splitVector2(base, 'base'),
+        shared_key: splitVector2(expectedSharedKey, 'sharedKey'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processDeactivate: rawInput,
+      messageIndex,
+      ecdhKind,
+      nativeSharedKey: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1494,10 +1534,15 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
   const signatureR8Hash = nativeHashPoint(input.cmdSigR8, 'signatureR8');
   const packedCmdHash = nativePackedCmdHash(input.packedCmd);
   const cmdSigSHash = nativeHashU256(input.cmdSigS, 'cmdSigS');
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(result.state.input.coordPrivKey);
+  const encPubKeyHash = nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey');
+  const commandSharedKeyHash = nativeHashPoint(command.sharedKey, 'commandSharedKey');
+  const deactivatePubKeyHash = nativeHashPoint(input.stateLeaf.slice(0, 2), 'deactivatePubKey');
+  const deactivateSharedKeyHash = nativeHashPoint(transition.derived.sharedKey, 'deactivateSharedKey');
   const publicFields = {
     message_index: BigInt(messageIndex),
     deactivate_index: BigInt(input.deactivateIndex),
-    coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
+    coord_priv_key_hash: coordPrivKeyHash,
     previous_message_hash: nativeMsgChain[messageIndex],
     next_message_hash: nativeMsgChain[messageIndex + 1],
     current_active_state_root_hash: nativeContext.currentActiveStateRoot,
@@ -1516,8 +1561,14 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     ),
     current_state_root_hash: nativeContext.currentStateRoot,
     expected_poll_id: result.publicFields.expectedPollId,
-    enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
-    command_shared_key_hash: nativeHashPoint(command.sharedKey, 'commandSharedKey'),
+    enc_pub_key_hash: encPubKeyHash,
+    command_shared_key_hash: commandSharedKeyHash,
+    command_shared_key_binding_hash: nativeDeactivateSharedKeyBindingHash(
+      0n,
+      coordPrivKeyHash,
+      encPubKeyHash,
+      commandSharedKeyHash,
+    ),
     signature_pub_key_hash: signaturePubKeyHash,
     signature_r8_hash: signatureR8Hash,
     packed_cmd_hash: packedCmdHash,
@@ -1543,8 +1594,14 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     new_state_ciphertext_c1_hash: nativeHashPoint(input.c1, 'newStateCiphertextC1'),
     new_state_ciphertext_c2_hash: nativeHashPoint(input.c2, 'newStateCiphertextC2'),
     new_decrypt_is_odd: transition.derived.newStateDecrypt.isOdd,
-    deactivate_pub_key_hash: nativeHashPoint(input.stateLeaf.slice(0, 2), 'deactivatePubKey'),
-    deactivate_shared_key_hash: nativeHashPoint(transition.derived.sharedKey, 'deactivateSharedKey'),
+    deactivate_pub_key_hash: deactivatePubKeyHash,
+    deactivate_shared_key_hash: deactivateSharedKeyHash,
+    deactivate_shared_key_binding_hash: nativeDeactivateSharedKeyBindingHash(
+      1n,
+      coordPrivKeyHash,
+      deactivatePubKeyHash,
+      deactivateSharedKeyHash,
+    ),
   };
   const fields = Object.fromEntries(
     Object.entries(publicFields).map(([key, value]) => [key, feltObject(value)]),
@@ -1565,6 +1622,7 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     'expected_poll_id',
     'enc_pub_key_hash',
     'command_shared_key_hash',
+    'command_shared_key_binding_hash',
     'signature_pub_key_hash',
     'signature_r8_hash',
     'packed_cmd_hash',
@@ -1579,6 +1637,7 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     'new_decrypt_is_odd',
     'deactivate_pub_key_hash',
     'deactivate_shared_key_hash',
+    'deactivate_shared_key_binding_hash',
   ];
   const publicOutput = nativeProcessDeactivatePublicOutput(
     PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
@@ -1819,6 +1878,13 @@ function pushNativeProcessDeactivateEcdhFields(args, fields) {
   pushFelt(args, fields.coord_priv_key_hash);
   pushFelt(args, fields.base_hash);
   pushFelt(args, fields.shared_key_hash);
+  pushFelt(args, fields.shared_key_binding_hash);
+}
+
+function pushNativeProcessDeactivateEcdhWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.base);
+  pushVector2(args, witness.shared_key);
 }
 
 function pushProcessDeactivateSignatureFields(args, fields) {
@@ -1906,6 +1972,7 @@ function pushNativeProcessDeactivateStepCoreFields(args, fields) {
   pushFelt(args, fields.expected_poll_id);
   pushFelt(args, fields.enc_pub_key_hash);
   pushFelt(args, fields.command_shared_key_hash);
+  pushFelt(args, fields.command_shared_key_binding_hash);
   pushFelt(args, fields.signature_pub_key_hash);
   pushFelt(args, fields.signature_r8_hash);
   pushFelt(args, fields.packed_cmd_hash);
@@ -1920,6 +1987,7 @@ function pushNativeProcessDeactivateStepCoreFields(args, fields) {
   pushFelt(args, fields.new_decrypt_is_odd);
   pushFelt(args, fields.deactivate_pub_key_hash);
   pushFelt(args, fields.deactivate_shared_key_hash);
+  pushFelt(args, fields.deactivate_shared_key_binding_hash);
 }
 
 function pushProcessDeactivateMessagesBoundaryWitness(args, witness) {
@@ -2129,7 +2197,7 @@ export function serializeCairoProcessDeactivateEcdhExecutableArgs(cairoInput) {
 export function serializeNativeCairoProcessDeactivateEcdhExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessDeactivateEcdhFields(args, cairoInput.program_input.fields);
-  pushProcessDeactivateEcdhWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessDeactivateEcdhWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

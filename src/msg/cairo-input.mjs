@@ -5,6 +5,7 @@ import {
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
   PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_NATIVE_COMMAND_AUTH_DOMAIN,
+  PROCESS_MESSAGE_NATIVE_SHARED_KEY_DOMAIN,
   PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
@@ -88,6 +89,13 @@ function nativeCommandAuthHash(pubKeyHash, r8Hash, packedCommandHash, cmdSigSHas
       isSignatureValid,
     ],
     'commandAuth',
+  );
+}
+
+function nativeSharedKeyBindingHash(coordPrivKeyHash, encPubKeyHash, sharedKeyHash) {
+  return nativeHashFelts(
+    [PROCESS_MESSAGE_NATIVE_SHARED_KEY_DOMAIN, coordPrivKeyHash, encPubKeyHash, sharedKeyHash],
+    'sharedKeyBinding',
   );
 }
 
@@ -978,26 +986,37 @@ export function buildNativeCairoProcessMessageCoordKeyInput(rawInput, evaluated)
 }
 
 export function buildNativeCairoProcessMessageEcdhInput(rawInput, messageIndex, evaluated) {
-  const legacy = buildCairoProcessMessageEcdhInput(rawInput, messageIndex, evaluated);
+  assertMessageIndex(messageIndex);
   const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
   const transition = result.state.transitions[messageIndex];
+  const coordPrivKeyHash = nativeCoordPrivKeyHash(rawInput.coordPrivKey);
+  const encPubKeyHash = nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey');
+  const sharedKeyHash = nativeHashPoint(transition.input.sharedKey, 'sharedKey');
   const publicFields = {
     message_index: BigInt(messageIndex),
-    coord_priv_key_hash: nativeCoordPrivKeyHash(rawInput.coordPrivKey),
-    enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
-    shared_key_hash: nativeHashPoint(transition.input.sharedKey, 'sharedKey'),
+    coord_priv_key_hash: coordPrivKeyHash,
+    enc_pub_key_hash: encPubKeyHash,
+    shared_key_hash: sharedKeyHash,
+    shared_key_binding_hash: nativeSharedKeyBindingHash(coordPrivKeyHash, encPubKeyHash, sharedKeyHash),
   };
   const fields = {
     message_index: feltObject(publicFields.message_index),
     coord_priv_key_hash: feltObject(publicFields.coord_priv_key_hash),
     enc_pub_key_hash: feltObject(publicFields.enc_pub_key_hash),
     shared_key_hash: feltObject(publicFields.shared_key_hash),
+    shared_key_binding_hash: feltObject(publicFields.shared_key_binding_hash),
   };
   const publicOutput = nativeProcessMessagePublicOutput(
     PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID,
     publicFields,
     result.params,
-    ['message_index', 'coord_priv_key_hash', 'enc_pub_key_hash', 'shared_key_hash'],
+    [
+      'message_index',
+      'coord_priv_key_hash',
+      'enc_pub_key_hash',
+      'shared_key_hash',
+      'shared_key_binding_hash',
+    ],
   );
 
   return {
@@ -1005,9 +1024,17 @@ export function buildNativeCairoProcessMessageEcdhInput(rawInput, messageIndex, 
     publicFields,
     program_input: {
       fields,
-      witness: legacy.program_input.witness,
+      witness: {
+        coord_priv_key: splitObject(rawInput.coordPrivKey, 'coordPrivKey'),
+        enc_pub_key: splitVector2(rawInput.encPubKeys[messageIndex], 'encPubKey'),
+        shared_key: splitVector2(transition.input.sharedKey, 'sharedKey'),
+      },
     },
-    full_witness: legacy.full_witness,
+    full_witness: {
+      processMessages: rawInput,
+      messageIndex,
+      nativeSharedKey: true,
+    },
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
   };
@@ -1263,6 +1290,8 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
   const signatureR8Hash = nativeHashPoint(transition.input.cmdSigR8, 'signatureR8');
   const packedCommandHash = nativePackedCommandHash(transition.input.packedCommand);
   const cmdSigSHash = nativeHashU256(linkFields.cmdSigS, 'cmdSigS');
+  const encPubKeyHash = nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey');
+  const sharedKeyHash = nativeHashPoint(transition.input.sharedKey, 'sharedKey');
   const publicFields = {
     message_index: BigInt(messageIndex),
     packed_vals_hash: nativeFelt(result.publicFields.packedVals, 'packedVals'),
@@ -1283,8 +1312,13 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     ),
     active_state_root_hash: nativeContext.activeStateRoot,
     expected_poll_id: result.publicFields.expectedPollId,
-    enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
-    shared_key_hash: nativeHashPoint(transition.input.sharedKey, 'sharedKey'),
+    enc_pub_key_hash: encPubKeyHash,
+    shared_key_hash: sharedKeyHash,
+    shared_key_binding_hash: nativeSharedKeyBindingHash(
+      nativeCoordPrivKeyHash(rawInput.coordPrivKey),
+      encPubKeyHash,
+      sharedKeyHash,
+    ),
     signature_pub_key_hash: signaturePubKeyHash,
     signature_r8_hash: signatureR8Hash,
     packed_command_hash: packedCommandHash,
@@ -1316,6 +1350,7 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     'expected_poll_id',
     'enc_pub_key_hash',
     'shared_key_hash',
+    'shared_key_binding_hash',
     'signature_pub_key_hash',
     'signature_r8_hash',
     'packed_command_hash',
@@ -1666,6 +1701,13 @@ function pushNativeProcessMessageEcdhFields(args, fields) {
   pushFelt(args, fields.coord_priv_key_hash);
   pushFelt(args, fields.enc_pub_key_hash);
   pushFelt(args, fields.shared_key_hash);
+  pushFelt(args, fields.shared_key_binding_hash);
+}
+
+function pushNativeProcessMessageEcdhWitness(args, witness) {
+  pushU256(args, witness.coord_priv_key);
+  pushVector2(args, witness.enc_pub_key);
+  pushVector2(args, witness.shared_key);
 }
 
 function pushNativeProcessMessageSignatureFields(args, fields) {
@@ -1714,6 +1756,7 @@ function pushNativeProcessMessageStepCoreFields(args, fields) {
   pushFelt(args, fields.expected_poll_id);
   pushFelt(args, fields.enc_pub_key_hash);
   pushFelt(args, fields.shared_key_hash);
+  pushFelt(args, fields.shared_key_binding_hash);
   pushFelt(args, fields.signature_pub_key_hash);
   pushFelt(args, fields.signature_r8_hash);
   pushFelt(args, fields.packed_command_hash);
@@ -2029,7 +2072,7 @@ export function serializeNativeCairoProcessMessageCoordKeyExecutableArgs(cairoIn
 export function serializeNativeCairoProcessMessageEcdhExecutableArgs(cairoInput) {
   const args = [];
   pushNativeProcessMessageEcdhFields(args, cairoInput.program_input.fields);
-  pushProcessMessageEcdhWitness(args, cairoInput.program_input.witness);
+  pushNativeProcessMessageEcdhWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
 }
 

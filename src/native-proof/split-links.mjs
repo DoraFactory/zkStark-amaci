@@ -252,6 +252,14 @@ function buildProcessMessagesReport(manifestPath, manifest) {
     );
     expectFieldEq(checks, `ecdh[${index}] enc public key links to core`, ecdhRun, 'enc_pub_key_hash', coreRun, 'enc_pub_key_hash');
     expectFieldEq(checks, `ecdh[${index}] shared key links to core`, ecdhRun, 'shared_key_hash', coreRun, 'shared_key_hash');
+    expectFieldEq(
+      checks,
+      `ecdh[${index}] shared key binding links to core`,
+      ecdhRun,
+      'shared_key_binding_hash',
+      coreRun,
+      'shared_key_binding_hash',
+    );
     expectFieldEq(checks, `signature[${index}] public key links to core`, signatureRun, 'pub_key_hash', coreRun, 'signature_pub_key_hash');
     expectFieldEq(checks, `signature[${index}] r8 links to core`, signatureRun, 'r8_hash', coreRun, 'signature_r8_hash');
     expectFieldEq(
@@ -445,6 +453,14 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
       coreRun,
       'command_shared_key_hash',
     );
+    expectFieldEq(
+      checks,
+      `commandEcdh[${index}] shared key binding links to core`,
+      commandRun,
+      'shared_key_binding_hash',
+      coreRun,
+      'command_shared_key_binding_hash',
+    );
     expectFieldEq(checks, `leafEcdh[${index}] base links to core deactivate key`, leafRun, 'base_hash', coreRun, 'deactivate_pub_key_hash');
     expectFieldEq(
       checks,
@@ -453,6 +469,14 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
       'shared_key_hash',
       coreRun,
       'deactivate_shared_key_hash',
+    );
+    expectFieldEq(
+      checks,
+      `leafEcdh[${index}] shared key binding links to core`,
+      leafRun,
+      'shared_key_binding_hash',
+      coreRun,
+      'deactivate_shared_key_binding_hash',
     );
     expectFieldEq(checks, `signature[${index}] public key links to core`, signatureRun, 'pub_key_hash', coreRun, 'signature_pub_key_hash');
     expectFieldEq(checks, `signature[${index}] r8 links to core`, signatureRun, 'r8_hash', coreRun, 'signature_r8_hash');

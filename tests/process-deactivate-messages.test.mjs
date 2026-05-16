@@ -545,12 +545,12 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   const nativeRoots = nativeProcessDeactivateTransitionContexts(evaluated.state)[2];
 
   assert.equal(coordKey.public_output.length, 9);
-  assert.equal(commandEcdh.public_output.length, 12);
-  assert.equal(leafEcdh.public_output.length, 12);
+  assert.equal(commandEcdh.public_output.length, 13);
+  assert.equal(leafEcdh.public_output.length, 13);
   assert.equal(signature.public_output.length, 14);
   assert.equal(currentDecrypt.public_output.length, 13);
   assert.equal(newDecrypt.public_output.length, 13);
-  assert.equal(core.public_output.length, 36);
+  assert.equal(core.public_output.length, 38);
   assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
   assert.equal(commandEcdh.publicFields.message_index, 2n);
   assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
@@ -560,8 +560,10 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(core.publicFields.coord_priv_key_hash, coordKey.publicFields.coord_priv_key_hash);
   assert.equal(core.publicFields.enc_pub_key_hash, commandEcdh.publicFields.base_hash);
   assert.equal(core.publicFields.command_shared_key_hash, commandEcdh.publicFields.shared_key_hash);
+  assert.equal(core.publicFields.command_shared_key_binding_hash, commandEcdh.publicFields.shared_key_binding_hash);
   assert.equal(core.publicFields.deactivate_pub_key_hash, leafEcdh.publicFields.base_hash);
   assert.equal(core.publicFields.deactivate_shared_key_hash, leafEcdh.publicFields.shared_key_hash);
+  assert.equal(core.publicFields.deactivate_shared_key_binding_hash, leafEcdh.publicFields.shared_key_binding_hash);
   assert.equal(core.publicFields.signature_pub_key_hash, signature.publicFields.pub_key_hash);
   assert.equal(core.publicFields.signature_r8_hash, signature.publicFields.r8_hash);
   assert.equal(core.publicFields.packed_cmd_hash, signature.publicFields.packed_cmd_hash);
