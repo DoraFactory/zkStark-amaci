@@ -66,7 +66,7 @@ test('runs a proof_serializer-compatible binary and writes calldata JSON', () =>
   const fakeSerializer = join(dir, 'proof_serializer');
   const stoneProof = join(dir, 'stone-proof.json');
   const out = join(dir, 'integrity-calldata.json');
-  writeFileSync(stoneProof, '{"proof":[]}\n');
+  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
   writeFileSync(fakeSerializer, '#!/usr/bin/env sh\ncat >/dev/null\nprintf "7 0x8 9\\n"\n');
   chmodSync(fakeSerializer, 0o755);
 
@@ -119,7 +119,7 @@ test('runs swiftness split generator and copies cli/calldata output', () => {
   mkdirSync(fakeBin, { recursive: true });
   mkdirSync(generatorCliDir, { recursive: true });
   writeFileSync(join(generatorCliDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
-  writeFileSync(stoneProof, '{"proof":[]}\n');
+  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
   writeFileSync(
     fakeCargo,
     [
@@ -168,7 +168,7 @@ test('runs swiftness split generator from root Cargo.toml when cli Cargo.toml is
   mkdirSync(fakeBin, { recursive: true });
   mkdirSync(generatorDir, { recursive: true });
   writeFileSync(join(generatorDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
-  writeFileSync(stoneProof, '{"proof":[]}\n');
+  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
   writeFileSync(
     fakeCargo,
     [
@@ -199,4 +199,27 @@ test('runs swiftness split generator from root Cargo.toml when cli Cargo.toml is
   } finally {
     process.env.PATH = previousPath;
   }
+});
+
+test('rejects split calldata generation when Stone proof annotations are missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-missing-annotations-'));
+  const generatorDir = join(dir, 'integrity-calldata-generator');
+  const stoneProof = join(dir, 'stone-proof.json');
+  const outDir = join(dir, 'integrity-split');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  mkdirSync(generatorDir, { recursive: true });
+  writeFileSync(join(generatorDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
+  writeFileSync(stoneProof, '{"proof":[]}\n');
+
+  assert.throws(
+    () =>
+      buildIntegritySplitCalldataPackage({
+        stoneProofPath: stoneProof,
+        calldataGeneratorDir: generatorDir,
+        outDir,
+        out,
+      }),
+    /missing annotations/,
+  );
 });

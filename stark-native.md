@@ -266,6 +266,11 @@ du -sh "$OUT" "$OUT.tar.gz"
 Because the layout is `recursive_with_poseidon`, use the split serialization
 path rather than monolith serialization.
 
+Integrity's split calldata generator expects Stone proofs with `annotations`.
+`npm run stone:prove:tally` enables `cpu_air_prover --generate_annotations`
+by default. If this step fails with `missing field annotations`, rerun only the
+Stone proof step against the existing AIR run before serializing calldata.
+
 ```sh
 export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
 

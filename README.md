@@ -1091,6 +1091,17 @@ To mark a proof run as Integrity-ready, rerun the checker only after producing
 Stone/Integrity-compatible calldata. The native tally Stone proof uses
 `recursive_with_poseidon`, so use split calldata:
 
+Integrity's split calldata generator expects Stone proofs with `annotations`.
+`npm run stone:prove:tally` enables `cpu_air_prover --generate_annotations`
+by default. If an older `stone-proof.json` fails with `missing field
+annotations`, rerun only the Stone proof step against the existing AIR run:
+
+```sh
+npm run stone:prove:tally -- \
+  --air-run "$STONE_OUT/stone-air/stone-air-run.json" \
+  --out-dir "$STONE_OUT/stone-proof"
+```
+
 ```sh
 export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
 

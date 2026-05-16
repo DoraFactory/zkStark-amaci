@@ -63,6 +63,19 @@ function readFeltFile(path) {
   };
 }
 
+function assertStoneProofHasAnnotations(path) {
+  const proof = JSON.parse(readFileSync(path, 'utf8'));
+  if (!Object.prototype.hasOwnProperty.call(proof, 'annotations')) {
+    throw new Error(
+      [
+        `Stone proof is missing annotations: ${path}`,
+        'Integrity split calldata generation requires a Stone proof produced with --generate_annotations.',
+        'Regenerate the proof with npm run stone:prove:tally using the current repository; annotations are enabled by default.',
+      ].join('\n'),
+    );
+  }
+}
+
 function normalizeSettings(settings = {}) {
   return {
     layout: settings.layout ?? DEFAULT_SETTINGS.layout,
@@ -232,6 +245,7 @@ export function buildIntegritySplitCalldataPackage({
     if (!existsSync(stoneProofPath)) {
       throw new Error(`Stone proof JSON not found: ${stoneProofPath}`);
     }
+    assertStoneProofHasAnnotations(stoneProofPath);
     if (!outDir) {
       throw new Error('outDir is required when generating split calldata');
     }

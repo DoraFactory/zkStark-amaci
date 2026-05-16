@@ -19,6 +19,8 @@ Options:
   --parameter-file <path>   cpu_air_params.json. Auto-detected if omitted.
                             If omitted, a matching params file is generated
                             from AIR n_steps under --out-dir.
+  --no-annotations          Do not pass --generate_annotations to cpu_air_prover.
+                            Integrity split calldata generation requires annotations.
   --skip-verify             Skip cpu_air_verifier.
 
 Outputs:
@@ -136,6 +138,7 @@ PROVER_CONFIG_FILE=""
 PARAMETER_FILE=""
 PARAMETER_FILE_EXPLICIT=0
 SKIP_VERIFY=0
+GENERATE_ANNOTATIONS=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -162,6 +165,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-verify)
       SKIP_VERIFY=1
+      shift
+      ;;
+    --no-annotations)
+      GENERATE_ANNOTATIONS=0
       shift
       ;;
     --help|-h)
@@ -259,14 +266,24 @@ echo "AIR run: $AIR_RUN_JSON"
 echo "stone executable: $STONE_EXECUTABLE"
 echo "prover config: $PROVER_CONFIG_FILE"
 echo "parameter file: $PARAMETER_FILE"
+if [[ "$GENERATE_ANNOTATIONS" -eq 1 ]]; then
+  echo "annotations: enabled"
+else
+  echo "annotations: disabled"
+fi
 
-cpu_air_prover \
-  --out_file="$PROOF_JSON" \
-  --private_input_file="$AIR_PRIVATE_INPUT" \
-  --public_input_file="$AIR_PUBLIC_INPUT" \
-  --prover_config_file="$PROVER_CONFIG_FILE" \
-  --parameter_file="$PARAMETER_FILE" \
-  2>&1 | tee "$PROVE_LOG"
+PROVER_ARGS=(
+  --out_file="$PROOF_JSON"
+  --private_input_file="$AIR_PRIVATE_INPUT"
+  --public_input_file="$AIR_PUBLIC_INPUT"
+  --prover_config_file="$PROVER_CONFIG_FILE"
+  --parameter_file="$PARAMETER_FILE"
+)
+if [[ "$GENERATE_ANNOTATIONS" -eq 1 ]]; then
+  PROVER_ARGS+=(--generate_annotations)
+fi
+
+cpu_air_prover "${PROVER_ARGS[@]}" 2>&1 | tee "$PROVE_LOG"
 
 if [[ ! -f "$PROOF_JSON" ]]; then
   echo "cpu_air_prover completed but proof JSON is missing: $PROOF_JSON" >&2
@@ -288,7 +305,7 @@ else
   printf 'verification skipped\n' > "$VERIFY_LOG"
 fi
 
-node - "$PROOF_RUN_JSON" "$AIR_RUN_JSON" "$PROOF_JSON" "$PREPARED_JSON" "$INPUT_PATH" "$EXECUTABLE" "$RUNNER_SIERRA_JSON" "$PROVE_LOG" "$VERIFY_LOG" <<'NODE'
+node - "$PROOF_RUN_JSON" "$AIR_RUN_JSON" "$PROOF_JSON" "$PREPARED_JSON" "$INPUT_PATH" "$EXECUTABLE" "$RUNNER_SIERRA_JSON" "$PROVE_LOG" "$VERIFY_LOG" "$GENERATE_ANNOTATIONS" <<'NODE'
 const fs = require('fs');
 const [
   out,
@@ -300,9 +317,11 @@ const [
   runnerSierraJson,
   proveLog,
   verifyLog,
+  generateAnnotations,
 ] = process.argv.slice(2);
 
 const airRun = JSON.parse(fs.readFileSync(airRunJson, 'utf8'));
+const proof = JSON.parse(fs.readFileSync(proofJson, 'utf8'));
 const output = {
   circuit: airRun.circuit ?? 'tally',
   executable: airRun.stoneExecutable ?? 'tally_votes_stone',
@@ -316,6 +335,8 @@ const output = {
   stoneAirRunJson: airRunJson,
   proveLog,
   verifyLog,
+  annotationsRequested: generateAnnotations === '1',
+  annotationsPresent: Object.prototype.hasOwnProperty.call(proof, 'annotations'),
 };
 
 fs.writeFileSync(out, `${JSON.stringify(output, null, 2)}\n`);
