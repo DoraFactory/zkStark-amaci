@@ -550,7 +550,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(signature.public_output.length, 14);
   assert.equal(currentDecrypt.public_output.length, 14);
   assert.equal(newDecrypt.public_output.length, 14);
-  assert.equal(core.public_output.length, 40);
+  assert.equal(core.public_output.length, 41);
   assert.ok(coordKey.public_output_labels.includes('hash_scheme'));
   assert.equal(commandEcdh.publicFields.message_index, 2n);
   assert.equal(commandEcdh.publicFields.ecdh_kind, 0n);
@@ -570,6 +570,7 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(core.publicFields.packed_cmd_hash, signature.publicFields.packed_cmd_hash);
   assert.equal(core.publicFields.cmd_sig_s_hash, signature.publicFields.cmd_sig_s_hash);
   assert.equal(core.publicFields.command_auth_hash, signature.publicFields.command_auth_hash);
+  assert.ok(core.publicFields.command_plaintext_binding_hash > 0n);
   assert.equal(core.publicFields.signature_valid, signature.publicFields.signature_valid);
   assert.equal(core.publicFields.current_state_ciphertext_c1_hash, currentDecrypt.publicFields.c1_hash);
   assert.equal(core.publicFields.current_state_ciphertext_c2_hash, currentDecrypt.publicFields.c2_hash);

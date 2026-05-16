@@ -54,6 +54,8 @@ pub const PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 pub const NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f44454143545f41555448;
+pub const NATIVE_DEACTIVATE_COMMAND_PLAINTEXT_DOMAIN: felt252 =
+    0x414d4143495f44454143545f434d445f504c41494e;
 pub const NATIVE_DEACTIVATE_COORD_KEY_BINDING_DOMAIN: felt252 =
     0x414d4143495f44454143545f434f4f52445f42494e44;
 pub const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
@@ -278,6 +280,7 @@ pub struct NativeProcessDeactivateStepCorePublicFields {
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
     pub command_auth_hash: felt252,
+    pub command_plaintext_binding_hash: felt252,
     pub signature_valid: felt252,
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
@@ -389,6 +392,7 @@ pub struct NativeProcessDeactivateStepCorePublicOutput {
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
     pub command_auth_hash: felt252,
+    pub command_plaintext_binding_hash: felt252,
     pub signature_valid: felt252,
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
@@ -866,6 +870,30 @@ fn native_deactivate_command_auth_hash(
     )
 }
 
+fn native_deactivate_command_plaintext_binding_hash(
+    next_message_hash: felt252,
+    shared_key_hash: felt252,
+    packed_cmd_hash: felt252,
+    signature_pub_key_hash: felt252,
+    signature_r8_hash: felt252,
+    cmd_sig_s_hash: felt252,
+    command_auth_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_DEACTIVATE_COMMAND_PLAINTEXT_DOMAIN,
+            next_message_hash,
+            shared_key_hash,
+            packed_cmd_hash,
+            signature_pub_key_hash,
+            signature_r8_hash,
+            cmd_sig_s_hash,
+            command_auth_hash,
+        ]
+            .span(),
+    )
+}
+
 fn native_deactivate_coord_key_binding_hash(
     coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
 ) -> felt252 {
@@ -1165,6 +1193,18 @@ fn verify_native_process_deactivate_step_core(
             fields.signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
+    );
+    assert(
+        native_deactivate_command_plaintext_binding_hash(
+            fields.next_message_hash,
+            fields.command_shared_key_hash,
+            fields.packed_cmd_hash,
+            fields.signature_pub_key_hash,
+            fields.signature_r8_hash,
+            fields.cmd_sig_s_hash,
+            fields.command_auth_hash,
+        ) == fields.command_plaintext_binding_hash,
+        'N_CMD_PLAIN',
     );
     assert(witness.signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(felt_from_u128(witness.signature_valid.low) == fields.signature_valid, 'SIG_VALID');
@@ -2116,6 +2156,7 @@ fn build_native_process_deactivate_step_core_public_output(
         packed_cmd_hash: fields.packed_cmd_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
         command_auth_hash: fields.command_auth_hash,
+        command_plaintext_binding_hash: fields.command_plaintext_binding_hash,
         signature_valid: fields.signature_valid,
         current_state_ciphertext_c1_hash: fields.current_state_ciphertext_c1_hash,
         current_state_ciphertext_c2_hash: fields.current_state_ciphertext_c2_hash,

@@ -292,6 +292,12 @@ function buildProcessMessagesReport(manifestPath, manifest) {
       coreRun,
       'command_auth_hash',
     );
+    expectFieldPresent(
+      checks,
+      `core[${index}] command plaintext binding is present`,
+      coreRun,
+      'command_plaintext_binding_hash',
+    );
     expectFieldEq(
       checks,
       `signature[${index}] validity links to core`,
@@ -497,6 +503,12 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     expectFieldEq(checks, `signature[${index}] packed command links to core`, signatureRun, 'packed_cmd_hash', coreRun, 'packed_cmd_hash');
     expectFieldEq(checks, `signature[${index}] s hash links to core`, signatureRun, 'cmd_sig_s_hash', coreRun, 'cmd_sig_s_hash');
     expectFieldEq(checks, `signature[${index}] command auth links to core`, signatureRun, 'command_auth_hash', coreRun, 'command_auth_hash');
+    expectFieldPresent(
+      checks,
+      `core[${index}] command plaintext binding is present`,
+      coreRun,
+      'command_plaintext_binding_hash',
+    );
     expectFieldEq(checks, `signature[${index}] validity links to core`, signatureRun, 'signature_valid', coreRun, 'signature_valid');
     expectFieldEq(
       checks,

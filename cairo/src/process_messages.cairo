@@ -54,6 +54,8 @@ pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445
 pub const NATIVE_COORD_KEY_BINDING_DOMAIN: felt252 =
     0x414d4143495f504d53475f434f4f52445f42494e44;
 pub const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
+pub const NATIVE_COMMAND_PLAINTEXT_DOMAIN: felt252 =
+    0x414d4143495f504d53475f434d445f504c41494e;
 pub const NATIVE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f504d53475f534841524544;
 
 #[derive(Copy, Drop, Serde)]
@@ -304,6 +306,7 @@ pub struct NativeProcessMessageStepCorePublicFields {
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
     pub command_auth_hash: felt252,
+    pub command_plaintext_binding_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -383,6 +386,7 @@ pub struct NativeProcessMessageStepCorePublicOutput {
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
     pub command_auth_hash: felt252,
+    pub command_plaintext_binding_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -953,6 +957,30 @@ fn native_command_auth_hash(
     )
 }
 
+fn native_command_plaintext_binding_hash(
+    next_message_hash: felt252,
+    shared_key_hash: felt252,
+    packed_command_hash: felt252,
+    signature_pub_key_hash: felt252,
+    signature_r8_hash: felt252,
+    cmd_sig_s_hash: felt252,
+    command_auth_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [
+            NATIVE_COMMAND_PLAINTEXT_DOMAIN,
+            next_message_hash,
+            shared_key_hash,
+            packed_command_hash,
+            signature_pub_key_hash,
+            signature_r8_hash,
+            cmd_sig_s_hash,
+            command_auth_hash,
+        ]
+            .span(),
+    )
+}
+
 fn native_coord_key_binding_hash(
     coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
 ) -> felt252 {
@@ -1254,6 +1282,18 @@ fn verify_native_process_message_step_core(
             fields.is_signature_valid,
         ) == fields.command_auth_hash,
         'N_CMD_AUTH',
+    );
+    assert(
+        native_command_plaintext_binding_hash(
+            fields.next_message_hash,
+            fields.shared_key_hash,
+            fields.packed_command_hash,
+            fields.signature_pub_key_hash,
+            fields.signature_r8_hash,
+            fields.cmd_sig_s_hash,
+            fields.command_auth_hash,
+        ) == fields.command_plaintext_binding_hash,
+        'N_CMD_PLAIN',
     );
     assert(witness.process_one.is_signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(
@@ -2300,6 +2340,7 @@ fn build_native_process_message_step_core_public_output(
         packed_command_hash: fields.packed_command_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
         command_auth_hash: fields.command_auth_hash,
+        command_plaintext_binding_hash: fields.command_plaintext_binding_hash,
         is_signature_valid: fields.is_signature_valid,
     }
 }

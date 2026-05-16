@@ -520,7 +520,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(coordKey.public_output.length, 10);
   assert.equal(ecdh.public_output.length, 12);
   assert.equal(signature.public_output.length, 14);
-  assert.equal(core.public_output.length, 27);
+  assert.equal(core.public_output.length, 28);
   assert.equal(coordKey.public_output_labels[3], 'hash_scheme');
   assert.equal(ecdh.publicFields.message_index, 3n);
   assert.equal(signature.publicFields.message_index, 3n);
@@ -536,6 +536,7 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(signature.publicFields.packed_command_hash, core.publicFields.packed_command_hash);
   assert.equal(signature.publicFields.cmd_sig_s_hash, core.publicFields.cmd_sig_s_hash);
   assert.equal(signature.publicFields.command_auth_hash, core.publicFields.command_auth_hash);
+  assert.ok(core.publicFields.command_plaintext_binding_hash > 0n);
   assert.equal(signature.publicFields.is_signature_valid, core.publicFields.is_signature_valid);
   assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
   assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[3]);
