@@ -47,6 +47,8 @@ pub const PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f454344485f4e4154495645;
 pub const PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f5349475f4e4154495645;
+pub const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f504d53475f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
 
 #[derive(Copy, Drop, Serde)]
@@ -252,6 +254,28 @@ pub struct NativeProcessMessageSignaturePublicFields {
 }
 
 #[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageStepCorePublicFields {
+    pub message_index: felt252,
+    pub packed_vals_hash: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub previous_message_hash: felt252,
+    pub next_message_hash: felt252,
+    pub current_state_root_hash: felt252,
+    pub new_state_root_hash: felt252,
+    pub current_state_commitment_hash: felt252,
+    pub new_state_commitment_hash: felt252,
+    pub active_state_root_hash: felt252,
+    pub expected_poll_id: felt252,
+    pub enc_pub_key_hash: felt252,
+    pub shared_key_hash: felt252,
+    pub signature_pub_key_hash: felt252,
+    pub signature_r8_hash: felt252,
+    pub packed_command_hash: felt252,
+    pub cmd_sig_s_hash: felt252,
+    pub is_signature_valid: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
 pub struct NativeProcessMessageCoordKeyPublicOutput {
     pub magic: felt252,
     pub version: felt252,
@@ -291,6 +315,35 @@ pub struct NativeProcessMessageSignaturePublicOutput {
     pub message_index: felt252,
     pub pub_key_hash: felt252,
     pub r8_hash: felt252,
+    pub packed_command_hash: felt252,
+    pub cmd_sig_s_hash: felt252,
+    pub is_signature_valid: felt252,
+}
+
+#[derive(Copy, Drop, Serde)]
+pub struct NativeProcessMessageStepCorePublicOutput {
+    pub magic: felt252,
+    pub version: felt252,
+    pub circuit_id: felt252,
+    pub hash_scheme: felt252,
+    pub state_tree_depth: felt252,
+    pub vote_option_tree_depth: felt252,
+    pub message_batch_size: felt252,
+    pub message_index: felt252,
+    pub packed_vals_hash: felt252,
+    pub coord_priv_key_hash: felt252,
+    pub previous_message_hash: felt252,
+    pub next_message_hash: felt252,
+    pub current_state_root_hash: felt252,
+    pub new_state_root_hash: felt252,
+    pub current_state_commitment_hash: felt252,
+    pub new_state_commitment_hash: felt252,
+    pub active_state_root_hash: felt252,
+    pub expected_poll_id: felt252,
+    pub enc_pub_key_hash: felt252,
+    pub shared_key_hash: felt252,
+    pub signature_pub_key_hash: felt252,
+    pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
     pub is_signature_valid: felt252,
@@ -907,6 +960,97 @@ fn verify_native_process_message_signature(
     );
     assert(valid.high == 0, 'SIG_BOOL_HIGH');
     assert(felt_from_u128(valid.low) == fields.is_signature_valid, 'SIG_VALID');
+}
+
+fn verify_native_process_message_step_core(
+    fields: NativeProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+) {
+    assert_valid_message_index(fields.message_index);
+    assert_bool_u256(witness.is_quadratic_cost);
+    assert_u32(witness.num_signups);
+    assert_u32(witness.max_vote_options);
+    assert(witness.max_vote_options <= MAX_VOTE_OPTIONS, 'BAD_MAX_VO');
+    assert(witness.num_signups <= MAX_SIGNUPS, 'BAD_NUM_SIGNUPS');
+    assert(fields.is_signature_valid == 0 || fields.is_signature_valid == 1, 'BAD_SIG_BOOL');
+
+    let packed_vals = witness.is_quadratic_cost * TWO_POW_64
+        + witness.num_signups * TWO_POW_32
+        + witness.max_vote_options;
+    assert(native_hash_u256(packed_vals) == fields.packed_vals_hash, 'N_PACKED');
+    assert(
+        native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
+        'N_COORD_PRIV',
+    );
+    assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
+    assert(native_hash_u256x2(witness.process_one.shared_key) == fields.shared_key_hash, 'N_SHARED');
+    assert(
+        native_hash_u256x2(
+            U256x2 { v0: witness.process_one.state_leaf.v0, v1: witness.process_one.state_leaf.v1 },
+        ) == fields.signature_pub_key_hash,
+        'N_SIG_PUB',
+    );
+    assert(native_hash_u256x2(witness.process_one.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
+    assert(
+        native_hash_u256x3(witness.process_one.packed_command) == fields.packed_command_hash,
+        'N_CMD',
+    );
+    assert(native_hash_u256(witness.process_one.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(witness.process_one.is_signature_valid.high == 0, 'SIG_BOOL_HIGH');
+    assert(
+        felt_from_u128(witness.process_one.is_signature_valid.low) == fields.is_signature_valid,
+        'SIG_VALID',
+    );
+
+    let previous_message_hash = witness.message_hash.out.inputs.v4;
+    assert(native_hash_u256(previous_message_hash) == fields.previous_message_hash, 'N_PREV_MSG');
+    let next_message_hash = message_hash_or_empty(
+        witness.message_hash, witness.msg, witness.enc_pub_key, previous_message_hash,
+    );
+    assert(native_hash_u256(next_message_hash) == fields.next_message_hash, 'N_NEXT_MSG');
+
+    assert(native_hash_u256(witness.process_one.current_state_root) == fields.current_state_root_hash, 'N_CUR_ROOT');
+    assert(native_hash_u256(witness.process_one.active_state_root) == fields.active_state_root_hash, 'N_ACTIVE');
+    assert_u256_eq(witness.process_one.is_quadratic_cost, witness.is_quadratic_cost);
+    assert_u256_eq(witness.process_one.num_signups, witness.num_signups);
+    assert_u256_eq(witness.process_one.max_vote_options, witness.max_vote_options);
+    assert(witness.process_one.expected_poll_id.high == 0, 'POLL_HIGH');
+    assert(felt_from_u128(witness.process_one.expected_poll_id.low) == fields.expected_poll_id, 'POLL_ID');
+    assert_message_matches(witness.msg, witness.process_one.msg);
+
+    let computed_new_state_root = if is_zero(witness.enc_pub_key.v0) {
+        assert_u256_eq(witness.process_one.is_valid, zero_u256());
+        witness.process_one.current_state_root
+    } else {
+        process_one_chain_step(
+            witness.process_one.current_state_root,
+            witness.coord_priv_key,
+            witness.process_one.active_state_root,
+            witness.state_decrypt,
+            witness.process_one,
+        )
+    };
+    assert(native_hash_u256(computed_new_state_root) == fields.new_state_root_hash, 'N_NEW_ROOT');
+
+    if fields.message_index == 4 {
+        let current_state_commitment = poseidon_hash2(
+            witness.current_state_commitment,
+            witness.process_one.current_state_root,
+            witness.current_state_salt,
+        );
+        assert(
+            native_hash_u256(current_state_commitment) == fields.current_state_commitment_hash,
+            'N_CUR_COMMIT',
+        );
+    }
+    if fields.message_index == 0 {
+        let new_state_commitment = poseidon_hash2(
+            witness.new_state_commitment, computed_new_state_root, witness.new_state_salt,
+        );
+        assert(
+            native_hash_u256(new_state_commitment) == fields.new_state_commitment_hash,
+            'N_NEW_COMMIT',
+        );
+    }
 }
 
 fn verify_process_message_coord_key(
@@ -1873,12 +2017,52 @@ pub fn process_message_signature_native_main(
     build_native_process_message_signature_public_output(fields)
 }
 
+fn build_native_process_message_step_core_public_output(
+    fields: NativeProcessMessageStepCorePublicFields,
+) -> NativeProcessMessageStepCorePublicOutput {
+    NativeProcessMessageStepCorePublicOutput {
+        magic: crate::public_output::PUBLIC_OUTPUT_MAGIC,
+        version: NATIVE_PUBLIC_OUTPUT_VERSION,
+        circuit_id: PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID,
+        hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
+        state_tree_depth: 2,
+        vote_option_tree_depth: 1,
+        message_batch_size: 5,
+        message_index: fields.message_index,
+        packed_vals_hash: fields.packed_vals_hash,
+        coord_priv_key_hash: fields.coord_priv_key_hash,
+        previous_message_hash: fields.previous_message_hash,
+        next_message_hash: fields.next_message_hash,
+        current_state_root_hash: fields.current_state_root_hash,
+        new_state_root_hash: fields.new_state_root_hash,
+        current_state_commitment_hash: fields.current_state_commitment_hash,
+        new_state_commitment_hash: fields.new_state_commitment_hash,
+        active_state_root_hash: fields.active_state_root_hash,
+        expected_poll_id: fields.expected_poll_id,
+        enc_pub_key_hash: fields.enc_pub_key_hash,
+        shared_key_hash: fields.shared_key_hash,
+        signature_pub_key_hash: fields.signature_pub_key_hash,
+        signature_r8_hash: fields.signature_r8_hash,
+        packed_command_hash: fields.packed_command_hash,
+        cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        is_signature_valid: fields.is_signature_valid,
+    }
+}
+
 #[executable]
 pub fn process_message_step_core_main(
     fields: ProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
 ) -> ProcessMessageStepCorePublicOutput {
     verify_process_message_step_core(fields, witness);
     build_process_message_step_core_public_output(fields)
+}
+
+#[executable]
+pub fn process_message_step_core_native_main(
+    fields: NativeProcessMessageStepCorePublicFields, witness: ProcessMessageStepCoreWitness,
+) -> NativeProcessMessageStepCorePublicOutput {
+    verify_native_process_message_step_core(fields, witness);
+    build_native_process_message_step_core_public_output(fields)
 }
 
 #[executable]

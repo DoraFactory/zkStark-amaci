@@ -22,6 +22,7 @@ import {
   buildNativeCairoProcessMessageCoordKeyInput,
   buildNativeCairoProcessMessageEcdhInput,
   buildNativeCairoProcessMessageSignatureInput,
+  buildNativeCairoProcessMessageStepCoreInput,
   serializeCairoProcessMessageCoordKeyExecutableArgs,
   serializeCairoProcessMessageEcdhExecutableArgs,
   serializeCairoProcessMessageSignatureExecutableArgs,
@@ -34,6 +35,7 @@ import {
   serializeNativeCairoProcessMessageCoordKeyExecutableArgs,
   serializeNativeCairoProcessMessageEcdhExecutableArgs,
   serializeNativeCairoProcessMessageSignatureExecutableArgs,
+  serializeNativeCairoProcessMessageStepCoreExecutableArgs,
 } from '../src/msg/cairo-input.mjs';
 import {
   evaluateProcessMessages,
@@ -192,6 +194,14 @@ const PREPARERS = {
     build: (input, evaluated, options) =>
       buildCairoProcessMessageStepCoreInput(input, options.messageIndex, evaluated),
     serialize: serializeCairoProcessMessageStepCoreExecutableArgs,
+    requiresMessageIndex: true,
+  },
+  'process-message-step-core-native': {
+    executable: 'process_message_step_core_native',
+    evaluate: evaluateProcessMessagesStateful,
+    build: (input, evaluated, options) =>
+      buildNativeCairoProcessMessageStepCoreInput(input, options.messageIndex, evaluated),
+    serialize: serializeNativeCairoProcessMessageStepCoreExecutableArgs,
     requiresMessageIndex: true,
   },
   'add-new-key': {

@@ -84,6 +84,12 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-step-core-native': {
+    prepareCircuit: 'process-message-step-core-native',
+    executable: 'process_message_step_core_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate': {
     prepareCircuit: 'process-deactivate-stateful',
     executable: 'process_deactivate_messages_stateful',
