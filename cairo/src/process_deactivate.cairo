@@ -53,6 +53,7 @@ pub const PROCESS_DEACTIVATE_DECRYPT_NATIVE_CIRCUIT_ID: felt252 =
 pub const PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f44454143545f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
+pub const NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f44454143545f41555448;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessDeactivateOneHashTranscript {
@@ -202,6 +203,7 @@ pub struct NativeProcessDeactivateSignaturePublicFields {
     pub r8_hash: felt252,
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub signature_valid: felt252,
 }
 
@@ -236,6 +238,7 @@ pub struct NativeProcessDeactivateStepCorePublicFields {
     pub signature_r8_hash: felt252,
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub signature_valid: felt252,
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
@@ -290,6 +293,7 @@ pub struct NativeProcessDeactivateSignaturePublicOutput {
     pub r8_hash: felt252,
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub signature_valid: felt252,
 }
 
@@ -338,6 +342,7 @@ pub struct NativeProcessDeactivateStepCorePublicOutput {
     pub signature_r8_hash: felt252,
     pub packed_cmd_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub signature_valid: felt252,
     pub current_state_ciphertext_c1_hash: felt252,
     pub current_state_ciphertext_c2_hash: felt252,
@@ -790,6 +795,15 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
     )
 }
 
+fn native_deactivate_command_auth_hash(
+    pub_key_hash: felt252, packed_cmd_hash: felt252, cmd_sig_s_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [NATIVE_DEACTIVATE_COMMAND_AUTH_DOMAIN, pub_key_hash, packed_cmd_hash, cmd_sig_s_hash]
+            .span(),
+    )
+}
+
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
     poseidon_hash_span([v0, v1, v2, v3, v4].span())
 }
@@ -943,6 +957,12 @@ fn verify_native_process_deactivate_signature(
     assert(native_hash_u256x2(witness.r8) == fields.r8_hash, 'N_R8');
     assert(native_hash_u256x3(witness.packed_cmd) == fields.packed_cmd_hash, 'N_CMD');
     assert(native_hash_u256(witness.s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(
+        native_deactivate_command_auth_hash(
+            fields.pub_key_hash, fields.packed_cmd_hash, fields.cmd_sig_s_hash,
+        ) == fields.command_auth_hash,
+        'N_CMD_AUTH',
+    );
     let valid = verify_babyjub_poseidon_signature(
         witness.pub_key, witness.r8, witness.s, witness.packed_cmd, witness.signature,
     );
@@ -999,6 +1019,12 @@ fn verify_native_process_deactivate_step_core(
     assert(native_hash_u256x2(witness.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
     assert(native_hash_u256x3(witness.packed_cmd) == fields.packed_cmd_hash, 'N_CMD');
     assert(native_hash_u256(witness.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(
+        native_deactivate_command_auth_hash(
+            fields.signature_pub_key_hash, fields.packed_cmd_hash, fields.cmd_sig_s_hash,
+        ) == fields.command_auth_hash,
+        'N_CMD_AUTH',
+    );
     assert(witness.signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(felt_from_u128(witness.signature_valid.low) == fields.signature_valid, 'SIG_VALID');
     assert(
@@ -1835,6 +1861,7 @@ fn build_native_process_deactivate_signature_public_output(
         r8_hash: fields.r8_hash,
         packed_cmd_hash: fields.packed_cmd_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        command_auth_hash: fields.command_auth_hash,
         signature_valid: fields.signature_valid,
     }
 }
@@ -1913,6 +1940,7 @@ fn build_native_process_deactivate_step_core_public_output(
         signature_r8_hash: fields.signature_r8_hash,
         packed_cmd_hash: fields.packed_cmd_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        command_auth_hash: fields.command_auth_hash,
         signature_valid: fields.signature_valid,
         current_state_ciphertext_c1_hash: fields.current_state_ciphertext_c1_hash,
         current_state_ciphertext_c2_hash: fields.current_state_ciphertext_c2_hash,

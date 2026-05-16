@@ -265,6 +265,14 @@ function buildProcessMessagesReport(manifestPath, manifest) {
     expectFieldEq(checks, `signature[${index}] s hash links to core`, signatureRun, 'cmd_sig_s_hash', coreRun, 'cmd_sig_s_hash');
     expectFieldEq(
       checks,
+      `signature[${index}] command auth links to core`,
+      signatureRun,
+      'command_auth_hash',
+      coreRun,
+      'command_auth_hash',
+    );
+    expectFieldEq(
+      checks,
       `signature[${index}] validity links to core`,
       signatureRun,
       'is_signature_valid',
@@ -450,6 +458,7 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     expectFieldEq(checks, `signature[${index}] r8 links to core`, signatureRun, 'r8_hash', coreRun, 'signature_r8_hash');
     expectFieldEq(checks, `signature[${index}] packed command links to core`, signatureRun, 'packed_cmd_hash', coreRun, 'packed_cmd_hash');
     expectFieldEq(checks, `signature[${index}] s hash links to core`, signatureRun, 'cmd_sig_s_hash', coreRun, 'cmd_sig_s_hash');
+    expectFieldEq(checks, `signature[${index}] command auth links to core`, signatureRun, 'command_auth_hash', coreRun, 'command_auth_hash');
     expectFieldEq(checks, `signature[${index}] validity links to core`, signatureRun, 'signature_valid', coreRun, 'signature_valid');
     expectFieldEq(
       checks,

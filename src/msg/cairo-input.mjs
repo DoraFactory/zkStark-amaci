@@ -4,6 +4,7 @@ import {
   PROCESS_MESSAGE_COORD_KEY_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
   PROCESS_MESSAGE_ECDH_NATIVE_CIRCUIT_ID,
+  PROCESS_MESSAGE_NATIVE_COMMAND_AUTH_DOMAIN,
   PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
@@ -73,6 +74,13 @@ function nativePackedCommandHash(packedCommand) {
     throw new Error('packedCommand must contain three values');
   }
   return nativeHashFelts(packedCommand, 'packedCommand');
+}
+
+function nativeCommandAuthHash(pubKeyHash, packedCommandHash, cmdSigSHash) {
+  return nativeHashFelts(
+    [PROCESS_MESSAGE_NATIVE_COMMAND_AUTH_DOMAIN, pubKeyHash, packedCommandHash, cmdSigSHash],
+    'commandAuth',
+  );
 }
 
 function nativeMessageHash(message, encPubKey, previousHash) {
@@ -1002,12 +1010,16 @@ export function buildNativeCairoProcessMessageSignatureInput(rawInput, messageIn
   const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
   const transition = result.state.transitions[messageIndex];
   const pubKey = [transition.input.stateLeaf[0], transition.input.stateLeaf[1]];
+  const pubKeyHash = nativeHashPoint(pubKey, 'pubKey');
+  const packedCommandHash = nativePackedCommandHash(transition.input.packedCommand);
+  const cmdSigSHash = nativeHashU256(transition.input.cmdSigS, 'cmdSigS');
   const publicFields = {
     message_index: BigInt(messageIndex),
-    pub_key_hash: nativeHashPoint(pubKey, 'pubKey'),
+    pub_key_hash: pubKeyHash,
     r8_hash: nativeHashPoint(transition.input.cmdSigR8, 'r8'),
-    packed_command_hash: nativePackedCommandHash(transition.input.packedCommand),
-    cmd_sig_s_hash: nativeHashU256(transition.input.cmdSigS, 'cmdSigS'),
+    packed_command_hash: packedCommandHash,
+    cmd_sig_s_hash: cmdSigSHash,
+    command_auth_hash: nativeCommandAuthHash(pubKeyHash, packedCommandHash, cmdSigSHash),
     is_signature_valid: transition.input.isSignatureValid,
   };
   const fields = {
@@ -1016,6 +1028,7 @@ export function buildNativeCairoProcessMessageSignatureInput(rawInput, messageIn
     r8_hash: feltObject(publicFields.r8_hash),
     packed_command_hash: feltObject(publicFields.packed_command_hash),
     cmd_sig_s_hash: feltObject(publicFields.cmd_sig_s_hash),
+    command_auth_hash: feltObject(publicFields.command_auth_hash),
     is_signature_valid: feltObject(publicFields.is_signature_valid),
   };
   const publicOutput = nativeProcessMessagePublicOutput(
@@ -1028,6 +1041,7 @@ export function buildNativeCairoProcessMessageSignatureInput(rawInput, messageIn
       'r8_hash',
       'packed_command_hash',
       'cmd_sig_s_hash',
+      'command_auth_hash',
       'is_signature_valid',
     ],
   );
@@ -1213,6 +1227,12 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     nativeContext.currentVotePathElements[0],
     'nativeCurrentVoteWeightPath',
   );
+  const signaturePubKeyHash = nativeHashPoint(
+    [transition.input.stateLeaf[0], transition.input.stateLeaf[1]],
+    'signaturePubKey',
+  );
+  const packedCommandHash = nativePackedCommandHash(transition.input.packedCommand);
+  const cmdSigSHash = nativeHashU256(linkFields.cmdSigS, 'cmdSigS');
   const publicFields = {
     message_index: BigInt(messageIndex),
     packed_vals_hash: nativeFelt(result.publicFields.packedVals, 'packedVals'),
@@ -1235,13 +1255,11 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     expected_poll_id: result.publicFields.expectedPollId,
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     shared_key_hash: nativeHashPoint(transition.input.sharedKey, 'sharedKey'),
-    signature_pub_key_hash: nativeHashPoint(
-      [transition.input.stateLeaf[0], transition.input.stateLeaf[1]],
-      'signaturePubKey',
-    ),
+    signature_pub_key_hash: signaturePubKeyHash,
     signature_r8_hash: nativeHashPoint(transition.input.cmdSigR8, 'signatureR8'),
-    packed_command_hash: nativePackedCommandHash(transition.input.packedCommand),
-    cmd_sig_s_hash: nativeHashU256(linkFields.cmdSigS, 'cmdSigS'),
+    packed_command_hash: packedCommandHash,
+    cmd_sig_s_hash: cmdSigSHash,
+    command_auth_hash: nativeCommandAuthHash(signaturePubKeyHash, packedCommandHash, cmdSigSHash),
     is_signature_valid: linkFields.isSignatureValid,
   };
   const fields = Object.fromEntries(
@@ -1265,6 +1283,7 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     'signature_r8_hash',
     'packed_command_hash',
     'cmd_sig_s_hash',
+    'command_auth_hash',
     'is_signature_valid',
   ];
   const publicOutput = nativeProcessMessagePublicOutput(
@@ -1618,6 +1637,7 @@ function pushNativeProcessMessageSignatureFields(args, fields) {
   pushFelt(args, fields.r8_hash);
   pushFelt(args, fields.packed_command_hash);
   pushFelt(args, fields.cmd_sig_s_hash);
+  pushFelt(args, fields.command_auth_hash);
   pushFelt(args, fields.is_signature_valid);
 }
 
@@ -1661,6 +1681,7 @@ function pushNativeProcessMessageStepCoreFields(args, fields) {
   pushFelt(args, fields.signature_r8_hash);
   pushFelt(args, fields.packed_command_hash);
   pushFelt(args, fields.cmd_sig_s_hash);
+  pushFelt(args, fields.command_auth_hash);
   pushFelt(args, fields.is_signature_valid);
 }
 

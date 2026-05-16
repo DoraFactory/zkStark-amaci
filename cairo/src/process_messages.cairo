@@ -51,6 +51,7 @@ pub const PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
 pub const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f535445505f434f52455f4e4154495645;
 pub const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
+pub const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
 
 #[derive(Copy, Drop, Serde)]
 pub struct ProcessMessagesHashTranscript {
@@ -251,6 +252,7 @@ pub struct NativeProcessMessageSignaturePublicFields {
     pub r8_hash: felt252,
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -273,6 +275,7 @@ pub struct NativeProcessMessageStepCorePublicFields {
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -318,6 +321,7 @@ pub struct NativeProcessMessageSignaturePublicOutput {
     pub r8_hash: felt252,
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -347,6 +351,7 @@ pub struct NativeProcessMessageStepCorePublicOutput {
     pub signature_r8_hash: felt252,
     pub packed_command_hash: felt252,
     pub cmd_sig_s_hash: felt252,
+    pub command_auth_hash: felt252,
     pub is_signature_valid: felt252,
 }
 
@@ -895,6 +900,14 @@ fn native_hash_u256x3(value: U256x3) -> felt252 {
     )
 }
 
+fn native_command_auth_hash(
+    pub_key_hash: felt252, packed_command_hash: felt252, cmd_sig_s_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [NATIVE_COMMAND_AUTH_DOMAIN, pub_key_hash, packed_command_hash, cmd_sig_s_hash].span(),
+    )
+}
+
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
     poseidon_hash_span([v0, v1, v2, v3, v4].span())
 }
@@ -1114,6 +1127,12 @@ fn verify_native_process_message_signature(
     assert(native_hash_u256x2(witness.r8) == fields.r8_hash, 'N_R8');
     assert(native_hash_u256x3(witness.packed_command) == fields.packed_command_hash, 'N_CMD');
     assert(native_hash_u256(witness.s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(
+        native_command_auth_hash(
+            fields.pub_key_hash, fields.packed_command_hash, fields.cmd_sig_s_hash,
+        ) == fields.command_auth_hash,
+        'N_CMD_AUTH',
+    );
     let valid = verify_babyjub_poseidon_signature(
         witness.pub_key, witness.r8, witness.s, witness.packed_command, witness.signature,
     );
@@ -1154,6 +1173,12 @@ fn verify_native_process_message_step_core(
         'N_CMD',
     );
     assert(native_hash_u256(witness.process_one.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    assert(
+        native_command_auth_hash(
+            fields.signature_pub_key_hash, fields.packed_command_hash, fields.cmd_sig_s_hash,
+        ) == fields.command_auth_hash,
+        'N_CMD_AUTH',
+    );
     assert(witness.process_one.is_signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(
         felt_from_u128(witness.process_one.is_signature_valid.low) == fields.is_signature_valid,
@@ -2154,6 +2179,7 @@ fn build_native_process_message_signature_public_output(
         r8_hash: fields.r8_hash,
         packed_command_hash: fields.packed_command_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        command_auth_hash: fields.command_auth_hash,
         is_signature_valid: fields.is_signature_valid,
     }
 }
@@ -2194,6 +2220,7 @@ fn build_native_process_message_step_core_public_output(
         signature_r8_hash: fields.signature_r8_hash,
         packed_command_hash: fields.packed_command_hash,
         cmd_sig_s_hash: fields.cmd_sig_s_hash,
+        command_auth_hash: fields.command_auth_hash,
         is_signature_valid: fields.is_signature_valid,
     }
 }
