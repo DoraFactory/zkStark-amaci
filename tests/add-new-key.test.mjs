@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN, TREE_ARITY } from '../src/constants.mjs';
+import {
+  ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+  ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+  ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN,
+  TREE_ARITY,
+} from '../src/constants.mjs';
 import { addNewKeyInputHash } from '../src/compat/encoding.mjs';
 import { BABYJUB_BASE8, babyjubAdd, babyjubScalarMul } from '../src/compat/babyjub.mjs';
 import { hash5, hashLeftRight } from '../src/compat/poseidon.mjs';
@@ -148,17 +153,45 @@ test('builds native public hash arguments for AddNewKey', () => {
     toStarkFelt(evaluated.input.oldPrivateKey),
     toStarkFelt(evaluated.input.pollId),
   ]);
+  const expectedC1Hash = poseidonManyFelts(evaluated.input.c1.map((value) => toStarkFelt(value)));
+  const expectedC2Hash = poseidonManyFelts(evaluated.input.c2.map((value) => toStarkFelt(value)));
+  const expectedSharedKeyHash = poseidonManyFelts(evaluated.derived.sharedKey.map((value) => toStarkFelt(value)));
+  const expectedD1Hash = poseidonManyFelts(evaluated.input.d1.map((value) => toStarkFelt(value)));
+  const expectedD2Hash = poseidonManyFelts(evaluated.input.d2.map((value) => toStarkFelt(value)));
+  const expectedDeactivateLeafHash = poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+    expectedC1Hash,
+    expectedC2Hash,
+    expectedSharedKeyHash,
+  ]);
+  const expectedRerandomizeBindingHash = poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN,
+    cairoInput.publicFields.coord_pub_key_hash,
+    expectedC1Hash,
+    expectedC2Hash,
+    expectedD1Hash,
+    expectedD2Hash,
+  ]);
 
-  assert.equal(cairoInput.public_output.length, 14);
+  assert.equal(cairoInput.public_output.length, 19);
   assert.ok(cairoInput.public_output_labels.includes('hash_scheme'));
-  assert.equal(cairoInput.publicFields.deactivate_root_hash, toStarkFelt(evaluated.input.deactivateRoot));
+  assert.ok(cairoInput.public_output_labels.includes('rerandomize_binding_hash'));
+  assert.notEqual(cairoInput.publicFields.deactivate_root_hash, toStarkFelt(evaluated.input.deactivateRoot));
   assert.equal(cairoInput.publicFields.poll_id, evaluated.input.pollId);
   assert.equal(cairoInput.publicFields.nullifier, expectedNativeNullifier);
+  assert.equal(cairoInput.publicFields.c1_hash, expectedC1Hash);
+  assert.equal(cairoInput.publicFields.c2_hash, expectedC2Hash);
+  assert.equal(cairoInput.publicFields.shared_key_hash, expectedSharedKeyHash);
+  assert.equal(cairoInput.publicFields.deactivate_leaf_hash, expectedDeactivateLeafHash);
+  assert.equal(cairoInput.publicFields.d1_hash, expectedD1Hash);
+  assert.equal(cairoInput.publicFields.d2_hash, expectedD2Hash);
+  assert.equal(cairoInput.publicFields.rerandomize_binding_hash, expectedRerandomizeBindingHash);
   assert.notEqual(cairoInput.publicFields.coord_pub_key_hash, evaluated.publicFields.coordPubKeyHash);
   assert.notEqual(cairoInput.publicFields.new_pub_key_hash, evaluated.publicFields.newPubKeyHash);
   assert.notEqual(cairoInput.publicFields.input_hash, evaluated.publicFields.inputHash);
-  assert.deepEqual(cairoInput.program_input.witness.legacy, legacyInput.program_input.witness);
-  assert.ok(args.length > legacyInput.public_output.length);
+  assert.equal(cairoInput.program_input.witness.legacy, undefined);
+  assert.equal(cairoInput.program_input.witness.random_base8, undefined);
+  assert.ok(args.length < serializeCairoAddNewKeyExecutableArgs(legacyInput).length);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 

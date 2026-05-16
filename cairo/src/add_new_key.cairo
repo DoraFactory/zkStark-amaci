@@ -22,6 +22,10 @@ pub const ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e41544956455f494e505554;
 pub const ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e554c4c4946494552;
+pub const ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN: felt252 =
+    0x414d4143495f4144445f4b45595f44454143545f4c454146;
+pub const ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN: felt252 =
+    0x414d4143495f4144445f4b45595f524552414e44;
 pub const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 
 #[derive(Copy, Drop, Serde)]
@@ -57,7 +61,18 @@ pub struct AddNewKeyWitness {
 
 #[derive(Drop, Serde)]
 pub struct NativeAddNewKeyWitness {
-    pub legacy: AddNewKeyWitness,
+    pub coord_pub_key: U256x2,
+    pub deactivate_index: u256,
+    pub c1: U256x2,
+    pub c2: U256x2,
+    pub shared_key: U256x2,
+    pub deactivate_leaf_path_0: U256x4,
+    pub deactivate_leaf_path_1: U256x4,
+    pub deactivate_leaf_path_2: U256x4,
+    pub deactivate_leaf_path_3: U256x4,
+    pub old_private_key: u256,
+    pub new_pub_key: U256x2,
+    pub poll_id: u256,
     pub d1: U256x2,
     pub d2: U256x2,
 }
@@ -67,8 +82,13 @@ pub struct NativeAddNewKeyPublicFields {
     pub deactivate_root_hash: felt252,
     pub coord_pub_key_hash: felt252,
     pub nullifier: felt252,
+    pub c1_hash: felt252,
+    pub c2_hash: felt252,
+    pub shared_key_hash: felt252,
+    pub deactivate_leaf_hash: felt252,
     pub d1_hash: felt252,
     pub d2_hash: felt252,
+    pub rerandomize_binding_hash: felt252,
     pub new_pub_key_hash: felt252,
     pub poll_id: felt252,
     pub input_hash: felt252,
@@ -85,8 +105,13 @@ pub struct NativeAddNewKeyPublicOutput {
     pub deactivate_root_hash: felt252,
     pub coord_pub_key_hash: felt252,
     pub nullifier: felt252,
+    pub c1_hash: felt252,
+    pub c2_hash: felt252,
+    pub shared_key_hash: felt252,
+    pub deactivate_leaf_hash: felt252,
     pub d1_hash: felt252,
     pub d2_hash: felt252,
+    pub rerandomize_binding_hash: felt252,
     pub new_pub_key_hash: felt252,
     pub poll_id: felt252,
     pub input_hash: felt252,
@@ -205,6 +230,10 @@ fn native_hash_u256x2(value: U256x2) -> felt252 {
     poseidon_hash_span([felt_from_u256(value.v0), felt_from_u256(value.v1)].span())
 }
 
+fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
+    poseidon_hash_span([v0, v1, v2, v3, v4].span())
+}
+
 fn native_nullifier(old_private_key: u256, poll_id: u256) -> felt252 {
     poseidon_hash_span(
         [
@@ -216,6 +245,61 @@ fn native_nullifier(old_private_key: u256, poll_id: u256) -> felt252 {
     )
 }
 
+fn native_deactivate_leaf_hash(
+    c1_hash: felt252, c2_hash: felt252, shared_key_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN, c1_hash, c2_hash, shared_key_hash]
+            .span(),
+    )
+}
+
+fn native_rerandomize_binding_hash(
+    coord_pub_key_hash: felt252,
+    c1_hash: felt252,
+    c2_hash: felt252,
+    d1_hash: felt252,
+    d2_hash: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        [ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN, coord_pub_key_hash, c1_hash, c2_hash, d1_hash, d2_hash]
+            .span(),
+    )
+}
+
+fn native_path_hash(leaf: felt252, path_elements: U256x4, index: u128) -> felt252 {
+    let p0 = felt_from_u256(path_elements.v0);
+    let p1 = felt_from_u256(path_elements.v1);
+    let p2 = felt_from_u256(path_elements.v2);
+    let p3 = felt_from_u256(path_elements.v3);
+    if index == 0 {
+        native_hash5_values(leaf, p0, p1, p2, p3)
+    } else if index == 1 {
+        native_hash5_values(p0, leaf, p1, p2, p3)
+    } else if index == 2 {
+        native_hash5_values(p0, p1, leaf, p2, p3)
+    } else if index == 3 {
+        native_hash5_values(p0, p1, p2, leaf, p3)
+    } else {
+        assert(index == 4, 'BAD_PATH_INDEX');
+        native_hash5_values(p0, p1, p2, p3, leaf)
+    }
+}
+
+fn native_quinary_root_depth_4(
+    leaf: felt252, path_0: U256x4, path_1: U256x4, path_2: U256x4, path_3: U256x4, index: u256,
+) -> felt252 {
+    assert_deactivate_index(index);
+    let level_0_index = index.low % 5;
+    let level_1_index = (index.low / 5) % 5;
+    let level_2_index = (index.low / 25) % 5;
+    let level_3_index = index.low / 125;
+    let level_0 = native_path_hash(leaf, path_0, level_0_index);
+    let level_1 = native_path_hash(level_0, path_1, level_1_index);
+    let level_2 = native_path_hash(level_1, path_2, level_2_index);
+    native_path_hash(level_2, path_3, level_3_index)
+}
+
 fn native_input_hash(fields: NativeAddNewKeyPublicFields) -> felt252 {
     poseidon_hash_span(
         [
@@ -223,8 +307,13 @@ fn native_input_hash(fields: NativeAddNewKeyPublicFields) -> felt252 {
             fields.deactivate_root_hash,
             fields.coord_pub_key_hash,
             fields.nullifier,
+            fields.c1_hash,
+            fields.c2_hash,
+            fields.shared_key_hash,
+            fields.deactivate_leaf_hash,
             fields.d1_hash,
             fields.d2_hash,
+            fields.rerandomize_binding_hash,
             fields.new_pub_key_hash,
             fields.poll_id,
         ]
@@ -233,54 +322,38 @@ fn native_input_hash(fields: NativeAddNewKeyPublicFields) -> felt252 {
 }
 
 fn verify_native_add_new_key(fields: NativeAddNewKeyPublicFields, witness: NativeAddNewKeyWitness) {
-    let legacy = witness.legacy;
-    assert(native_hash_u256x2(legacy.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
-    assert(native_hash_u256x2(legacy.new_pub_key) == fields.new_pub_key_hash, 'N_NEW_KEY');
-    assert(native_nullifier(legacy.old_private_key, legacy.poll_id) == fields.nullifier, 'N_NULLIFIER');
+    assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
+    assert(native_hash_u256x2(witness.new_pub_key) == fields.new_pub_key_hash, 'N_NEW_KEY');
+    assert(native_nullifier(witness.old_private_key, witness.poll_id) == fields.nullifier, 'N_NULLIFIER');
+    assert(native_hash_u256x2(witness.c1) == fields.c1_hash, 'N_C1');
+    assert(native_hash_u256x2(witness.c2) == fields.c2_hash, 'N_C2');
+    assert(native_hash_u256x2(witness.shared_key) == fields.shared_key_hash, 'N_SHARED');
+    assert(
+        native_deactivate_leaf_hash(fields.c1_hash, fields.c2_hash, fields.shared_key_hash)
+            == fields.deactivate_leaf_hash,
+        'N_DEACT_LEAF',
+    );
     assert(native_hash_u256x2(witness.d1) == fields.d1_hash, 'N_D1');
     assert(native_hash_u256x2(witness.d2) == fields.d2_hash, 'N_D2');
-    assert(legacy.poll_id.high == 0, 'N_POLL_HIGH');
-    assert(felt_from_u128(legacy.poll_id.low) == fields.poll_id, 'N_POLL_ID');
+    assert(
+        native_rerandomize_binding_hash(
+            fields.coord_pub_key_hash, fields.c1_hash, fields.c2_hash, fields.d1_hash, fields.d2_hash,
+        ) == fields.rerandomize_binding_hash,
+        'N_RERAND_BIND',
+    );
+    assert(witness.poll_id.high == 0, 'N_POLL_HIGH');
+    assert(felt_from_u128(witness.poll_id.low) == fields.poll_id, 'N_POLL_ID');
     assert(native_input_hash(fields) == fields.input_hash, 'N_INPUT_HASH');
 
-    assert_u256_eq(legacy.ecdh.scalar, legacy.old_private_key);
-    assert_u256_eq(legacy.ecdh.base.v0, legacy.coord_pub_key.v0);
-    assert_u256_eq(legacy.ecdh.base.v1, legacy.coord_pub_key.v1);
-    let shared_key = verify_babyjub_scalar_mul(legacy.ecdh);
-    let shared_key_hash = poseidon_hash2(
-        legacy.hashes.shared_key_hash, shared_key.v0, shared_key.v1,
+    let deactivate_root = native_quinary_root_depth_4(
+        fields.deactivate_leaf_hash,
+        witness.deactivate_leaf_path_0,
+        witness.deactivate_leaf_path_1,
+        witness.deactivate_leaf_path_2,
+        witness.deactivate_leaf_path_3,
+        witness.deactivate_index,
     );
-    let deactivate_leaf = poseidon_hash5(
-        legacy.hashes.deactivate_leaf,
-        U256x5 {
-            v0: legacy.c1.v0,
-            v1: legacy.c1.v1,
-            v2: legacy.c2.v0,
-            v3: legacy.c2.v1,
-            v4: shared_key_hash,
-        },
-    );
-    assert_u256_eq(deactivate_leaf, legacy.deactivate_leaf);
-    let deactivate_root = quinary_root_depth_4(
-        legacy.deactivate_leaf,
-        legacy.deactivate_leaf_path_0,
-        legacy.deactivate_leaf_path_1,
-        legacy.deactivate_leaf_path_2,
-        legacy.deactivate_leaf_path_3,
-        legacy.deactivate_index,
-    );
-    assert(felt_from_u256(deactivate_root) == fields.deactivate_root_hash, 'N_DEACT_ROOT');
-
-    assert_rerandomize(
-        legacy.random_val,
-        legacy.coord_pub_key,
-        legacy.c1,
-        legacy.c2,
-        witness.d1,
-        witness.d2,
-        legacy.random_base8,
-        legacy.random_coord_pub_key,
-    );
+    assert(deactivate_root == fields.deactivate_root_hash, 'N_DEACT_ROOT');
 }
 
 fn verify_add_new_key(fields: AddNewKeyPublicFields, witness: AddNewKeyWitness) {
@@ -377,8 +450,13 @@ fn build_native_add_new_key_public_output(
         deactivate_root_hash: fields.deactivate_root_hash,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         nullifier: fields.nullifier,
+        c1_hash: fields.c1_hash,
+        c2_hash: fields.c2_hash,
+        shared_key_hash: fields.shared_key_hash,
+        deactivate_leaf_hash: fields.deactivate_leaf_hash,
         d1_hash: fields.d1_hash,
         d2_hash: fields.d2_hash,
+        rerandomize_binding_hash: fields.rerandomize_binding_hash,
         new_pub_key_hash: fields.new_pub_key_hash,
         poll_id: fields.poll_id,
         input_hash: fields.input_hash,
