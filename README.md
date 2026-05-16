@@ -564,7 +564,8 @@ This command prepares the small tally fixture, converts the Scarb executable
 argument JSON into the bracketed decimal `cairo1-run --args_file` format,
 exports a `cairo1-run` Sierra artifact from `zkstark_amaci_tally.sierra.json`,
 renames the Stone wrapper entrypoint to the `::main` suffix expected by
-`cairo1-run`, runs `cairo1-run --proof_mode`, and writes:
+`cairo1-run`, hides any other package functions already ending in `::main`,
+runs `cairo1-run --proof_mode`, and writes:
 
 ```text
 trace.bin
