@@ -25,6 +25,9 @@ Options:
 
 Outputs:
   stone-proof.json
+  stone-proof.prover-annotations.json
+  stone-verifier-annotations.txt
+  stone-verifier-extra-output.txt
   stone-prove.log
   stone-verify.log
   proof-run.json
@@ -257,6 +260,9 @@ if [[ "$PARAMETER_FILE_EXPLICIT" -ne 1 ]]; then
 fi
 
 PROOF_JSON="$OUT_DIR/stone-proof.json"
+PROVER_ANNOTATED_PROOF_JSON="$OUT_DIR/stone-proof.prover-annotations.json"
+VERIFIER_ANNOTATION_FILE="$OUT_DIR/stone-verifier-annotations.txt"
+VERIFIER_EXTRA_OUTPUT_FILE="$OUT_DIR/stone-verifier-extra-output.txt"
 PROVE_LOG="$OUT_DIR/stone-prove.log"
 VERIFY_LOG="$OUT_DIR/stone-verify.log"
 PROOF_RUN_JSON="$OUT_DIR/proof-run.json"
@@ -292,8 +298,15 @@ fi
 
 if [[ "$SKIP_VERIFY" -ne 1 ]]; then
   echo "==> Verifying Stone $CIRCUIT proof"
+  VERIFIER_ARGS=(--in_file="$PROOF_JSON")
+  if [[ "$GENERATE_ANNOTATIONS" -eq 1 ]]; then
+    VERIFIER_ARGS+=(
+      --annotation_file="$VERIFIER_ANNOTATION_FILE"
+      --extra_output_file="$VERIFIER_EXTRA_OUTPUT_FILE"
+    )
+  fi
   set +e
-  cpu_air_verifier --in_file="$PROOF_JSON" 2>&1 | tee "$VERIFY_LOG"
+  cpu_air_verifier "${VERIFIER_ARGS[@]}" 2>&1 | tee "$VERIFY_LOG"
   verifier_status=${PIPESTATUS[0]}
   set -e
   if [[ "$verifier_status" -ne 0 ]]; then
@@ -301,11 +314,41 @@ if [[ "$SKIP_VERIFY" -ne 1 ]]; then
     exit "$verifier_status"
   fi
   echo "Verified proof successfully" | tee -a "$VERIFY_LOG"
+  if [[ "$GENERATE_ANNOTATIONS" -eq 1 ]]; then
+    if [[ ! -s "$VERIFIER_ANNOTATION_FILE" ]]; then
+      echo "cpu_air_verifier completed but verifier annotation file is missing or empty: $VERIFIER_ANNOTATION_FILE" >&2
+      exit 1
+    fi
+    if [[ ! -f "$VERIFIER_EXTRA_OUTPUT_FILE" ]]; then
+      echo "cpu_air_verifier completed but verifier extra-output file is missing: $VERIFIER_EXTRA_OUTPUT_FILE" >&2
+      exit 1
+    fi
+    node - "$PROOF_JSON" "$PROVER_ANNOTATED_PROOF_JSON" "$VERIFIER_ANNOTATION_FILE" "$VERIFIER_EXTRA_OUTPUT_FILE" <<'NODE'
+const fs = require('fs');
+const [proofJson, proverAnnotatedProofJson, verifierAnnotationFile, verifierExtraOutputFile] =
+  process.argv.slice(2);
+
+function readLines(path) {
+  const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/);
+  if (lines.at(-1) === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+const proof = JSON.parse(fs.readFileSync(proofJson, 'utf8'));
+fs.copyFileSync(proofJson, proverAnnotatedProofJson);
+proof.annotations = readLines(verifierAnnotationFile);
+proof.extra_annotations = readLines(verifierExtraOutputFile);
+fs.writeFileSync(proofJson, `${JSON.stringify(proof, null, 2)}\n`);
+NODE
+    echo "Verifier annotations merged into: $PROOF_JSON" | tee -a "$VERIFY_LOG"
+  fi
 else
   printf 'verification skipped\n' > "$VERIFY_LOG"
 fi
 
-node - "$PROOF_RUN_JSON" "$AIR_RUN_JSON" "$PROOF_JSON" "$PREPARED_JSON" "$INPUT_PATH" "$EXECUTABLE" "$RUNNER_SIERRA_JSON" "$PROVE_LOG" "$VERIFY_LOG" "$GENERATE_ANNOTATIONS" <<'NODE'
+node - "$PROOF_RUN_JSON" "$AIR_RUN_JSON" "$PROOF_JSON" "$PREPARED_JSON" "$INPUT_PATH" "$EXECUTABLE" "$RUNNER_SIERRA_JSON" "$PROVE_LOG" "$VERIFY_LOG" "$GENERATE_ANNOTATIONS" "$PROVER_ANNOTATED_PROOF_JSON" "$VERIFIER_ANNOTATION_FILE" "$VERIFIER_EXTRA_OUTPUT_FILE" <<'NODE'
 const fs = require('fs');
 const [
   out,
@@ -318,10 +361,17 @@ const [
   proveLog,
   verifyLog,
   generateAnnotations,
+  proverAnnotatedProofJson,
+  verifierAnnotationFile,
+  verifierExtraOutputFile,
 ] = process.argv.slice(2);
 
 const airRun = JSON.parse(fs.readFileSync(airRunJson, 'utf8'));
 const proof = JSON.parse(fs.readFileSync(proofJson, 'utf8'));
+const verifierAnnotationsPresent =
+  fs.existsSync(verifierAnnotationFile) && fs.statSync(verifierAnnotationFile).size > 0;
+const verifierExtraOutputPresent =
+  fs.existsSync(verifierExtraOutputFile) && fs.statSync(verifierExtraOutputFile).size > 0;
 const output = {
   circuit: airRun.circuit ?? 'tally',
   executable: airRun.stoneExecutable ?? 'tally_votes_stone',
@@ -337,6 +387,15 @@ const output = {
   verifyLog,
   annotationsRequested: generateAnnotations === '1',
   annotationsPresent: Object.prototype.hasOwnProperty.call(proof, 'annotations'),
+  verifierAnnotationsPresent,
+  verifierExtraOutputPresent,
+  verifierAnnotationFile,
+  verifierExtraOutputFile,
+  proverAnnotatedProofJson: fs.existsSync(proverAnnotatedProofJson)
+    ? proverAnnotatedProofJson
+    : undefined,
+  annotationCount: Array.isArray(proof.annotations) ? proof.annotations.length : 0,
+  extraAnnotationCount: Array.isArray(proof.extra_annotations) ? proof.extra_annotations.length : 0,
 };
 
 fs.writeFileSync(out, `${JSON.stringify(output, null, 2)}\n`);

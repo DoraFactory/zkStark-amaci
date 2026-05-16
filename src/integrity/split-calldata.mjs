@@ -74,6 +74,58 @@ function assertStoneProofHasAnnotations(path) {
       ].join('\n'),
     );
   }
+  if (!Array.isArray(proof.annotations)) {
+    throw new Error(`Stone proof annotations must be an array: ${path}`);
+  }
+
+  const requiredPatterns = [
+    {
+      label: 'interaction elements',
+      pattern: /V->P: \/cpu air\/STARK\/Interaction: Interaction element #\d+: Field Element\(/,
+      minimum: 3,
+    },
+    {
+      label: 'original trace commitment',
+      pattern: /P->V\[\d+:\d+\]: \/cpu air\/STARK\/Original\/Commit on Trace: .*Hash\(/,
+      minimum: 1,
+    },
+    {
+      label: 'interaction trace commitment',
+      pattern: /P->V\[\d+:\d+\]: \/cpu air\/STARK\/Interaction\/Commit on Trace: .*Hash\(/,
+      minimum: 1,
+    },
+    {
+      label: 'composition trace commitment',
+      pattern:
+        /P->V\[\d+:\d+\]: \/cpu air\/STARK\/Out Of Domain Sampling\/Commit on Trace: .*Hash\(/,
+      minimum: 1,
+    },
+    {
+      label: 'OODS values',
+      pattern:
+        /P->V\[\d+:\d+\]: \/cpu air\/STARK\/Out Of Domain Sampling\/OODS values: .*Field Elements\(/,
+      minimum: 1,
+    },
+  ];
+  const missing = requiredPatterns
+    .map(({ label, pattern, minimum }) => ({
+      label,
+      count: proof.annotations.filter((line) => pattern.test(String(line))).length,
+      minimum,
+    }))
+    .filter(({ count, minimum }) => count < minimum);
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Stone proof annotations are incomplete for Integrity split calldata: ${path}`,
+        `Missing: ${missing
+          .map(({ label, count, minimum }) => `${label} (${count}/${minimum})`)
+          .join(', ')}`,
+        'This usually means the proof still contains prover-only annotations.',
+        'Regenerate the proof with the current npm run stone:prove:tally; it runs cpu_air_verifier with --annotation_file and rewrites stone-proof.json with verifier annotations.',
+      ].join('\n'),
+    );
+  }
 }
 
 function normalizeSettings(settings = {}) {

@@ -20,6 +20,23 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+const INTEGRITY_STONE_ANNOTATIONS = [
+  'V->P: /cpu air/STARK/Interaction: Interaction element #0: Field Element(0x1)',
+  'V->P: /cpu air/STARK/Interaction: Interaction element #1: Field Element(0x2)',
+  'V->P: /cpu air/STARK/Interaction: Interaction element #2: Field Element(0x3)',
+  'P->V[0:32]: /cpu air/STARK/Original/Commit on Trace: Trace commitment: Hash(0x4)',
+  'P->V[32:64]: /cpu air/STARK/Interaction/Commit on Trace: Trace commitment: Hash(0x5)',
+  'P->V[64:96]: /cpu air/STARK/Out Of Domain Sampling/Commit on Trace: Trace commitment: Hash(0x6)',
+  'P->V[96:128]: /cpu air/STARK/Out Of Domain Sampling/OODS values: Field Elements(0x7,0x8,0x9)',
+];
+
+function writeStoneProofWithIntegrityAnnotations(path) {
+  writeJson(path, {
+    proof: [],
+    annotations: INTEGRITY_STONE_ANNOTATIONS,
+  });
+}
+
 test('parses raw Integrity calldata felt lists', () => {
   assert.deepEqual(parseIntegrityCalldata('1 0x2\n3,4\n# comment\n5'), [
     '1',
@@ -66,7 +83,7 @@ test('runs a proof_serializer-compatible binary and writes calldata JSON', () =>
   const fakeSerializer = join(dir, 'proof_serializer');
   const stoneProof = join(dir, 'stone-proof.json');
   const out = join(dir, 'integrity-calldata.json');
-  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
+  writeStoneProofWithIntegrityAnnotations(stoneProof);
   writeFileSync(fakeSerializer, '#!/usr/bin/env sh\ncat >/dev/null\nprintf "7 0x8 9\\n"\n');
   chmodSync(fakeSerializer, 0o755);
 
@@ -119,7 +136,7 @@ test('runs swiftness split generator and copies cli/calldata output', () => {
   mkdirSync(fakeBin, { recursive: true });
   mkdirSync(generatorCliDir, { recursive: true });
   writeFileSync(join(generatorCliDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
-  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
+  writeStoneProofWithIntegrityAnnotations(stoneProof);
   writeFileSync(
     fakeCargo,
     [
@@ -168,7 +185,7 @@ test('runs swiftness split generator from root Cargo.toml when cli Cargo.toml is
   mkdirSync(fakeBin, { recursive: true });
   mkdirSync(generatorDir, { recursive: true });
   writeFileSync(join(generatorDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
-  writeFileSync(stoneProof, '{"proof":[],"annotations":[]}\n');
+  writeStoneProofWithIntegrityAnnotations(stoneProof);
   writeFileSync(
     fakeCargo,
     [
@@ -221,5 +238,33 @@ test('rejects split calldata generation when Stone proof annotations are missing
         out,
       }),
     /missing annotations/,
+  );
+});
+
+test('rejects split calldata generation when Stone proof annotations are prover-only', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-prover-only-annotations-'));
+  const generatorDir = join(dir, 'integrity-calldata-generator');
+  const stoneProof = join(dir, 'stone-proof.json');
+  const outDir = join(dir, 'integrity-split');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  mkdirSync(generatorDir, { recursive: true });
+  writeFileSync(join(generatorDir, 'Cargo.toml'), '[package]\nname = "fake"\nversion = "0.0.0"\n');
+  writeJson(stoneProof, {
+    proof: [],
+    annotations: [
+      'P->V[0:32]: /cpu air/STARK/Original/Commit on Trace: Trace commitment: Hash(0x4)',
+    ],
+  });
+
+  assert.throws(
+    () =>
+      buildIntegritySplitCalldataPackage({
+        stoneProofPath: stoneProof,
+        calldataGeneratorDir: generatorDir,
+        outDir,
+        out,
+      }),
+    /annotations are incomplete/,
   );
 });
