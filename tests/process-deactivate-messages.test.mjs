@@ -42,6 +42,7 @@ import {
 import { isIntegrityHashingAvailable } from '../src/integrity/hashes.mjs';
 import { STARK_FIELD } from '../src/constants.mjs';
 import { evaluateNativeProcessDeactivateMessagesBoundary } from '../src/deactivate/native-process-deactivate-messages.mjs';
+import { toStarkFelt } from '../src/tally/native-tally-votes.mjs';
 import {
   evaluateProcessDeactivateMessages,
   evaluateProcessDeactivateMessagesStateTransition,
@@ -538,6 +539,8 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   const coreArgs = serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(core);
   const legacyCoordKey = buildCairoProcessDeactivateCoordKeyInput(input, evaluated);
   const legacyCore = buildCairoProcessDeactivateStepCoreInput(input, 2, evaluated);
+  const nativeBoundary = evaluateNativeProcessDeactivateMessagesBoundary(input);
+  const transition = evaluated.state.transitions[2];
 
   assert.equal(coordKey.public_output.length, 9);
   assert.equal(commandEcdh.public_output.length, 12);
@@ -568,6 +571,14 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
   assert.equal(core.publicFields.new_state_ciphertext_c1_hash, newDecrypt.publicFields.c1_hash);
   assert.equal(core.publicFields.new_state_ciphertext_c2_hash, newDecrypt.publicFields.c2_hash);
   assert.equal(core.publicFields.new_decrypt_is_odd, newDecrypt.publicFields.decrypt_is_odd);
+  assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
+  assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[2]);
+  assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[3]);
+  assert.equal(core.publicFields.current_state_root_hash, nativeBoundary.publicFields.currentStateRoot);
+  assert.equal(core.publicFields.current_active_state_root_hash, toStarkFelt(transition.input.currentActiveStateRoot));
+  assert.equal(core.publicFields.current_deactivate_root_hash, toStarkFelt(transition.input.currentDeactivateRoot));
+  assert.equal(core.publicFields.new_active_state_root_hash, toStarkFelt(transition.derived.newActiveStateRoot));
+  assert.equal(core.publicFields.new_deactivate_root_hash, toStarkFelt(transition.derived.newDeactivateRoot));
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash, legacyCoordKey.publicFields.coordPubKeyHash);
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());

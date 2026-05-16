@@ -42,11 +42,13 @@ import {
   packProcessMessagesVals,
   processMessageHashChain,
 } from '../src/msg/process-messages.mjs';
+import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
 import {
   evaluateProcessOneStateTransition,
   packCommandData,
   poseidonEncryptWithoutCheck7,
 } from '../src/msg/process-one.mjs';
+import { toStarkFelt } from '../src/tally/native-tally-votes.mjs';
 import { requireZkKitPackage } from '../src/compat/zk-kit-require.mjs';
 
 const { derivePublicKey, signMessage } = requireZkKitPackage('@zk-kit/eddsa-poseidon');
@@ -510,6 +512,8 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   const signatureArgs = serializeNativeCairoProcessMessageSignatureExecutableArgs(signature);
   const coreArgs = serializeNativeCairoProcessMessageStepCoreExecutableArgs(core);
   const legacyCore = buildCairoProcessMessageStepCoreInput(input, 3, evaluated);
+  const nativeBoundary = evaluateNativeProcessMessagesBoundary(input);
+  const transition = evaluated.state.transitions[3];
 
   assert.equal(coordKey.public_output.length, 9);
   assert.equal(ecdh.public_output.length, 11);
@@ -528,6 +532,12 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(signature.publicFields.packed_command_hash, core.publicFields.packed_command_hash);
   assert.equal(signature.publicFields.cmd_sig_s_hash, core.publicFields.cmd_sig_s_hash);
   assert.equal(signature.publicFields.is_signature_valid, core.publicFields.is_signature_valid);
+  assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
+  assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[3]);
+  assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[4]);
+  assert.equal(core.publicFields.current_state_root_hash, toStarkFelt(transition.input.currentStateRoot));
+  assert.equal(core.publicFields.new_state_root_hash, toStarkFelt(transition.derived.newStateRoot));
+  assert.equal(core.publicFields.active_state_root_hash, toStarkFelt(evaluated.state.derived.activeStateRoot));
   assert.notEqual(coordKey.publicFields.coord_pub_key_hash.toString(), evaluated.publicFields.coordPubKeyHash.toString());
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());

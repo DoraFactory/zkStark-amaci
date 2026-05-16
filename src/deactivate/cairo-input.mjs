@@ -17,6 +17,7 @@ import {
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8 } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
+import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import {
   canonicalProcessDeactivateCoordKeyPublicOutput,
   canonicalProcessDeactivateDecryptPublicOutput,
@@ -46,41 +47,56 @@ function feltObject(value) {
   return value.toString();
 }
 
-function u256Limbs(value, label) {
-  const { low, high } = splitU256ToU128(value, label);
-  return [low, high];
+function nativeFelt(value, label) {
+  return toStarkFelt(value, label);
+}
+
+function nativeHashFelts(values, label) {
+  return poseidonManyFelts(values.map((value, index) => nativeFelt(value, `${label}[${index}]`)));
 }
 
 function nativeHashU256(value, label) {
-  return poseidonManyFelts(u256Limbs(value, label));
+  return nativeHashFelts([value], label);
 }
 
 function nativeHashPoint(values, label) {
   if (!Array.isArray(values) || values.length !== 2) {
     throw new Error(`${label} must contain two values`);
   }
-  return poseidonManyFelts([
-    ...u256Limbs(values[0], `${label}[0]`),
-    ...u256Limbs(values[1], `${label}[1]`),
-  ]);
+  return nativeHashFelts(values, label);
 }
 
 function nativeCoordPrivKeyHash(coordPrivKey) {
-  return poseidonManyFelts([
-    ...u256Limbs(coordPrivKey, 'coordPrivKey'),
-    PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
-  ]);
+  return nativeHashFelts([coordPrivKey, PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN], 'coordPrivKey');
 }
 
 function nativePackedCmdHash(packedCmd) {
   if (!Array.isArray(packedCmd) || packedCmd.length !== 3) {
     throw new Error('packedCmd must contain three values');
   }
-  return poseidonManyFelts([
-    ...u256Limbs(packedCmd[0], 'packedCmd[0]'),
-    ...u256Limbs(packedCmd[1], 'packedCmd[1]'),
-    ...u256Limbs(packedCmd[2], 'packedCmd[2]'),
-  ]);
+  return nativeHashFelts(packedCmd, 'packedCmd');
+}
+
+function nativeDeactivateMessageHash(message, encPubKey, previousHash) {
+  return nativeHashFelts([...message, encPubKey[0], encPubKey[1], previousHash], 'messageHash');
+}
+
+function nativeDeactivateMessageHashOrEmpty(message, encPubKey, previousHash) {
+  return nativeFelt(message[0], 'message[0]') === 0n
+    ? nativeFelt(previousHash, 'previousHash')
+    : nativeDeactivateMessageHash(message, encPubKey, previousHash);
+}
+
+function nativeDeactivateMessageHashChain(messages, encPubKeys, batchStartHash) {
+  const chain = [nativeFelt(batchStartHash, 'batchStartHash')];
+  for (let index = 0; index < messages.length; index += 1) {
+    chain.push(nativeDeactivateMessageHashOrEmpty(messages[index], encPubKeys[index], chain[index]));
+  }
+  return chain;
+}
+
+function nativeCommitment(left, right, label) {
+  return nativeHashFelts([left, right], label);
 }
 
 function nativeProcessDeactivatePublicOutput(circuitId, fields, params, fieldLabels) {
@@ -1390,51 +1406,32 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
   const transition = result.state.transitions[messageIndex];
   const input = transition.input;
   const command = result.derived.messageCommands[messageIndex];
-  const currentDeactivateCommitment = hashLeftRight(
-    input.currentActiveStateRoot,
-    input.currentDeactivateRoot,
-  );
-  const newDeactivateCommitment = hashLeftRight(
-    transition.derived.newActiveStateRoot,
-    transition.derived.newDeactivateRoot,
+  const nativeMsgChain = nativeDeactivateMessageHashChain(
+    rawInput.msgs,
+    rawInput.encPubKeys,
+    rawInput.batchStartHash,
   );
   const publicFields = {
     message_index: BigInt(messageIndex),
     deactivate_index: BigInt(input.deactivateIndex),
     coord_priv_key_hash: nativeCoordPrivKeyHash(result.state.input.coordPrivKey),
-    previous_message_hash: nativeHashU256(
-      result.boundary.derived.messageHashChain[messageIndex],
-      'previousMessageHash',
-    ),
-    next_message_hash: nativeHashU256(
-      result.boundary.derived.messageHashChain[messageIndex + 1],
-      'nextMessageHash',
-    ),
-    current_active_state_root_hash: nativeHashU256(
+    previous_message_hash: nativeMsgChain[messageIndex],
+    next_message_hash: nativeMsgChain[messageIndex + 1],
+    current_active_state_root_hash: nativeFelt(input.currentActiveStateRoot, 'currentActiveStateRoot'),
+    current_deactivate_root_hash: nativeFelt(input.currentDeactivateRoot, 'currentDeactivateRoot'),
+    new_active_state_root_hash: nativeFelt(transition.derived.newActiveStateRoot, 'newActiveStateRoot'),
+    new_deactivate_root_hash: nativeFelt(transition.derived.newDeactivateRoot, 'newDeactivateRoot'),
+    current_deactivate_commitment_hash: nativeCommitment(
       input.currentActiveStateRoot,
-      'currentActiveStateRoot',
-    ),
-    current_deactivate_root_hash: nativeHashU256(
       input.currentDeactivateRoot,
-      'currentDeactivateRoot',
-    ),
-    new_active_state_root_hash: nativeHashU256(
-      transition.derived.newActiveStateRoot,
-      'newActiveStateRoot',
-    ),
-    new_deactivate_root_hash: nativeHashU256(
-      transition.derived.newDeactivateRoot,
-      'newDeactivateRoot',
-    ),
-    current_deactivate_commitment_hash: nativeHashU256(
-      currentDeactivateCommitment,
       'currentDeactivateCommitment',
     ),
-    new_deactivate_commitment_hash: nativeHashU256(
-      newDeactivateCommitment,
+    new_deactivate_commitment_hash: nativeCommitment(
+      transition.derived.newActiveStateRoot,
+      transition.derived.newDeactivateRoot,
       'newDeactivateCommitment',
     ),
-    current_state_root_hash: nativeHashU256(result.publicFields.currentStateRoot, 'currentStateRoot'),
+    current_state_root_hash: nativeFelt(result.publicFields.currentStateRoot, 'currentStateRoot'),
     expected_poll_id: result.publicFields.expectedPollId,
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     command_shared_key_hash: nativeHashPoint(command.sharedKey, 'commandSharedKey'),

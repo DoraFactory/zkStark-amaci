@@ -17,6 +17,7 @@ import {
 } from '../compat/babyjub-cairo-input.mjs';
 import { BABYJUB_BASE8, buildElGamalDecryptWitness } from '../compat/babyjub.mjs';
 import { hash5, hash13, hashLeftRight } from '../compat/poseidon.mjs';
+import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import {
   canonicalProcessMessageCoordKeyPublicOutput,
   canonicalProcessMessageEcdhPublicOutput,
@@ -43,41 +44,56 @@ function feltObject(value) {
   return value.toString();
 }
 
-function u256Limbs(value, label) {
-  const { low, high } = splitU256ToU128(value, label);
-  return [low, high];
+function nativeFelt(value, label) {
+  return toStarkFelt(value, label);
+}
+
+function nativeHashFelts(values, label) {
+  return poseidonManyFelts(values.map((value, index) => nativeFelt(value, `${label}[${index}]`)));
 }
 
 function nativeHashU256(value, label) {
-  return poseidonManyFelts(u256Limbs(value, label));
+  return nativeHashFelts([value], label);
 }
 
 function nativeHashPoint(values, label) {
   if (!Array.isArray(values) || values.length !== 2) {
     throw new Error(`${label} must contain two values`);
   }
-  return poseidonManyFelts([
-    ...u256Limbs(values[0], `${label}[0]`),
-    ...u256Limbs(values[1], `${label}[1]`),
-  ]);
+  return nativeHashFelts(values, label);
 }
 
 function nativeCoordPrivKeyHash(coordPrivKey) {
-  return poseidonManyFelts([
-    ...u256Limbs(coordPrivKey, 'coordPrivKey'),
-    PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
-  ]);
+  return nativeHashFelts([coordPrivKey, PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN], 'coordPrivKey');
 }
 
 function nativePackedCommandHash(packedCommand) {
   if (!Array.isArray(packedCommand) || packedCommand.length !== 3) {
     throw new Error('packedCommand must contain three values');
   }
-  return poseidonManyFelts([
-    ...u256Limbs(packedCommand[0], 'packedCommand[0]'),
-    ...u256Limbs(packedCommand[1], 'packedCommand[1]'),
-    ...u256Limbs(packedCommand[2], 'packedCommand[2]'),
-  ]);
+  return nativeHashFelts(packedCommand, 'packedCommand');
+}
+
+function nativeMessageHash(message, encPubKey, previousHash) {
+  return nativeHashFelts([...message, encPubKey[0], encPubKey[1], previousHash], 'messageHash');
+}
+
+function nativeMessageHashOrEmpty(message, encPubKey, previousHash) {
+  return nativeFelt(encPubKey[0], 'encPubKey[0]') === 0n
+    ? nativeFelt(previousHash, 'previousHash')
+    : nativeMessageHash(message, encPubKey, previousHash);
+}
+
+function nativeMessageHashChain(messages, encPubKeys, batchStartHash) {
+  const chain = [nativeFelt(batchStartHash, 'batchStartHash')];
+  for (let index = 0; index < messages.length; index += 1) {
+    chain.push(nativeMessageHashOrEmpty(messages[index], encPubKeys[index], chain[index]));
+  }
+  return chain;
+}
+
+function nativeCommitment(root, salt, label) {
+  return nativeHashFelts([root, salt], label);
 }
 
 function nativeProcessMessagePublicOutput(circuitId, fields, params, fieldLabels) {
@@ -1182,32 +1198,26 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
   const legacy = buildCairoProcessMessageStepCoreInput(rawInput, messageIndex, result);
   const transition = result.state.transitions[messageIndex];
   const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
+  const nativeMsgChain = nativeMessageHashChain(rawInput.msgs, rawInput.encPubKeys, rawInput.batchStartHash);
   const publicFields = {
     message_index: BigInt(messageIndex),
-    packed_vals_hash: nativeHashU256(result.publicFields.packedVals, 'packedVals'),
+    packed_vals_hash: nativeFelt(result.publicFields.packedVals, 'packedVals'),
     coord_priv_key_hash: nativeCoordPrivKeyHash(rawInput.coordPrivKey),
-    previous_message_hash: nativeHashU256(
-      result.derived.messageHashChain[messageIndex],
-      'previousMessageHash',
-    ),
-    next_message_hash: nativeHashU256(
-      result.derived.messageHashChain[messageIndex + 1],
-      'nextMessageHash',
-    ),
-    current_state_root_hash: nativeHashU256(
+    previous_message_hash: nativeMsgChain[messageIndex],
+    next_message_hash: nativeMsgChain[messageIndex + 1],
+    current_state_root_hash: nativeFelt(transition.input.currentStateRoot, 'currentStateRoot'),
+    new_state_root_hash: nativeFelt(transition.derived.newStateRoot, 'newStateRoot'),
+    current_state_commitment_hash: nativeCommitment(
       transition.input.currentStateRoot,
-      'currentStateRoot',
-    ),
-    new_state_root_hash: nativeHashU256(transition.derived.newStateRoot, 'newStateRoot'),
-    current_state_commitment_hash: nativeHashU256(
-      result.publicFields.currentStateCommitment,
+      rawInput.currentStateSalt,
       'currentStateCommitment',
     ),
-    new_state_commitment_hash: nativeHashU256(
-      result.publicFields.newStateCommitment,
+    new_state_commitment_hash: nativeCommitment(
+      transition.derived.newStateRoot,
+      rawInput.newStateSalt,
       'newStateCommitment',
     ),
-    active_state_root_hash: nativeHashU256(result.state.derived.activeStateRoot, 'activeStateRoot'),
+    active_state_root_hash: nativeFelt(result.state.derived.activeStateRoot, 'activeStateRoot'),
     expected_poll_id: result.publicFields.expectedPollId,
     enc_pub_key_hash: nativeHashPoint(rawInput.encPubKeys[messageIndex], 'encPubKey'),
     shared_key_hash: nativeHashPoint(transition.input.sharedKey, 'sharedKey'),
