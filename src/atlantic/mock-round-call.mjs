@@ -54,6 +54,20 @@ function normalizeFeltArray(values, label) {
   return values.map((value, index) => parseBigInt(value, `${label}[${index}]`));
 }
 
+function uniqueCandidates(candidates) {
+  const seen = new Set();
+  const unique = [];
+  for (const entry of candidates.filter(Boolean)) {
+    const key = `${entry.label}:${normalizeHex(entry.value, entry.label)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(entry);
+  }
+  return unique;
+}
+
 function summaryFromInput(value) {
   if (value?.summary) {
     return value.summary;
@@ -111,11 +125,22 @@ export function buildAtlanticFactCandidates({ summary, metadata }) {
   const expectedFactHash = summary.integrityFactHash;
   const queryProgramHash = summary.programHash;
   const metadataProgramHash = metadata?.program_hash;
-  const childProgramHash = metadata?.child_program_hash ?? queryProgramHash;
+  const metadataChildProgramHash = metadata?.child_program_hash;
   const metadataOutput = metadata?.output ? normalizeFeltArray(metadata.output, 'metadata.output') : undefined;
   const nativeTallyOutput = metadataOutput
     ? extractNativeTallyPublicOutput(metadata.output)
     : undefined;
+
+  const programHashCandidates = uniqueCandidates([
+    queryProgramHash ? { label: 'query-program', value: queryProgramHash } : undefined,
+    metadataProgramHash ? { label: 'metadata-program', value: metadataProgramHash } : undefined,
+    metadataChildProgramHash ? { label: 'metadata-child-program', value: metadataChildProgramHash } : undefined,
+  ]);
+  const bootloadedChildProgramHashCandidates = uniqueCandidates([
+    metadataProgramHash ? { label: 'metadata-program', value: metadataProgramHash } : undefined,
+    metadataChildProgramHash ? { label: 'metadata-child-program', value: metadataChildProgramHash } : undefined,
+    queryProgramHash ? { label: 'query-program', value: queryProgramHash } : undefined,
+  ]);
 
   const outputSets = [
     nativeTallyOutput
@@ -133,31 +158,16 @@ export function buildAtlanticFactCandidates({ summary, metadata }) {
   ].filter(Boolean);
 
   for (const { label, output } of outputSets) {
-    if (queryProgramHash) {
-      const plain = calculatePlainFactHash(queryProgramHash, output);
+    for (const programHashCandidate of programHashCandidates) {
+      const plain = calculatePlainFactHash(programHashCandidate.value, output);
       candidates.push(
         candidate(
-          `plain:${label}:query-program`,
+          `plain:${label}:${programHashCandidate.label}`,
           'plain',
           {
-            programHash: normalizeHex(queryProgramHash, 'programHash'),
-            outputHash: bigintToHex(plain.outputHash),
-            outputFelts: output.map(bigintToHex),
-          },
-          plain.factHash,
-          expectedFactHash,
-        ),
-      );
-    }
-
-    if (metadataProgramHash) {
-      const plain = calculatePlainFactHash(metadataProgramHash, output);
-      candidates.push(
-        candidate(
-          `plain:${label}:metadata-program`,
-          'plain',
-          {
-            programHash: normalizeHex(metadataProgramHash, 'metadata.program_hash'),
+            outputLabel: label,
+            programHashRole: programHashCandidate.label,
+            programHash: normalizeHex(programHashCandidate.value, programHashCandidate.label),
             outputHash: bigintToHex(plain.outputHash),
             outputFelts: output.map(bigintToHex),
           },
@@ -171,51 +181,60 @@ export function buildAtlanticFactCandidates({ summary, metadata }) {
       ['stone', STONE_BOOTLOADER_PROGRAM_HASH],
       ['sharp', SHARP_BOOTLOADER_PROGRAM_HASH],
     ]) {
-      const bootloaded = calculateBootloadedFactHash(
-        bootloaderProgramHash,
-        childProgramHash,
-        output,
-      );
-      candidates.push(
-        candidate(
-          `bootloaded:${label}:${bootloaderLabel}`,
-          'bootloaded',
-          {
-            bootloaderProgramHash,
-            childProgramHash: normalizeHex(childProgramHash, 'childProgramHash'),
-            outputHash: bigintToHex(bootloaded.bootloaderOutputHash),
-            outputFelts: output.map(bigintToHex),
-          },
-          bootloaded.factHash,
-          expectedFactHash,
-        ),
-      );
-
-      for (const [wrapperLabel, wrapperProgramHash] of [
-        ['cairo-verifier', CAIRO_VERIFIER_PROGRAM_HASH],
-        metadataProgramHash ? ['metadata-program', metadataProgramHash] : undefined,
-      ].filter(Boolean)) {
-        const wrapped = calculateWrappedBootloadedFactHash(
-          wrapperProgramHash,
+      for (const childProgramHashCandidate of bootloadedChildProgramHashCandidates) {
+        const bootloaded = calculateBootloadedFactHash(
           bootloaderProgramHash,
-          childProgramHash,
+          childProgramHashCandidate.value,
           output,
         );
         candidates.push(
           candidate(
-            `wrapped-bootloaded:${label}:${wrapperLabel}:${bootloaderLabel}`,
-            'wrapped_bootloaded',
+            `bootloaded:${label}:${childProgramHashCandidate.label}:${bootloaderLabel}`,
+            'bootloaded',
             {
-              wrapperProgramHash: normalizeHex(wrapperProgramHash, 'wrapperProgramHash'),
+              outputLabel: label,
+              bootloaderLabel,
               bootloaderProgramHash,
-              childProgramHash: normalizeHex(childProgramHash, 'childProgramHash'),
-              outputHash: bigintToHex(wrapped.wrapperOutputHash),
+              childProgramHashRole: childProgramHashCandidate.label,
+              childProgramHash: normalizeHex(childProgramHashCandidate.value, childProgramHashCandidate.label),
+              outputHash: bigintToHex(bootloaded.bootloaderOutputHash),
               outputFelts: output.map(bigintToHex),
             },
-            wrapped.factHash,
+            bootloaded.factHash,
             expectedFactHash,
           ),
         );
+
+        for (const [wrapperLabel, wrapperProgramHash] of [
+          ['cairo-verifier', CAIRO_VERIFIER_PROGRAM_HASH],
+          metadataProgramHash ? ['metadata-program', metadataProgramHash] : undefined,
+        ].filter(Boolean)) {
+          const wrapped = calculateWrappedBootloadedFactHash(
+            wrapperProgramHash,
+            bootloaderProgramHash,
+            childProgramHashCandidate.value,
+            output,
+          );
+          candidates.push(
+            candidate(
+              `wrapped-bootloaded:${label}:${childProgramHashCandidate.label}:${wrapperLabel}:${bootloaderLabel}`,
+              'wrapped_bootloaded',
+              {
+                outputLabel: label,
+                wrapperLabel,
+                wrapperProgramHash: normalizeHex(wrapperProgramHash, 'wrapperProgramHash'),
+                bootloaderLabel,
+                bootloaderProgramHash,
+                childProgramHashRole: childProgramHashCandidate.label,
+                childProgramHash: normalizeHex(childProgramHashCandidate.value, childProgramHashCandidate.label),
+                outputHash: bigintToHex(wrapped.wrapperOutputHash),
+                outputFelts: output.map(bigintToHex),
+              },
+              wrapped.factHash,
+              expectedFactHash,
+            ),
+          );
+        }
       }
     }
   }
@@ -237,8 +256,25 @@ function sncastInvokeCommand({ sncast, profile, contractAddress, functionName, c
     .join(' ');
 }
 
-function submitTallyCommand({ candidate, wrapperAddress, profile, sncast, state }) {
+function currentWrapperCanSubmitCandidate(candidate, tallyProgramHash) {
+  if (!candidate || !tallyProgramHash) {
+    return false;
+  }
+  const expectedProgramHash = normalizeHex(tallyProgramHash, 'tallyProgramHash');
+  if (candidate.mode === 'plain') {
+    return candidate.programHash === expectedProgramHash;
+  }
+  if (candidate.mode === 'bootloaded' || candidate.mode === 'wrapped_bootloaded') {
+    return candidate.childProgramHash === expectedProgramHash;
+  }
+  return false;
+}
+
+function submitTallyCommand({ candidate, wrapperAddress, profile, sncast, state, tallyProgramHash }) {
   if (!candidate || !wrapperAddress) {
+    return undefined;
+  }
+  if (!currentWrapperCanSubmitCandidate(candidate, tallyProgramHash)) {
     return undefined;
   }
   const currentTallyCommitment = normalizeHex(state.currentTallyCommitment, 'currentTallyCommitment');
@@ -367,6 +403,15 @@ export function buildAtlanticMockRoundCall({
     : SATELLITE[normalizedNetwork];
   const isFactMocked = normalizedSummary.isFactMocked ? '1' : '0';
   const tallyProgramHash = metadata?.child_program_hash ?? normalizedSummary.programHash;
+  const currentWrapperSubmitSupported = currentWrapperCanSubmitCandidate(
+    selectedCandidate,
+    tallyProgramHash,
+  );
+  if (selectedCandidate && !currentWrapperSubmitSupported) {
+    blockers.push(
+      'matching integrityFactHash is not directly consumable by current MockAmaciRound tally submit functions; it is registered for a metadata/bootloader-level output',
+    );
+  }
   const constructorCalldata = [
     '<ADMIN_ADDRESS>',
     registryAddress,
@@ -442,8 +487,10 @@ export function buildAtlanticMockRoundCall({
             profile,
             sncast,
             state: tallyState,
+            tallyProgramHash,
           })
         : undefined,
+      supportedByCurrentWrapper: currentWrapperSubmitSupported,
     },
     blockers,
     warnings,

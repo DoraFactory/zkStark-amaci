@@ -4,8 +4,9 @@ import {
   buildAtlanticFactCandidates,
   buildAtlanticMockRoundCall,
   extractNativeTallyPublicOutput,
+  SHARP_BOOTLOADER_PROGRAM_HASH,
 } from '../src/atlantic/mock-round-call.mjs';
-import { calculatePlainFactHash } from '../src/integrity/hashes.mjs';
+import { calculateBootloadedFactHash, calculatePlainFactHash } from '../src/integrity/hashes.mjs';
 import { bigintToHex } from '../src/compat/encoding.mjs';
 
 const nativeTallyOutput = [
@@ -86,4 +87,38 @@ test('reports a blocker when Atlantic fact shape is not reconstructed locally', 
   const result = buildAtlanticMockRoundCall({ summary, metadata });
   assert.match(result.blockers.join('\n'), /did not match supported/);
   assert.equal(result.submit.command, undefined);
+});
+
+test('recognizes Atlantic metadata-level bootloaded fact shape', () => {
+  const metadata = metadataWithNativeTallyOutput();
+  const metadataOutput = metadata.output.map((value) => BigInt(value));
+  const fact = calculateBootloadedFactHash(
+    SHARP_BOOTLOADER_PROGRAM_HASH,
+    metadata.program_hash,
+    metadataOutput,
+  );
+  const summary = {
+    id: 'query-1',
+    status: 'DONE',
+    result: 'PROOF_VERIFICATION_ON_L2',
+    programHash: metadata.child_program_hash,
+    integrityFactHash: bigintToHex(fact.factHash),
+    isFactMocked: false,
+    isProofMocked: false,
+  };
+
+  const result = buildAtlanticMockRoundCall({
+    summary,
+    metadata,
+    wrapperAddress: '0xabc',
+    profile: 'amaci_sepolia',
+  });
+
+  assert.equal(result.selectedCandidate.mode, 'bootloaded');
+  assert.equal(result.selectedCandidate.outputLabel, 'metadata-output');
+  assert.equal(result.selectedCandidate.childProgramHashRole, 'metadata-program');
+  assert.equal(result.selectedCandidate.bootloaderLabel, 'sharp');
+  assert.equal(result.submit.supportedByCurrentWrapper, false);
+  assert.equal(result.submit.command, undefined);
+  assert.match(result.blockers.join('\n'), /metadata\/bootloader-level output/);
 });
