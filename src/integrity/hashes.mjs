@@ -63,8 +63,7 @@ export function poseidonManyFelts(values) {
 }
 
 export function poseidonTwoFelts(left, right) {
-  const hash = loadStarknetHash();
-  return BigInt(hash.computePoseidonHash(bigintToHex(left), bigintToHex(right)));
+  return poseidonManyFelts([left, right]);
 }
 
 export function calculatePlainFactHash(programHash, outputFelts) {
@@ -88,6 +87,37 @@ export function calculateBootloadedFactHash(bootloaderProgramHash, childProgramH
   return {
     bootloaderOutput: output,
     bootloaderOutputHash,
+    factHash,
+  };
+}
+
+export function calculateWrappedBootloadedFactHash(
+  wrapperProgramHash,
+  bootloaderProgramHash,
+  childProgramHash,
+  childOutputFelts,
+) {
+  const bootloaderOutput = [
+    1n,
+    BigInt(childOutputFelts.length + 2),
+    parseBigInt(childProgramHash, 'childProgramHash'),
+    ...childOutputFelts.map((value) => parseBigInt(value)),
+  ];
+  const bootloaderOutputHash = poseidonManyFelts(bootloaderOutput);
+  const wrapperOutput = [
+    1n,
+    4n,
+    parseBigInt(wrapperProgramHash, 'wrapperProgramHash'),
+    parseBigInt(bootloaderProgramHash, 'bootloaderProgramHash'),
+    bootloaderOutputHash,
+  ];
+  const wrapperOutputHash = poseidonManyFelts(wrapperOutput);
+  const factHash = poseidonTwoFelts(parseBigInt(bootloaderProgramHash, 'bootloaderProgramHash'), wrapperOutputHash);
+  return {
+    bootloaderOutput,
+    bootloaderOutputHash,
+    wrapperOutput,
+    wrapperOutputHash,
     factHash,
   };
 }

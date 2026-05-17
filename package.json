@@ -91,6 +91,7 @@
     "export:native-stwo-handoff": "node tools/export-native-stwo-handoff.mjs",
     "export:proof-inventory": "node tools/export-proof-artifact-inventory.mjs",
     "export:atlantic-query": "node tools/export-atlantic-query-bundle.mjs",
+    "export:atlantic-round-call": "node tools/export-atlantic-mock-round-call.mjs",
     "atlantic:fetch-query": "node tools/fetch-atlantic-query-result.mjs",
     "serialize:integrity-split-calldata": "node tools/serialize-integrity-split-calldata.mjs",
     "submit:integrity-fact": "node tools/submit-integrity-fact.mjs",

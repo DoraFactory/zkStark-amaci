@@ -1,5 +1,6 @@
 use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
 use starknet::ContractAddress;
+use zkstark_amaci_contracts::integrity_fact_registry::FACT_REGISTRY_MODE_DIRECT;
 use zkstark_amaci_contracts::mock_amaci_round::{
     IMockAmaciRoundDispatcher, IMockAmaciRoundDispatcherTrait,
 };
@@ -39,10 +40,10 @@ fn deploy_round(
 ) -> IMockAmaciRoundDispatcher {
     let contract = declare("MockAmaciRound").unwrap().contract_class();
     let calldata = array![
-        ADMIN, integrity.into(), verifier_config_hash, MIN_SECURITY_BITS.into(),
-        ADD_NEW_KEY_PROGRAM_HASH, PROCESS_MESSAGES_PROGRAM_HASH, PROCESS_DEACTIVATE_PROGRAM_HASH,
-        TALLY_PROGRAM_HASH, INITIAL_STATE_COMMITMENT, INITIAL_DEACTIVATE_COMMITMENT,
-        INITIAL_TALLY_COMMITMENT,
+        ADMIN, integrity.into(), FACT_REGISTRY_MODE_DIRECT, false.into(), verifier_config_hash,
+        MIN_SECURITY_BITS.into(), ADD_NEW_KEY_PROGRAM_HASH, PROCESS_MESSAGES_PROGRAM_HASH,
+        PROCESS_DEACTIVATE_PROGRAM_HASH, TALLY_PROGRAM_HASH, INITIAL_STATE_COMMITMENT,
+        INITIAL_DEACTIVATE_COMMITMENT, INITIAL_TALLY_COMMITMENT,
     ];
 
     let (contract_address, _) = contract.deploy(@calldata).unwrap();

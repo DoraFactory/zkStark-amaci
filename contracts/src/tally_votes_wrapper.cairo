@@ -29,10 +29,13 @@ pub trait ITallyVotesStarkWrapper<TContractState> {
 
 #[starknet::contract]
 pub mod TallyVotesStarkWrapper {
-    use core::poseidon::{hades_permutation, poseidon_hash_span};
+    use core::hash::HashStateTrait;
+    use core::poseidon::{PoseidonTrait, poseidon_hash_span};
     use starknet::ContractAddress;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use super::{IIntegrityDispatcher, IIntegrityDispatcherTrait};
+    use crate::integrity_fact_registry::{
+        FACT_REGISTRY_MODE_DIRECT, is_fact_hash_valid_with_security, is_verification_hash_valid,
+    };
 
     const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b; // MACISTARK
     const PUBLIC_OUTPUT_VERSION: felt252 = 2;
@@ -191,15 +194,25 @@ pub mod TallyVotesStarkWrapper {
             };
             assert(fact_hash == expected_fact_hash, 'FACT_HASH_BINDING_MISMATCH');
 
-            let integrity = IIntegrityDispatcher { contract_address: self.integrity.read() };
             let verifier_config_hash = self.verifier_config_hash.read();
             let expected_verification_hash = verification_hash(
                 fact_hash, verifier_config_hash, self.min_security_bits.read(),
             );
             let valid = if verifier_config_hash == 0 {
-                integrity.is_fact_hash_valid_with_security(fact_hash, self.min_security_bits.read())
+                is_fact_hash_valid_with_security(
+                    self.integrity.read(),
+                    FACT_REGISTRY_MODE_DIRECT,
+                    false,
+                    fact_hash,
+                    self.min_security_bits.read(),
+                )
             } else {
-                integrity.is_verification_hash_valid(expected_verification_hash)
+                is_verification_hash_valid(
+                    self.integrity.read(),
+                    FACT_REGISTRY_MODE_DIRECT,
+                    false,
+                    expected_verification_hash,
+                )
             };
             assert(valid, 'INVALID_INTEGRITY_FACT');
 
@@ -294,14 +307,17 @@ pub mod TallyVotesStarkWrapper {
     }
 
     fn poseidon_pair_hash(left: felt252, right: felt252) -> felt252 {
-        let (result, _, _) = hades_permutation(left, right, 2);
-        result
+        PoseidonTrait::new().update(left).update(right).finalize()
     }
 
     fn verification_hash(
         fact_hash: felt252, verifier_config_hash: felt252, security_bits: u32,
     ) -> felt252 {
-        poseidon_hash_span([fact_hash, verifier_config_hash, security_bits.into()].span())
+        PoseidonTrait::new()
+            .update(fact_hash)
+            .update(verifier_config_hash)
+            .update(security_bits.into())
+            .finalize()
     }
 
     #[cfg(test)]
@@ -323,7 +339,7 @@ pub mod TallyVotesStarkWrapper {
         fn plain_fact_hash_matches_starknet_js_vector() {
             let actual = plain_fact_hash(0x1234, 5, 6, 7, 8, 9);
             assert(
-                actual == 0x477789976d748f724ddabf99cffdfa11f30420fb908e9ad4ab0b34a0aabcd99,
+                actual == 0x7e31486632025a0afb4c2527f82bd037e5f83ba503bf084ea3b0eed214d3e14,
                 'FACT_HASH_VECTOR_MISMATCH',
             );
         }
@@ -338,7 +354,7 @@ pub mod TallyVotesStarkWrapper {
 
             let fact_hash = bootloaded_fact_hash(0x5678, 0x1234, 5, 6, 7, 8, 9);
             assert(
-                fact_hash == 0x775e9f4544c95b87bac17eedc82b58f99c490493497ebb6b9c143424b26d6a6,
+                fact_hash == 0x1ac48340ff9c68b2c9eaeecf634fba7cc679cf9c11f991fa6359aa31309f47e,
                 'BOOT_FACT_HASH_MISMATCH',
             );
         }

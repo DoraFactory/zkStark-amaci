@@ -13,6 +13,22 @@ pub trait IMockAmaciRound<TContractState> {
     fn get_expected_fact_hash(
         self: @TContractState, program_hash: felt252, public_output_hash: felt252,
     ) -> felt252;
+    fn get_expected_plain_fact_hash_for_output(
+        self: @TContractState, program_hash: felt252, public_output: Span<felt252>,
+    ) -> felt252;
+    fn get_expected_bootloaded_fact_hash_for_output(
+        self: @TContractState,
+        bootloader_program_hash: felt252,
+        child_program_hash: felt252,
+        child_output: Span<felt252>,
+    ) -> felt252;
+    fn get_expected_wrapped_bootloaded_fact_hash_for_output(
+        self: @TContractState,
+        wrapper_program_hash: felt252,
+        bootloader_program_hash: felt252,
+        child_program_hash: felt252,
+        child_output: Span<felt252>,
+    ) -> felt252;
     fn get_expected_verification_hash(self: @TContractState, fact_hash: felt252) -> felt252;
     fn submit_operation_fact(
         ref self: TContractState,
@@ -52,22 +68,54 @@ pub trait IMockAmaciRound<TContractState> {
         public_output_hash: felt252,
         fact_hash: felt252,
     );
+    fn submit_tally_plain_output_fact(
+        ref self: TContractState,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+        current_state_commitment: felt252,
+        child_output: Span<felt252>,
+        fact_hash: felt252,
+    );
+    fn submit_tally_bootloaded_output_fact(
+        ref self: TContractState,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+        current_state_commitment: felt252,
+        bootloader_program_hash: felt252,
+        child_output: Span<felt252>,
+        fact_hash: felt252,
+    );
+    fn submit_tally_wrapped_bootloaded_output_fact(
+        ref self: TContractState,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+        current_state_commitment: felt252,
+        wrapper_program_hash: felt252,
+        bootloader_program_hash: felt252,
+        child_output: Span<felt252>,
+        fact_hash: felt252,
+    );
 }
 
 #[starknet::contract]
 pub mod MockAmaciRound {
-    use core::poseidon::{hades_permutation, poseidon_hash_span};
+    use core::hash::HashStateTrait;
+    use core::poseidon::PoseidonTrait;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use crate::tally_votes_wrapper::{IIntegrityDispatcher, IIntegrityDispatcherTrait};
+    use crate::integrity_fact_registry::{
+        is_fact_hash_valid_with_security, is_verification_hash_valid,
+    };
 
     #[storage]
     struct Storage {
         admin: ContractAddress,
         integrity: ContractAddress,
+        fact_registry_mode: felt252,
+        is_fact_mocked: bool,
         verifier_config_hash: felt252,
         min_security_bits: u32,
         add_new_key_program_hash: felt252,
@@ -156,6 +204,8 @@ pub mod MockAmaciRound {
         ref self: ContractState,
         admin: ContractAddress,
         integrity: ContractAddress,
+        fact_registry_mode: felt252,
+        is_fact_mocked: bool,
         verifier_config_hash: felt252,
         min_security_bits: u32,
         add_new_key_program_hash: felt252,
@@ -168,6 +218,8 @@ pub mod MockAmaciRound {
     ) {
         self.admin.write(admin);
         self.integrity.write(integrity);
+        self.fact_registry_mode.write(fact_registry_mode);
+        self.is_fact_mocked.write(is_fact_mocked);
         self.verifier_config_hash.write(verifier_config_hash);
         self.min_security_bits.write(min_security_bits);
         self.add_new_key_program_hash.write(add_new_key_program_hash);
@@ -236,6 +288,35 @@ pub mod MockAmaciRound {
             self: @ContractState, program_hash: felt252, public_output_hash: felt252,
         ) -> felt252 {
             fact_hash(program_hash, public_output_hash)
+        }
+
+        fn get_expected_plain_fact_hash_for_output(
+            self: @ContractState, program_hash: felt252, public_output: Span<felt252>,
+        ) -> felt252 {
+            plain_fact_hash_for_output(program_hash, public_output)
+        }
+
+        fn get_expected_bootloaded_fact_hash_for_output(
+            self: @ContractState,
+            bootloader_program_hash: felt252,
+            child_program_hash: felt252,
+            child_output: Span<felt252>,
+        ) -> felt252 {
+            bootloaded_fact_hash_for_output(
+                bootloader_program_hash, child_program_hash, child_output,
+            )
+        }
+
+        fn get_expected_wrapped_bootloaded_fact_hash_for_output(
+            self: @ContractState,
+            wrapper_program_hash: felt252,
+            bootloader_program_hash: felt252,
+            child_program_hash: felt252,
+            child_output: Span<felt252>,
+        ) -> felt252 {
+            wrapped_bootloaded_fact_hash_for_output(
+                wrapper_program_hash, bootloader_program_hash, child_program_hash, child_output,
+            )
         }
 
         fn get_expected_verification_hash(self: @ContractState, fact_hash: felt252) -> felt252 {
@@ -387,6 +468,93 @@ pub mod MockAmaciRound {
                     },
                 );
         }
+
+        fn submit_tally_plain_output_fact(
+            ref self: ContractState,
+            current_tally_commitment: felt252,
+            new_tally_commitment: felt252,
+            current_state_commitment: felt252,
+            child_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            let expected_fact_hash = plain_fact_hash_for_output(
+                self.tally_program_hash.read(), child_output,
+            );
+            assert(fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
+            let verification_hash = validate_registered_fact(@self, fact_hash);
+            accept_tally_fact(
+                ref self,
+                current_tally_commitment,
+                new_tally_commitment,
+                current_state_commitment,
+                0,
+                fact_hash,
+                verification_hash,
+            );
+        }
+
+        fn submit_tally_bootloaded_output_fact(
+            ref self: ContractState,
+            current_tally_commitment: felt252,
+            new_tally_commitment: felt252,
+            current_state_commitment: felt252,
+            bootloader_program_hash: felt252,
+            child_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            let expected_fact_hash = bootloaded_fact_hash_for_output(
+                bootloader_program_hash, self.tally_program_hash.read(), child_output,
+            );
+            assert(fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
+            let verification_hash = validate_registered_fact(@self, fact_hash);
+            accept_tally_fact(
+                ref self,
+                current_tally_commitment,
+                new_tally_commitment,
+                current_state_commitment,
+                0,
+                fact_hash,
+                verification_hash,
+            );
+        }
+
+        fn submit_tally_wrapped_bootloaded_output_fact(
+            ref self: ContractState,
+            current_tally_commitment: felt252,
+            new_tally_commitment: felt252,
+            current_state_commitment: felt252,
+            wrapper_program_hash: felt252,
+            bootloader_program_hash: felt252,
+            child_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            let expected_fact_hash = wrapped_bootloaded_fact_hash_for_output(
+                wrapper_program_hash,
+                bootloader_program_hash,
+                self.tally_program_hash.read(),
+                child_output,
+            );
+            assert(fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
+            let verification_hash = validate_registered_fact(@self, fact_hash);
+            accept_tally_fact(
+                ref self,
+                current_tally_commitment,
+                new_tally_commitment,
+                current_state_commitment,
+                0,
+                fact_hash,
+                verification_hash,
+            );
+        }
     }
 
     fn validate_fact(
@@ -404,14 +572,75 @@ pub mod MockAmaciRound {
         let expected_verification_hash = verification_hash(
             provided_fact_hash, verifier_config_hash, min_security_bits,
         );
-        let integrity = IIntegrityDispatcher { contract_address: self.integrity.read() };
         let valid = if verifier_config_hash == 0 {
-            integrity.is_fact_hash_valid_with_security(provided_fact_hash, min_security_bits)
+            is_fact_hash_valid_with_security(
+                self.integrity.read(),
+                self.fact_registry_mode.read(),
+                self.is_fact_mocked.read(),
+                provided_fact_hash,
+                min_security_bits,
+            )
         } else {
-            integrity.is_verification_hash_valid(expected_verification_hash)
+            is_verification_hash_valid(
+                self.integrity.read(),
+                self.fact_registry_mode.read(),
+                self.is_fact_mocked.read(),
+                expected_verification_hash,
+            )
         };
         assert(valid, 'INVALID_INTEGRITY_FACT');
         expected_verification_hash
+    }
+
+    fn validate_registered_fact(self: @ContractState, provided_fact_hash: felt252) -> felt252 {
+        let verifier_config_hash = self.verifier_config_hash.read();
+        let min_security_bits = self.min_security_bits.read();
+        let expected_verification_hash = verification_hash(
+            provided_fact_hash, verifier_config_hash, min_security_bits,
+        );
+        let valid = if verifier_config_hash == 0 {
+            is_fact_hash_valid_with_security(
+                self.integrity.read(),
+                self.fact_registry_mode.read(),
+                self.is_fact_mocked.read(),
+                provided_fact_hash,
+                min_security_bits,
+            )
+        } else {
+            is_verification_hash_valid(
+                self.integrity.read(),
+                self.fact_registry_mode.read(),
+                self.is_fact_mocked.read(),
+                expected_verification_hash,
+            )
+        };
+        assert(valid, 'INVALID_INTEGRITY_FACT');
+        expected_verification_hash
+    }
+
+    fn accept_tally_fact(
+        ref self: ContractState,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+        current_state_commitment: felt252,
+        public_output_hash: felt252,
+        fact_hash: felt252,
+        verification_hash: felt252,
+    ) {
+        self.tally_commitment.write(new_tally_commitment);
+        self.tally_submitted.write(true);
+        self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
+        self
+            .emit(
+                TallyFactAccepted {
+                    old_tally_commitment: current_tally_commitment,
+                    new_tally_commitment,
+                    state_commitment: current_state_commitment,
+                    public_output_hash,
+                    fact_hash,
+                    verification_hash,
+                },
+            );
     }
 
     fn assert_admin(self: @ContractState) {
@@ -422,27 +651,80 @@ pub mod MockAmaciRound {
         poseidon_pair_hash(program_hash, public_output_hash)
     }
 
+    fn plain_fact_hash_for_output(program_hash: felt252, public_output: Span<felt252>) -> felt252 {
+        poseidon_pair_hash(program_hash, poseidon_hash_output(public_output))
+    }
+
+    fn bootloaded_fact_hash_for_output(
+        bootloader_program_hash: felt252, child_program_hash: felt252, child_output: Span<felt252>,
+    ) -> felt252 {
+        let bootloader_output_hash = bootloader_output_hash(child_program_hash, child_output);
+        poseidon_pair_hash(bootloader_program_hash, bootloader_output_hash)
+    }
+
+    fn wrapped_bootloaded_fact_hash_for_output(
+        wrapper_program_hash: felt252,
+        bootloader_program_hash: felt252,
+        child_program_hash: felt252,
+        child_output: Span<felt252>,
+    ) -> felt252 {
+        let bootloader_hash = bootloader_output_hash(child_program_hash, child_output);
+        let wrapper_output_hash = PoseidonTrait::new()
+            .update(1)
+            .update(4)
+            .update(wrapper_program_hash)
+            .update(bootloader_program_hash)
+            .update(bootloader_hash)
+            .finalize();
+        poseidon_pair_hash(bootloader_program_hash, wrapper_output_hash)
+    }
+
+    fn bootloader_output_hash(child_program_hash: felt252, child_output: Span<felt252>) -> felt252 {
+        let mut output_hash = PoseidonTrait::new()
+            .update(1)
+            .update(child_output.len().into() + 2)
+            .update(child_program_hash);
+        for x in child_output {
+            output_hash = output_hash.update(*x);
+        }
+        output_hash.finalize()
+    }
+
+    fn poseidon_hash_output(output: Span<felt252>) -> felt252 {
+        let mut output_hash = PoseidonTrait::new();
+        for x in output {
+            output_hash = output_hash.update(*x);
+        }
+        output_hash.finalize()
+    }
+
     fn poseidon_pair_hash(left: felt252, right: felt252) -> felt252 {
-        let (result, _, _) = hades_permutation(left, right, 2);
-        result
+        PoseidonTrait::new().update(left).update(right).finalize()
     }
 
     fn verification_hash(
         fact_hash: felt252, verifier_config_hash: felt252, security_bits: u32,
     ) -> felt252 {
-        poseidon_hash_span([fact_hash, verifier_config_hash, security_bits.into()].span())
+        PoseidonTrait::new()
+            .update(fact_hash)
+            .update(verifier_config_hash)
+            .update(security_bits.into())
+            .finalize()
     }
 
     #[cfg(test)]
     mod tests {
-        use super::{fact_hash, verification_hash};
+        use super::{
+            bootloaded_fact_hash_for_output, fact_hash, plain_fact_hash_for_output,
+            poseidon_hash_output, verification_hash, wrapped_bootloaded_fact_hash_for_output,
+        };
 
         #[test]
         fn fact_hash_matches_tally_wrapper_pair_hash_vector() {
             assert(
                 fact_hash(
                     0x1234, 0x456,
-                ) == 0x34bdae18917a12eef4020013ee2b4f8f164632685a887bdfa5eb67a22962b5d,
+                ) == 0x49d46086df30505fa5d8e4d48d2a325ef5a3c85b3135b2a3ddfd883bdb56636,
                 'FACT_HASH_VECTOR_BAD',
             );
         }
@@ -454,6 +736,38 @@ pub mod MockAmaciRound {
                     0x1234, 0x5678, 80,
                 ) == 0x57458c3f7260103b710ff2509a3de1f5ac2a2a8fd9604578aaf4865faff08d9,
                 'VERIFY_HASH_VECTOR_BAD',
+            );
+        }
+
+        #[test]
+        fn output_hash_fact_modes_match_integrity_vectors() {
+            let output = [5, 6, 7].span();
+            assert(
+                poseidon_hash_output(
+                    output,
+                ) == 0x527e0bd43e6765351997c60384c821d27993806f4d5f991e9a912df7777feb5,
+                'OUTPUT_HASH_BAD',
+            );
+
+            assert(
+                plain_fact_hash_for_output(
+                    0x1234, [5, 6, 7].span(),
+                ) == 0x14bb0672f8d0b310806201f4342beea32a511e9fbae9f18be454cb7085db171,
+                'PLAIN_OUTPUT_FACT_BAD',
+            );
+
+            assert(
+                bootloaded_fact_hash_for_output(
+                    0x5678, 0x1234, [5, 6, 7].span(),
+                ) == 0x2a84e80deaf2006759b78a3f6255e7370072d32a63fdc4248df07c3be967f26,
+                'BOOT_OUTPUT_FACT_BAD',
+            );
+
+            assert(
+                wrapped_bootloaded_fact_hash_for_output(
+                    0x9abc, 0x5678, 0x1234, [5, 6, 7].span(),
+                ) == 0x4c3af6bdb21415b6a3f13006a38ed9d3cdd278b98ee6d3724e410f16fc90bf9,
+                'WRAPPED_OUTPUT_FACT_BAD',
             );
         }
     }
