@@ -33,6 +33,11 @@ const TALLY_OUTPUT_HASH: felt252 = 0xa04;
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
 const TALLY_VOTES_NATIVE_CIRCUIT_ID: felt252 = 0x414d4143495f54414c4c595f4e4154495645;
+const ADD_NEW_KEY_NATIVE_CIRCUIT_ID: felt252 = 0x414d4143495f4144445f4b45595f4e4154495645;
+const PROCESS_MESSAGES_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f50524f434553535f4d53475f4e4154495645;
+const PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID: felt252 =
+    0x414d4143495f50524f434553535f44454143545f4e4154495645;
 const STARKNET_POSEIDON_HASH_SCHEME: felt252 = 0x535441524b4e45545f504f534549444f4e;
 
 fn deploy_mock_integrity() -> IMockIntegrityDispatcher {
@@ -172,6 +177,124 @@ fn mock_round_accepts_atlantic_metadata_tally_fact() {
     assert(round.get_tally_commitment() == FINAL_TALLY_COMMITMENT, 'TALLY_NOT_UPDATED');
     assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
     assert(round.get_tally_submitted(), 'TALLY_NOT_SUBMITTED');
+}
+
+#[test]
+fn mock_round_accepts_atlantic_metadata_add_new_key_fact() {
+    let integrity = deploy_mock_integrity();
+    let round = deploy_round(integrity.contract_address, 0);
+    let metadata_output = array![
+        0, 0x99, 1, 21, ADD_NEW_KEY_PROGRAM_HASH, 0, 19, PUBLIC_OUTPUT_MAGIC,
+        NATIVE_PUBLIC_OUTPUT_VERSION, ADD_NEW_KEY_NATIVE_CIRCUIT_ID, STARKNET_POSEIDON_HASH_SCHEME,
+        2, 4, 0x201, 0x202, KEY_NULLIFIER, 0x203, 0x204, 0x205, 0x206, 0x207, 0x208, 0x209, 0x20a,
+        0x20b, 0x20c,
+    ];
+    let fact_hash = round
+        .get_expected_bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, ATLANTIC_METADATA_PROGRAM_HASH, metadata_output.span(),
+        );
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    round
+        .submit_add_new_key_atlantic_metadata_fact(
+            KEY_NULLIFIER,
+            STATE_AFTER_KEY,
+            ATLANTIC_METADATA_PROGRAM_HASH,
+            metadata_output.span(),
+            fact_hash,
+        );
+
+    assert(round.get_state_commitment() == STATE_AFTER_KEY, 'STATE_NOT_UPDATED');
+    assert(round.get_keys_added() == 1, 'KEY_COUNT_BAD');
+    assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
+}
+
+#[test]
+fn mock_round_accepts_atlantic_metadata_process_messages_fact() {
+    let integrity = deploy_mock_integrity();
+    let round = deploy_round(integrity.contract_address, 0);
+    let metadata_output = array![
+        0, 0x99, 1, 18, PROCESS_MESSAGES_PROGRAM_HASH, 0, 16, PUBLIC_OUTPUT_MAGIC,
+        NATIVE_PUBLIC_OUTPUT_VERSION, PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+        STARKNET_POSEIDON_HASH_SCHEME, 2, 1, 5, 0x301, 0x302, 0x303, 0x304,
+        INITIAL_STATE_COMMITMENT, STATE_AFTER_MESSAGES, INITIAL_DEACTIVATE_COMMITMENT, 0x305, 0x306,
+    ];
+    let fact_hash = round
+        .get_expected_bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, ATLANTIC_METADATA_PROGRAM_HASH, metadata_output.span(),
+        );
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    round
+        .submit_process_messages_atlantic_metadata_fact(
+            INITIAL_STATE_COMMITMENT,
+            STATE_AFTER_MESSAGES,
+            INITIAL_DEACTIVATE_COMMITMENT,
+            ATLANTIC_METADATA_PROGRAM_HASH,
+            metadata_output.span(),
+            fact_hash,
+        );
+
+    assert(round.get_state_commitment() == STATE_AFTER_MESSAGES, 'STATE_NOT_UPDATED');
+    assert(round.get_message_batches_processed() == 1, 'MSG_COUNT_BAD');
+    assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
+}
+
+#[test]
+fn mock_round_accepts_atlantic_metadata_process_deactivate_fact() {
+    let integrity = deploy_mock_integrity();
+    let round = deploy_round(integrity.contract_address, 0);
+    let metadata_output = array![
+        0, 0x99, 1, 18, PROCESS_DEACTIVATE_PROGRAM_HASH, 0, 16, PUBLIC_OUTPUT_MAGIC,
+        NATIVE_PUBLIC_OUTPUT_VERSION, PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+        STARKNET_POSEIDON_HASH_SCHEME, 2, 4, 5, 0x401, 0x402, 0x403, 0x404,
+        INITIAL_DEACTIVATE_COMMITMENT, DEACTIVATE_AFTER_PROCESS, 0x405, 0x406, 0x407,
+    ];
+    let fact_hash = round
+        .get_expected_bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, ATLANTIC_METADATA_PROGRAM_HASH, metadata_output.span(),
+        );
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    round
+        .submit_process_deactivate_atlantic_metadata_fact(
+            INITIAL_DEACTIVATE_COMMITMENT,
+            DEACTIVATE_AFTER_PROCESS,
+            INITIAL_STATE_COMMITMENT,
+            ATLANTIC_METADATA_PROGRAM_HASH,
+            metadata_output.span(),
+            fact_hash,
+        );
+
+    assert(round.get_deactivate_commitment() == DEACTIVATE_AFTER_PROCESS, 'DEACT_NOT_UPDATED');
+    assert(round.get_deactivate_batches_processed() == 1, 'DEACT_COUNT_BAD');
+    assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
+}
+
+#[test]
+fn mock_round_accepts_generic_atlantic_metadata_component_fact() {
+    let integrity = deploy_mock_integrity();
+    let round = deploy_round(integrity.contract_address, 0);
+    let metadata_output = array![
+        0, 0x99, 1, 6, PROCESS_MESSAGES_PROGRAM_HASH, 0, 4, PUBLIC_OUTPUT_MAGIC,
+        NATIVE_PUBLIC_OUTPUT_VERSION, 0x7777, STARKNET_POSEIDON_HASH_SCHEME,
+    ];
+    let fact_hash = round
+        .get_expected_bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, ATLANTIC_METADATA_PROGRAM_HASH, metadata_output.span(),
+        );
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    round
+        .submit_operation_atlantic_metadata_fact(
+            0x50524f434553535f4d5347,
+            PROCESS_MESSAGES_PROGRAM_HASH,
+            ATLANTIC_METADATA_PROGRAM_HASH,
+            metadata_output.span(),
+            fact_hash,
+        );
+
+    assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
 }
 
 #[test]

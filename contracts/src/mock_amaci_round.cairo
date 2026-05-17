@@ -44,6 +44,14 @@ pub trait IMockAmaciRound<TContractState> {
         public_output_hash: felt252,
         fact_hash: felt252,
     );
+    fn submit_add_new_key_atlantic_metadata_fact(
+        ref self: TContractState,
+        key_nullifier: felt252,
+        new_state_commitment: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
+        fact_hash: felt252,
+    );
     fn submit_process_messages_fact(
         ref self: TContractState,
         current_state_commitment: felt252,
@@ -52,12 +60,38 @@ pub trait IMockAmaciRound<TContractState> {
         public_output_hash: felt252,
         fact_hash: felt252,
     );
+    fn submit_process_messages_atlantic_metadata_fact(
+        ref self: TContractState,
+        current_state_commitment: felt252,
+        new_state_commitment: felt252,
+        current_deactivate_commitment: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
+        fact_hash: felt252,
+    );
     fn submit_process_deactivate_fact(
         ref self: TContractState,
         current_deactivate_commitment: felt252,
         new_deactivate_commitment: felt252,
         current_state_commitment: felt252,
         public_output_hash: felt252,
+        fact_hash: felt252,
+    );
+    fn submit_process_deactivate_atlantic_metadata_fact(
+        ref self: TContractState,
+        current_deactivate_commitment: felt252,
+        new_deactivate_commitment: felt252,
+        current_state_commitment: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
+        fact_hash: felt252,
+    );
+    fn submit_operation_atlantic_metadata_fact(
+        ref self: TContractState,
+        operation_id: felt252,
+        child_program_hash: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
         fact_hash: felt252,
     );
     fn submit_tally_fact(
@@ -123,11 +157,20 @@ pub mod MockAmaciRound {
     const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
     const TALLY_VOTES_NATIVE_CIRCUIT_ID: felt252 =
         0x414d4143495f54414c4c595f4e4154495645; // AMACI_TALLY_NATIVE
+    const ADD_NEW_KEY_NATIVE_CIRCUIT_ID: felt252 =
+        0x414d4143495f4144445f4b45595f4e4154495645; // AMACI_ADD_KEY_NATIVE
+    const PROCESS_MESSAGES_NATIVE_CIRCUIT_ID: felt252 =
+        0x414d4143495f50524f434553535f4d53475f4e4154495645; // AMACI_PROCESS_MSG_NATIVE
+    const PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID: felt252 =
+        0x414d4143495f50524f434553535f44454143545f4e4154495645; // AMACI_PROCESS_DEACT_NATIVE
     const STARKNET_POSEIDON_HASH_SCHEME: felt252 =
         0x535441524b4e45545f504f534549444f4e; // STARKNET_POSEIDON
     const SHARP_BOOTLOADER_PROGRAM_HASH: felt252 =
         0x5ab580b04e3532b6b18f81cfa654a05e29dd8e2352d88df1e765a84072db07;
     const TALLY_NATIVE_OUTPUT_LEN: usize = 12;
+    const ADD_NEW_KEY_NATIVE_OUTPUT_LEN: usize = 19;
+    const PROCESS_MESSAGES_NATIVE_OUTPUT_LEN: usize = 16;
+    const PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN: usize = 16;
 
     #[storage]
     struct Storage {
@@ -394,6 +437,48 @@ pub mod MockAmaciRound {
                 );
         }
 
+        fn submit_add_new_key_atlantic_metadata_fact(
+            ref self: ContractState,
+            key_nullifier: felt252,
+            new_state_commitment: felt252,
+            metadata_program_hash: felt252,
+            metadata_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.used_key_nullifiers.read(key_nullifier) == false, 'KEY_NULLIFIER_USED');
+            let verification_hash = validate_atlantic_metadata_fact(
+                @self,
+                self.add_new_key_program_hash.read(),
+                metadata_program_hash,
+                metadata_output,
+                fact_hash,
+            );
+            let output_start = find_native_output_start(
+                metadata_output, ADD_NEW_KEY_NATIVE_CIRCUIT_ID, ADD_NEW_KEY_NATIVE_OUTPUT_LEN,
+            );
+            assert_native_output_header_at(
+                metadata_output, output_start, ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+            );
+            assert(*metadata_output.at(output_start + 8) == key_nullifier, 'KEY_NULLIFIER_BAD');
+            let public_output_hash = poseidon_hash_output_at(
+                metadata_output, output_start, ADD_NEW_KEY_NATIVE_OUTPUT_LEN,
+            );
+            self.used_key_nullifiers.write(key_nullifier, true);
+            self.state_commitment.write(new_state_commitment);
+            self.keys_added.write(self.keys_added.read() + 1);
+            self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
+            self
+                .emit(
+                    AddNewKeyFactAccepted {
+                        key_nullifier,
+                        new_state_commitment,
+                        public_output_hash,
+                        fact_hash,
+                        verification_hash,
+                    },
+                );
+        }
+
         fn submit_process_messages_fact(
             ref self: ContractState,
             current_state_commitment: felt252,
@@ -409,6 +494,63 @@ pub mod MockAmaciRound {
             );
             let verification_hash = validate_fact(
                 @self, self.process_messages_program_hash.read(), public_output_hash, fact_hash,
+            );
+            self.state_commitment.write(new_state_commitment);
+            self.message_batches_processed.write(self.message_batches_processed.read() + 1);
+            self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
+            self
+                .emit(
+                    ProcessMessagesFactAccepted {
+                        old_state_commitment: current_state_commitment,
+                        new_state_commitment,
+                        deactivate_commitment: current_deactivate_commitment,
+                        public_output_hash,
+                        fact_hash,
+                        verification_hash,
+                    },
+                );
+        }
+
+        fn submit_process_messages_atlantic_metadata_fact(
+            ref self: ContractState,
+            current_state_commitment: felt252,
+            new_state_commitment: felt252,
+            current_deactivate_commitment: felt252,
+            metadata_program_hash: felt252,
+            metadata_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            assert(
+                self.deactivate_commitment.read() == current_deactivate_commitment,
+                'DEACT_MISMATCH',
+            );
+            let verification_hash = validate_atlantic_metadata_fact(
+                @self,
+                self.process_messages_program_hash.read(),
+                metadata_program_hash,
+                metadata_output,
+                fact_hash,
+            );
+            let output_start = find_native_output_start(
+                metadata_output,
+                PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+                PROCESS_MESSAGES_NATIVE_OUTPUT_LEN,
+            );
+            assert_native_output_header_at(
+                metadata_output, output_start, PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+            );
+            assert(
+                *metadata_output.at(output_start + 11) == current_state_commitment,
+                'STATE_CURRENT_BAD',
+            );
+            assert(*metadata_output.at(output_start + 12) == new_state_commitment, 'STATE_NEW_BAD');
+            assert(
+                *metadata_output.at(output_start + 13) == current_deactivate_commitment,
+                'DEACT_OUTPUT_BAD',
+            );
+            let public_output_hash = poseidon_hash_output_at(
+                metadata_output, output_start, PROCESS_MESSAGES_NATIVE_OUTPUT_LEN,
             );
             self.state_commitment.write(new_state_commitment);
             self.message_batches_processed.write(self.message_batches_processed.read() + 1);
@@ -451,6 +593,87 @@ pub mod MockAmaciRound {
                         old_deactivate_commitment: current_deactivate_commitment,
                         new_deactivate_commitment,
                         state_commitment: current_state_commitment,
+                        public_output_hash,
+                        fact_hash,
+                        verification_hash,
+                    },
+                );
+        }
+
+        fn submit_process_deactivate_atlantic_metadata_fact(
+            ref self: ContractState,
+            current_deactivate_commitment: felt252,
+            new_deactivate_commitment: felt252,
+            current_state_commitment: felt252,
+            metadata_program_hash: felt252,
+            metadata_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(
+                self.deactivate_commitment.read() == current_deactivate_commitment,
+                'DEACT_MISMATCH',
+            );
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            let verification_hash = validate_atlantic_metadata_fact(
+                @self,
+                self.process_deactivate_program_hash.read(),
+                metadata_program_hash,
+                metadata_output,
+                fact_hash,
+            );
+            let output_start = find_native_output_start(
+                metadata_output,
+                PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+                PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN,
+            );
+            assert_native_output_header_at(
+                metadata_output, output_start, PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+            );
+            assert(
+                *metadata_output.at(output_start + 11) == current_deactivate_commitment,
+                'DEACT_CURRENT_BAD',
+            );
+            assert(
+                *metadata_output.at(output_start + 12) == new_deactivate_commitment,
+                'DEACT_NEW_BAD',
+            );
+            let public_output_hash = poseidon_hash_output_at(
+                metadata_output, output_start, PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN,
+            );
+            self.deactivate_commitment.write(new_deactivate_commitment);
+            self.deactivate_batches_processed.write(self.deactivate_batches_processed.read() + 1);
+            self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
+            self
+                .emit(
+                    ProcessDeactivateFactAccepted {
+                        old_deactivate_commitment: current_deactivate_commitment,
+                        new_deactivate_commitment,
+                        state_commitment: current_state_commitment,
+                        public_output_hash,
+                        fact_hash,
+                        verification_hash,
+                    },
+                );
+        }
+
+        fn submit_operation_atlantic_metadata_fact(
+            ref self: ContractState,
+            operation_id: felt252,
+            child_program_hash: felt252,
+            metadata_program_hash: felt252,
+            metadata_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            let verification_hash = validate_atlantic_metadata_fact(
+                @self, child_program_hash, metadata_program_hash, metadata_output, fact_hash,
+            );
+            let public_output_hash = poseidon_hash_output(metadata_output);
+            self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
+            self
+                .emit(
+                    OperationFactAccepted {
+                        operation_id,
+                        program_hash: child_program_hash,
                         public_output_hash,
                         fact_hash,
                         verification_hash,
@@ -682,6 +905,23 @@ pub mod MockAmaciRound {
         expected_verification_hash
     }
 
+    fn validate_atlantic_metadata_fact(
+        self: @ContractState,
+        child_program_hash: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
+        provided_fact_hash: felt252,
+    ) -> felt252 {
+        assert(self.allowed_program_hashes.read(child_program_hash), 'PROGRAM_NOT_ALLOWED');
+        assert(metadata_output.len() > 4, 'METADATA_OUTPUT_SHORT');
+        assert(*metadata_output.at(4) == child_program_hash, 'PROGRAM_MISMATCH');
+        let expected_fact_hash = bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, metadata_program_hash, metadata_output,
+        );
+        assert(provided_fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
+        validate_registered_fact(self, provided_fact_hash)
+    }
+
     fn accept_tally_fact(
         ref self: ContractState,
         current_tally_commitment: felt252,
@@ -755,15 +995,23 @@ pub mod MockAmaciRound {
     }
 
     fn find_native_tally_output_start(metadata_output: Span<felt252>) -> usize {
-        assert(metadata_output.len() >= TALLY_NATIVE_OUTPUT_LEN, 'METADATA_OUTPUT_SHORT');
-        let limit = metadata_output.len() - TALLY_NATIVE_OUTPUT_LEN + 1;
+        find_native_output_start(
+            metadata_output, TALLY_VOTES_NATIVE_CIRCUIT_ID, TALLY_NATIVE_OUTPUT_LEN,
+        )
+    }
+
+    fn find_native_output_start(
+        metadata_output: Span<felt252>, circuit_id: felt252, output_len: usize,
+    ) -> usize {
+        assert(metadata_output.len() >= output_len, 'METADATA_OUTPUT_SHORT');
+        let limit = metadata_output.len() - output_len + 1;
         let mut found = false;
         let mut found_start: usize = 0;
         let mut i: usize = 0;
         while i < limit {
             if *metadata_output.at(i) == PUBLIC_OUTPUT_MAGIC {
                 if *metadata_output.at(i + 1) == NATIVE_PUBLIC_OUTPUT_VERSION {
-                    if *metadata_output.at(i + 2) == TALLY_VOTES_NATIVE_CIRCUIT_ID {
+                    if *metadata_output.at(i + 2) == circuit_id {
                         found = true;
                         found_start = i;
                         i = limit;
@@ -777,8 +1025,19 @@ pub mod MockAmaciRound {
                 i += 1;
             }
         }
-        assert(found, 'TALLY_OUTPUT_MISSING');
+        assert(found, 'NATIVE_OUTPUT_MISSING');
         found_start
+    }
+
+    fn assert_native_output_header_at(
+        metadata_output: Span<felt252>, start: usize, circuit_id: felt252,
+    ) {
+        assert(*metadata_output.at(start) == PUBLIC_OUTPUT_MAGIC, 'NATIVE_MAGIC_BAD');
+        assert(
+            *metadata_output.at(start + 1) == NATIVE_PUBLIC_OUTPUT_VERSION, 'NATIVE_VERSION_BAD',
+        );
+        assert(*metadata_output.at(start + 2) == circuit_id, 'NATIVE_CIRCUIT_BAD');
+        assert(*metadata_output.at(start + 3) == STARKNET_POSEIDON_HASH_SCHEME, 'NATIVE_HASH_BAD');
     }
 
     fn assert_native_tally_output_at(
@@ -788,12 +1047,7 @@ pub mod MockAmaciRound {
         current_tally_commitment: felt252,
         new_tally_commitment: felt252,
     ) {
-        assert(*metadata_output.at(start) == PUBLIC_OUTPUT_MAGIC, 'TALLY_MAGIC_BAD');
-        assert(*metadata_output.at(start + 1) == NATIVE_PUBLIC_OUTPUT_VERSION, 'TALLY_VERSION_BAD');
-        assert(
-            *metadata_output.at(start + 2) == TALLY_VOTES_NATIVE_CIRCUIT_ID, 'TALLY_CIRCUIT_BAD',
-        );
-        assert(*metadata_output.at(start + 3) == STARKNET_POSEIDON_HASH_SCHEME, 'TALLY_HASH_BAD');
+        assert_native_output_header_at(metadata_output, start, TALLY_VOTES_NATIVE_CIRCUIT_ID);
         assert(*metadata_output.at(start + 8) == current_state_commitment, 'STATE_OUTPUT_BAD');
         assert(*metadata_output.at(start + 9) == current_tally_commitment, 'TALLY_CURRENT_BAD');
         assert(*metadata_output.at(start + 10) == new_tally_commitment, 'TALLY_NEW_BAD');

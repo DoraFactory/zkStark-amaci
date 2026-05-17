@@ -29,7 +29,32 @@ const SATELLITE = Object.freeze({
 const PUBLIC_OUTPUT_MAGIC = 0x4d414349535441524bn;
 const NATIVE_PUBLIC_OUTPUT_VERSION = 2n;
 const TALLY_VOTES_NATIVE_CIRCUIT_ID = 0x414d4143495f54414c4c595f4e4154495645n;
-const TALLY_NATIVE_OUTPUT_LEN = 12;
+const ADD_NEW_KEY_NATIVE_CIRCUIT_ID = 0x414d4143495f4144445f4b45595f4e4154495645n;
+const PROCESS_MESSAGES_NATIVE_CIRCUIT_ID = 0x414d4143495f50524f434553535f4d53475f4e4154495645n;
+const PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID = 0x414d4143495f50524f434553535f44454143545f4e4154495645n;
+
+const NATIVE_OUTPUT_SPECS = Object.freeze({
+  tally: {
+    label: 'native-tally-output',
+    circuitId: TALLY_VOTES_NATIVE_CIRCUIT_ID,
+    outputLength: 12,
+  },
+  addNewKey: {
+    label: 'native-add-new-key-output',
+    circuitId: ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+    outputLength: 19,
+  },
+  processMessages: {
+    label: 'native-process-messages-output',
+    circuitId: PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+    outputLength: 16,
+  },
+  processDeactivate: {
+    label: 'native-process-deactivate-output',
+    circuitId: PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+    outputLength: 16,
+  },
+});
 
 function readJson(path, label) {
   if (!existsSync(path)) {
@@ -93,18 +118,22 @@ function summaryFromInput(value) {
   return value;
 }
 
-export function extractNativeTallyPublicOutput(values) {
+export function extractNativePublicOutput(values, spec) {
   const felts = normalizeFeltArray(values, 'metadata.output');
-  for (let i = 0; i <= felts.length - TALLY_NATIVE_OUTPUT_LEN; i += 1) {
+  for (let i = 0; i <= felts.length - spec.outputLength; i += 1) {
     if (
       felts[i] === PUBLIC_OUTPUT_MAGIC &&
       felts[i + 1] === NATIVE_PUBLIC_OUTPUT_VERSION &&
-      felts[i + 2] === TALLY_VOTES_NATIVE_CIRCUIT_ID
+      felts[i + 2] === spec.circuitId
     ) {
-      return felts.slice(i, i + TALLY_NATIVE_OUTPUT_LEN);
+      return felts.slice(i, i + spec.outputLength);
     }
   }
   return undefined;
+}
+
+export function extractNativeTallyPublicOutput(values) {
+  return extractNativePublicOutput(values, NATIVE_OUTPUT_SPECS.tally);
 }
 
 function candidate(label, mode, fields, factHash, expectedFactHash) {
@@ -127,9 +156,19 @@ export function buildAtlanticFactCandidates({ summary, metadata }) {
   const metadataProgramHash = metadata?.program_hash;
   const metadataChildProgramHash = metadata?.child_program_hash;
   const metadataOutput = metadata?.output ? normalizeFeltArray(metadata.output, 'metadata.output') : undefined;
-  const nativeTallyOutput = metadataOutput
-    ? extractNativeTallyPublicOutput(metadata.output)
-    : undefined;
+  const nativeOutputs = metadataOutput
+    ? Object.values(NATIVE_OUTPUT_SPECS)
+        .map((spec) => {
+          const output = extractNativePublicOutput(metadata.output, spec);
+          return output
+            ? {
+                label: spec.label,
+                output,
+              }
+            : undefined;
+        })
+        .filter(Boolean)
+    : [];
 
   const programHashCandidates = uniqueCandidates([
     queryProgramHash ? { label: 'query-program', value: queryProgramHash } : undefined,
@@ -143,12 +182,7 @@ export function buildAtlanticFactCandidates({ summary, metadata }) {
   ]);
 
   const outputSets = [
-    nativeTallyOutput
-      ? {
-          label: 'native-tally-output',
-          output: nativeTallyOutput,
-        }
-      : undefined,
+    ...nativeOutputs,
     metadataOutput
       ? {
           label: 'metadata-output',
@@ -259,7 +293,7 @@ function currentWrapperCanSubmitCandidate(candidate, tallyProgramHash) {
   if (!candidate || !tallyProgramHash) {
     return false;
   }
-  if (isAtlanticMetadataTallyCandidate(candidate)) {
+  if (isAtlanticMetadataCandidate(candidate)) {
     return true;
   }
   const expectedProgramHash = normalizeHex(tallyProgramHash, 'tallyProgramHash');
@@ -273,24 +307,141 @@ function currentWrapperCanSubmitCandidate(candidate, tallyProgramHash) {
 }
 
 function isAtlanticMetadataTallyCandidate(candidate) {
+  return isAtlanticMetadataCandidate(candidate);
+}
+
+function isAtlanticMetadataCandidate(candidate) {
   return candidate?.mode === 'bootloaded'
     && candidate.outputLabel === 'metadata-output'
     && candidate.childProgramHashRole === 'metadata-program'
     && candidate.bootloaderLabel === 'sharp';
 }
 
-function submitTallyCommand({ candidate, wrapperAddress, profile, sncast, state, tallyProgramHash }) {
+function submitCommand({ operation, candidate, wrapperAddress, profile, sncast, state, tallyProgramHash }) {
   if (!candidate || !wrapperAddress) {
     return undefined;
   }
   if (!currentWrapperCanSubmitCandidate(candidate, tallyProgramHash)) {
     return undefined;
   }
+  const output = candidate.outputFelts;
+  if (operation === 'addNewKey' && isAtlanticMetadataCandidate(candidate)) {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_add_new_key_atlantic_metadata_fact',
+      calldata: [
+        state.keyNullifier,
+        state.newStateCommitment,
+        candidate.childProgramHash,
+        output.length,
+        ...output,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'processMessages' && isAtlanticMetadataCandidate(candidate)) {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_process_messages_atlantic_metadata_fact',
+      calldata: [
+        state.currentStateCommitment,
+        state.newStateCommitment,
+        state.currentDeactivateCommitment,
+        candidate.childProgramHash,
+        output.length,
+        ...output,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'processDeactivate' && isAtlanticMetadataCandidate(candidate)) {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_process_deactivate_atlantic_metadata_fact',
+      calldata: [
+        state.currentDeactivateCommitment,
+        state.newDeactivateCommitment,
+        state.currentStateCommitment,
+        candidate.childProgramHash,
+        output.length,
+        ...output,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'generic' && isAtlanticMetadataCandidate(candidate)) {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_operation_atlantic_metadata_fact',
+      calldata: [
+        state.operationId,
+        state.childProgramHash,
+        candidate.childProgramHash,
+        output.length,
+        ...output,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'addNewKey' && candidate.mode === 'plain') {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_add_new_key_fact',
+      calldata: [
+        state.keyNullifier,
+        state.newStateCommitment,
+        candidate.outputHash,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'processMessages' && candidate.mode === 'plain') {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_process_messages_fact',
+      calldata: [
+        state.currentStateCommitment,
+        state.newStateCommitment,
+        state.currentDeactivateCommitment,
+        candidate.outputHash,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation === 'processDeactivate' && candidate.mode === 'plain') {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_process_deactivate_fact',
+      calldata: [
+        state.currentDeactivateCommitment,
+        state.newDeactivateCommitment,
+        state.currentStateCommitment,
+        candidate.outputHash,
+        candidate.factHash,
+      ],
+    });
+  }
+  if (operation !== 'tally') {
+    return undefined;
+  }
   const currentTallyCommitment = normalizeHex(state.currentTallyCommitment, 'currentTallyCommitment');
   const newTallyCommitment = normalizeHex(state.newTallyCommitment, 'newTallyCommitment');
   const stateCommitment = normalizeHex(state.stateCommitment, 'stateCommitment');
-  const output = candidate.outputFelts;
-  if (isAtlanticMetadataTallyCandidate(candidate)) {
+  if (operation === 'tally' && isAtlanticMetadataTallyCandidate(candidate)) {
     return sncastInvokeCommand({
       sncast,
       profile,
@@ -372,6 +523,106 @@ function tallyStateFromOutput(nativeTallyOutput, overrides = {}) {
   };
 }
 
+function operationFromInput(operation = 'tally') {
+  const normalized = String(operation).trim().toLowerCase();
+  if (normalized === 'tally' || normalized === 'tally-native') {
+    return 'tally';
+  }
+  if (normalized === 'add-new-key' || normalized === 'addnewkey' || normalized === 'add-new-key-native') {
+    return 'addNewKey';
+  }
+  if (
+    normalized === 'process-messages' ||
+    normalized === 'processmessages' ||
+    normalized === 'process-messages-boundary-native'
+  ) {
+    return 'processMessages';
+  }
+  if (
+    normalized === 'process-deactivate' ||
+    normalized === 'processdeactivate' ||
+    normalized === 'process-deactivate-boundary-native'
+  ) {
+    return 'processDeactivate';
+  }
+  if (normalized === 'generic' || normalized === 'operation') {
+    return 'generic';
+  }
+  throw new Error(`unsupported operation: ${operation}`);
+}
+
+function operationNativeOutput(operation, metadataOutput) {
+  if (!metadataOutput || operation === 'generic') {
+    return undefined;
+  }
+  const spec = NATIVE_OUTPUT_SPECS[operation];
+  return spec ? extractNativePublicOutput(metadataOutput, spec) : undefined;
+}
+
+function operationStateFromOutput(operation, nativeOutput, overrides = {}, operationProgramHash) {
+  if (operation === 'tally') {
+    return tallyStateFromOutput(nativeOutput, overrides);
+  }
+  if (operation === 'addNewKey') {
+    if (!nativeOutput) {
+      return undefined;
+    }
+    return {
+      keyNullifier: overrides.keyNullifier
+        ? normalizeHex(overrides.keyNullifier, 'keyNullifier')
+        : bigintToHex(nativeOutput[8]),
+      newStateCommitment: overrides.newStateCommitment
+        ? normalizeHex(overrides.newStateCommitment, 'newStateCommitment')
+        : undefined,
+    };
+  }
+  if (operation === 'processMessages') {
+    if (!nativeOutput) {
+      return undefined;
+    }
+    return {
+      currentStateCommitment: overrides.currentStateCommitment
+        ? normalizeHex(overrides.currentStateCommitment, 'currentStateCommitment')
+        : bigintToHex(nativeOutput[11]),
+      newStateCommitment: overrides.newStateCommitment
+        ? normalizeHex(overrides.newStateCommitment, 'newStateCommitment')
+        : bigintToHex(nativeOutput[12]),
+      currentDeactivateCommitment: overrides.currentDeactivateCommitment
+        ? normalizeHex(overrides.currentDeactivateCommitment, 'currentDeactivateCommitment')
+        : bigintToHex(nativeOutput[13]),
+    };
+  }
+  if (operation === 'processDeactivate') {
+    if (!nativeOutput) {
+      return undefined;
+    }
+    return {
+      currentDeactivateCommitment: overrides.currentDeactivateCommitment
+        ? normalizeHex(overrides.currentDeactivateCommitment, 'currentDeactivateCommitment')
+        : bigintToHex(nativeOutput[11]),
+      newDeactivateCommitment: overrides.newDeactivateCommitment
+        ? normalizeHex(overrides.newDeactivateCommitment, 'newDeactivateCommitment')
+        : bigintToHex(nativeOutput[12]),
+      currentStateCommitment: overrides.currentStateCommitment || overrides.stateCommitment
+        ? normalizeHex(
+            overrides.currentStateCommitment ?? overrides.stateCommitment,
+            'currentStateCommitment',
+          )
+        : undefined,
+    };
+  }
+  if (operation === 'generic') {
+    return {
+      operationId: normalizeHex(overrides.operationId ?? 0, 'operationId'),
+      childProgramHash: normalizeHex(
+        overrides.childProgramHash ?? operationProgramHash,
+        'childProgramHash',
+      ),
+    };
+  }
+  return undefined;
+}
+
 export function buildAtlanticMockRoundCall({
   queryResult,
   summary,
@@ -384,15 +635,17 @@ export function buildAtlanticMockRoundCall({
   profile,
   sncast = 'sncast',
   state = {},
+  operation = 'tally',
 }) {
+  const normalizedOperation = operationFromInput(operation);
   const normalizedSummary = summaryFromInput(queryResult ?? summary);
   if (!normalizedSummary?.integrityFactHash) {
     throw new Error('Atlantic summary must include integrityFactHash');
   }
 
   const metadataOutput = metadata?.output ? normalizeFeltArray(metadata.output, 'metadata.output') : undefined;
-  const nativeTallyOutput = metadataOutput
-    ? extractNativeTallyPublicOutput(metadata.output)
+  const nativeOutput = metadataOutput
+    ? operationNativeOutput(normalizedOperation, metadata.output)
     : undefined;
   const candidates = buildAtlanticFactCandidates({
     summary: normalizedSummary,
@@ -400,12 +653,18 @@ export function buildAtlanticMockRoundCall({
   });
   const matchingCandidates = candidates.filter((entry) => entry.matchesIntegrityFact);
   const selectedCandidate = matchingCandidates[0];
-  const tallyState = tallyStateFromOutput(nativeTallyOutput, state);
+  const operationProgramHash = metadata?.child_program_hash ?? normalizedSummary.programHash;
+  const operationState = operationStateFromOutput(
+    normalizedOperation,
+    nativeOutput,
+    state,
+    operationProgramHash,
+  );
   const blockers = [];
   const warnings = [];
 
-  if (!nativeTallyOutput) {
-    blockers.push('metadata output does not contain a native tally public output');
+  if (normalizedOperation !== 'generic' && !nativeOutput) {
+    blockers.push(`metadata output does not contain a native ${operation} public output`);
   }
   if (matchingCandidates.length === 0) {
     blockers.push(
@@ -428,16 +687,43 @@ export function buildAtlanticMockRoundCall({
     ? FACT_REGISTRY[normalizedNetwork]
     : SATELLITE[normalizedNetwork];
   const isFactMocked = normalizedSummary.isFactMocked ? '1' : '0';
-  const tallyProgramHash = metadata?.child_program_hash ?? normalizedSummary.programHash;
+  const operationProgramHashHex = normalizeHex(operationProgramHash, 'operationProgramHash');
+  const addNewKeyProgramHash = normalizedOperation === 'addNewKey'
+    ? operationProgramHashHex
+    : '<ADD_NEW_KEY_PROGRAM_HASH>';
+  const processMessagesProgramHash = normalizedOperation === 'processMessages'
+    ? operationProgramHashHex
+    : '<PROCESS_MESSAGES_PROGRAM_HASH>';
+  const processDeactivateProgramHash = normalizedOperation === 'processDeactivate'
+    ? operationProgramHashHex
+    : '<PROCESS_DEACTIVATE_PROGRAM_HASH>';
+  const tallyProgramHash = normalizedOperation === 'tally'
+    ? operationProgramHashHex
+    : '<TALLY_PROGRAM_HASH>';
   const currentWrapperSubmitSupported = currentWrapperCanSubmitCandidate(
     selectedCandidate,
-    tallyProgramHash,
+    operationProgramHash,
   );
   if (selectedCandidate && !currentWrapperSubmitSupported) {
     blockers.push(
       'matching integrityFactHash is not directly consumable by current MockAmaciRound tally submit functions; it is registered for a metadata/bootloader-level output',
     );
   }
+  if (normalizedOperation === 'addNewKey' && !operationState?.newStateCommitment) {
+    blockers.push('add-new-key submission requires --new-state-commitment');
+  }
+  if (normalizedOperation === 'processDeactivate' && !operationState?.currentStateCommitment) {
+    blockers.push('process-deactivate submission requires --state-commitment');
+  }
+  if (normalizedOperation === 'generic' && !operationState?.operationId) {
+    blockers.push('generic operation submission requires --operation-id');
+  }
+  const constructorInitialState = normalizedOperation === 'tally'
+    ? operationState?.stateCommitment
+    : operationState?.currentStateCommitment;
+  const constructorInitialTally = normalizedOperation === 'tally'
+    ? operationState?.currentTallyCommitment
+    : undefined;
   const constructorCalldata = [
     '<ADMIN_ADDRESS>',
     registryAddress,
@@ -445,13 +731,13 @@ export function buildAtlanticMockRoundCall({
     isFactMocked,
     normalizeHex(verifierConfigHash, 'verifierConfigHash'),
     normalizeHex(securityBits, 'securityBits'),
-    '<ADD_NEW_KEY_PROGRAM_HASH>',
-    '<PROCESS_MESSAGES_PROGRAM_HASH>',
-    '<PROCESS_DEACTIVATE_PROGRAM_HASH>',
-    normalizeHex(tallyProgramHash, 'tallyProgramHash'),
-    tallyState?.stateCommitment ?? '<INITIAL_STATE_COMMITMENT>',
+    addNewKeyProgramHash,
+    processMessagesProgramHash,
+    processDeactivateProgramHash,
+    tallyProgramHash,
+    constructorInitialState ?? '<INITIAL_STATE_COMMITMENT>',
     '<INITIAL_DEACTIVATE_COMMITMENT>',
-    tallyState?.currentTallyCommitment ?? '<INITIAL_TALLY_COMMITMENT>',
+    constructorInitialTally ?? '<INITIAL_TALLY_COMMITMENT>',
   ];
 
   const selectedVerificationHash = selectedCandidate
@@ -467,6 +753,7 @@ export function buildAtlanticMockRoundCall({
   return {
     schema: 'zkstark-amaci.atlantic-mock-round-call.v1',
     network: normalizedNetwork,
+    operation: normalizedOperation,
     factRegistryMode,
     factRegistryAddress: registryAddress,
     query: {
@@ -485,10 +772,11 @@ export function buildAtlanticMockRoundCall({
           programHash: metadata.program_hash,
           childProgramHash: metadata.child_program_hash,
           outputFelts: metadataOutput?.length,
-          nativeTallyOutputFelts: nativeTallyOutput?.length,
+          nativeOutputFelts: nativeOutput?.length,
         }
       : undefined,
-    tallyState,
+    tallyState: normalizedOperation === 'tally' ? operationState : undefined,
+    operationState,
     candidates,
     selectedCandidate,
     verificationHash: selectedVerificationHash,
@@ -500,22 +788,37 @@ export function buildAtlanticMockRoundCall({
     },
     submit: {
       function: selectedCandidate?.mode
-        ? isAtlanticMetadataTallyCandidate(selectedCandidate)
-          ? 'submit_tally_atlantic_metadata_fact'
-          : {
+        ? isAtlanticMetadataCandidate(selectedCandidate)
+          ? {
+              tally: 'submit_tally_atlantic_metadata_fact',
+              addNewKey: 'submit_add_new_key_atlantic_metadata_fact',
+              processMessages: 'submit_process_messages_atlantic_metadata_fact',
+              processDeactivate: 'submit_process_deactivate_atlantic_metadata_fact',
+              generic: 'submit_operation_atlantic_metadata_fact',
+            }[normalizedOperation]
+          : normalizedOperation === 'tally'
+            ? {
               plain: 'submit_tally_plain_output_fact',
               bootloaded: 'submit_tally_bootloaded_output_fact',
               wrapped_bootloaded: 'submit_tally_wrapped_bootloaded_output_fact',
             }[selectedCandidate.mode]
+            : {
+              addNewKey: { plain: 'submit_add_new_key_fact' }[selectedCandidate.mode],
+              processMessages: { plain: 'submit_process_messages_fact' }[selectedCandidate.mode],
+              processDeactivate: { plain: 'submit_process_deactivate_fact' }[
+                selectedCandidate.mode
+              ],
+            }[normalizedOperation]
         : undefined,
-      command: selectedCandidate && tallyState
-        ? submitTallyCommand({
+      command: selectedCandidate && operationState && blockers.length === 0
+        ? submitCommand({
+            operation: normalizedOperation,
             candidate: selectedCandidate,
             wrapperAddress,
             profile,
             sncast,
-            state: tallyState,
-            tallyProgramHash,
+            state: operationState,
+            tallyProgramHash: operationProgramHash,
           })
         : undefined,
       supportedByCurrentWrapper: currentWrapperSubmitSupported,

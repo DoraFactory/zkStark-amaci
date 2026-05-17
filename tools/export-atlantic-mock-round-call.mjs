@@ -11,10 +11,22 @@ Options:
   --summary <path>            final-query-summary.json. Used when --query-result is absent.
   --metadata <path>           Atlantic metadata.json artifact.
   --wrapper-address <addr>    Deployed MockAmaciRound address.
+  --operation <name>          tally, add-new-key, process-messages, process-deactivate, or generic.
   --network <sepolia|mainnet> Default: sepolia.
   --fact-registry-mode <mode> satellite or direct. Default: satellite.
   --verifier-config-hash <f>  Default: 0.
   --security-bits <n>         Default: 50.
+  --new-state-commitment <f>  Required for add-new-key; optional override for process-messages.
+  --state-commitment <f>      Required for process-deactivate.
+  --current-state-commitment <f>
+                              Alias for --state-commitment.
+  --current-deactivate-commitment <f>
+                              Optional override for process-messages/process-deactivate.
+  --new-deactivate-commitment <f>
+                              Optional override for process-deactivate.
+  --key-nullifier <f>         Optional override for add-new-key.
+  --operation-id <f>          Operation id for generic component submissions.
+  --child-program-hash <f>    Program hash for generic component submissions.
   --profile <name>            sncast profile for emitted commands.
   --sncast <path>             sncast binary. Default: sncast.
   --out <path>                Output JSON path.
@@ -29,10 +41,12 @@ function parseArgs(argv) {
     summaryPath: undefined,
     metadataPath: undefined,
     wrapperAddress: undefined,
+    operation: 'tally',
     network: 'sepolia',
     factRegistryMode: 'satellite',
     verifierConfigHash: 0,
     securityBits: 50,
+    state: {},
     profile: undefined,
     sncast: 'sncast',
     out: undefined,
@@ -51,6 +65,8 @@ function parseArgs(argv) {
       args.metadataPath = argv[++i];
     } else if (arg === '--wrapper-address') {
       args.wrapperAddress = argv[++i];
+    } else if (arg === '--operation') {
+      args.operation = argv[++i];
     } else if (arg === '--network') {
       args.network = argv[++i];
     } else if (arg === '--fact-registry-mode') {
@@ -59,6 +75,20 @@ function parseArgs(argv) {
       args.verifierConfigHash = argv[++i];
     } else if (arg === '--security-bits') {
       args.securityBits = argv[++i];
+    } else if (arg === '--new-state-commitment') {
+      args.state.newStateCommitment = argv[++i];
+    } else if (arg === '--state-commitment' || arg === '--current-state-commitment') {
+      args.state.currentStateCommitment = argv[++i];
+    } else if (arg === '--current-deactivate-commitment') {
+      args.state.currentDeactivateCommitment = argv[++i];
+    } else if (arg === '--new-deactivate-commitment') {
+      args.state.newDeactivateCommitment = argv[++i];
+    } else if (arg === '--key-nullifier') {
+      args.state.keyNullifier = argv[++i];
+    } else if (arg === '--operation-id') {
+      args.state.operationId = argv[++i];
+    } else if (arg === '--child-program-hash') {
+      args.state.childProgramHash = argv[++i];
     } else if (arg === '--profile') {
       args.profile = argv[++i];
     } else if (arg === '--sncast') {
@@ -91,6 +121,7 @@ if (args.text) {
     `Atlantic query: ${result.query.id ?? 'unknown'}`,
     `Status: ${result.query.status}`,
     `Result: ${result.query.result}`,
+    `Operation: ${result.operation}`,
     `Integrity fact hash: ${result.query.integrityFactHash}`,
     `FactRegistry mode: ${result.factRegistryMode}`,
     `FactRegistry address: ${result.factRegistryAddress}`,

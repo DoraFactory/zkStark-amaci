@@ -1,6 +1,8 @@
 node_modules/
 logs/
 target/
+.env
+snfoundry.toml
 cairo/target/
 contracts/target/
 contracts/.snfoundry_cache/
