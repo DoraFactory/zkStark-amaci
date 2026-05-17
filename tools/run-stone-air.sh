@@ -515,6 +515,7 @@ case "$CIRCUIT" in
     STONE_MODULES=(native_process_deactivate "$STONE_ENTRY_MODULE")
     ;;
   add-new-key-native)
+    STONE_ENTRY_MODE="source-direct"
     STONE_MODULES=(
       add_new_key
       babyjub
@@ -559,12 +560,16 @@ case "$CIRCUIT" in
     ;;
 esac
 
-if [[ "$STONE_ENTRY_MODE" == "executable-wrapper" ]]; then
+if [[ "$STONE_ENTRY_MODE" == "executable-wrapper" || "$STONE_ENTRY_MODE" == "source-direct" ]]; then
   STONE_SOURCE_ENTRY_PATH="$(source_entry_path "$CIRCUIT")"
   STONE_SOURCE_ENTRY_MODULE="${STONE_SOURCE_ENTRY_PATH%%::*}"
   STONE_SOURCE_ENTRY_FUNCTION="${STONE_SOURCE_ENTRY_PATH##*::}"
   STONE_TARGET_FUNCTION="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_PATH"
-  STONE_EXPORT_FUNCTION="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_MODULE::__executable_wrapper__$STONE_SOURCE_ENTRY_FUNCTION"
+  if [[ "$STONE_ENTRY_MODE" == "source-direct" ]]; then
+    STONE_EXPORT_FUNCTION="$STONE_TARGET_FUNCTION"
+  else
+    STONE_EXPORT_FUNCTION="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_MODULE::__executable_wrapper__$STONE_SOURCE_ENTRY_FUNCTION"
+  fi
   STONE_RUNNER_MAIN_NAME="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_MODULE::main"
 else
   STONE_SOURCE_ENTRY_PATH="$STONE_ENTRY_MODULE::$STONE_ENTRY_FUNCTION"
