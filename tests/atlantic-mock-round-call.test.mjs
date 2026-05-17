@@ -66,6 +66,7 @@ test('builds a mock-round submit command only when an Integrity fact candidate m
   assert.equal(result.tallyState.newTallyCommitment, '0x303');
   assert.match(result.submit.command, /submit_tally_plain_output_fact/);
   assert.match(result.submit.command, /--profile amaci_sepolia/);
+  assert.doesNotMatch(result.submit.command, /--fee-token/);
   assert.match(result.submit.command, /12 0x4d414349535441524b/);
 });
 

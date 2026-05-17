@@ -89,8 +89,6 @@ function command(wrapperAddress, calldata) {
     'sncast',
     '--wait',
     'invoke',
-    '--fee-token',
-    'eth',
     '--contract-address',
     wrapperAddress,
     '--function',

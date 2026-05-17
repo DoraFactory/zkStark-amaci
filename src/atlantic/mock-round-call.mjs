@@ -247,7 +247,6 @@ function sncastInvokeCommand({ sncast, profile, contractAddress, functionName, c
     sncast,
     profile ? `--profile ${profile}` : undefined,
     '--wait invoke',
-    '--fee-token eth',
     `--contract-address ${contractAddress}`,
     `--function ${functionName}`,
     `--calldata ${calldata.join(' ')}`,

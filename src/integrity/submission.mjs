@@ -30,8 +30,6 @@ function sncastCommand({ sncast, contractAddress, functionName, calldata }) {
     sncast,
     '--wait',
     'invoke',
-    '--fee-token',
-    'eth',
     '--contract-address',
     contractAddress,
     '--function',
