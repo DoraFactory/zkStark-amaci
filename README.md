@@ -628,6 +628,13 @@ Fibonacci example mismatch where `[0, 4, 3]` and `last_layer_degree_bound=64`
 only support FRI degree `2^13`, while the tally AIR can require a much larger
 degree bound.
 
+Generated params also default to the Integrity-compatible Stone profile:
+Poseidon transcript, verifier-friendly Poseidon commitment layers, and
+`keccak256_masked160_lsb` bottom commitments. This matches the default
+`serialize:integrity-split-calldata --hasher keccak_160_lsb` setting. Passing
+an explicit `--parameter-file` bypasses this profile; do that only for local
+Stone verification experiments, not for Integrity/Starknet calldata.
+
 If those files are not in the Stone checkout root, the script also checks the
 official Stone example locations:
 
@@ -1096,8 +1103,9 @@ including OODS values. `npm run stone:prove:tally` now runs
 `cpu_air_verifier --annotation_file --extra_output_file` after proving and
 rewrites `$STONE_OUT/stone-proof/stone-proof.json` with those verifier
 annotations. If an older `stone-proof.json` fails with `missing field
-annotations` or `annotations are incomplete`, rerun only the Stone proof step
-against the existing AIR run:
+annotations`, `annotations are incomplete`, or
+`Commit(Oods(EvaluationInvalid ...))`, rerun only the Stone proof step against
+the existing AIR run so it uses the generated Integrity-compatible params:
 
 Some Stone verifier builds emit OODS values as repeated `Field Element(...)`
 annotation lines instead of one `Field Elements(...)` span. The split calldata

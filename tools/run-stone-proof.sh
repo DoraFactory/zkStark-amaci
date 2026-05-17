@@ -19,6 +19,10 @@ Options:
   --parameter-file <path>   cpu_air_params.json. Auto-detected if omitted.
                             If omitted, a matching params file is generated
                             from AIR n_steps under --out-dir.
+  --stone-params-profile <integrity|base>
+                            Profile for generated params. Default: integrity.
+  --integrity-hasher <name> Integrity profile hasher. Default: keccak_160_lsb.
+                            Supported: keccak_160_lsb, blake2s_248_lsb.
   --no-annotations          Do not pass --generate_annotations to cpu_air_prover.
                             Integrity split calldata generation requires annotations.
   --skip-verify             Skip cpu_air_verifier.
@@ -140,6 +144,8 @@ STONE_PROVER_DIR="${STONE_PROVER_DIR:-$HOME/stone-prover}"
 PROVER_CONFIG_FILE=""
 PARAMETER_FILE=""
 PARAMETER_FILE_EXPLICIT=0
+STONE_PARAMS_PROFILE="integrity"
+INTEGRITY_HASHER="keccak_160_lsb"
 SKIP_VERIFY=0
 GENERATE_ANNOTATIONS=1
 
@@ -164,6 +170,14 @@ while [[ $# -gt 0 ]]; do
     --parameter-file)
       PARAMETER_FILE="${2:-}"
       PARAMETER_FILE_EXPLICIT=1
+      shift 2
+      ;;
+    --stone-params-profile)
+      STONE_PARAMS_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --integrity-hasher)
+      INTEGRITY_HASHER="${2:-}"
       shift 2
       ;;
     --skip-verify)
@@ -256,6 +270,8 @@ if [[ "$PARAMETER_FILE_EXPLICIT" -ne 1 ]]; then
     --air-public-input "$AIR_PUBLIC_INPUT" \
     --out "$PARAMETER_FILE" \
     --metadata-out "$PARAMETER_METADATA_FILE" \
+    --profile "$STONE_PARAMS_PROFILE" \
+    --integrity-hasher "$INTEGRITY_HASHER" \
     --text
 fi
 

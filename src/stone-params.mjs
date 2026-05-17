@@ -88,7 +88,57 @@ export function buildFriStepList(targetSum, baseFriStepList = []) {
   return steps;
 }
 
-export function generateStoneParams(baseParams, airPublicInput) {
+const INTEGRITY_HASHERS = Object.freeze({
+  keccak_160_lsb: Object.freeze({
+    commitmentHash: 'keccak256_masked160_lsb',
+    powHash: 'keccak256',
+  }),
+  blake2s_248_lsb: Object.freeze({
+    commitmentHash: 'blake256_masked248_lsb',
+    powHash: 'blake256',
+  }),
+});
+
+function applyIntegrityProfile(params, options = {}) {
+  const integrityHasher = options.integrityHasher ?? 'keccak_160_lsb';
+  const hasher = INTEGRITY_HASHERS[integrityHasher];
+  if (!hasher) {
+    throw new Error(
+      `unsupported Integrity Stone hasher '${integrityHasher}'; supported: ${Object.keys(
+        INTEGRITY_HASHERS,
+      ).join(', ')}`,
+    );
+  }
+
+  const logNCosets = params?.stark?.log_n_cosets;
+  if (!Number.isInteger(logNCosets) || logNCosets < 0) {
+    throw new Error('stark.log_n_cosets must be a non-negative integer');
+  }
+
+  params.channel_hash = 'poseidon3';
+  params.commitment_hash = hasher.commitmentHash;
+  params.pow_hash = hasher.powHash;
+  params.verifier_friendly_channel_updates = true;
+  params.verifier_friendly_commitment_hash = 'poseidon3';
+  params.n_verifier_friendly_commitment_layers =
+    options.nVerifierFriendlyCommitmentLayers ?? logNCosets * 5;
+  params.statement = {
+    ...(params.statement ?? {}),
+    page_hash: 'pedersen',
+  };
+
+  return {
+    integrityHasher,
+    commitmentHash: params.commitment_hash,
+    powHash: params.pow_hash,
+    channelHash: params.channel_hash,
+    verifierFriendlyCommitmentHash: params.verifier_friendly_commitment_hash,
+    verifierFriendlyChannelUpdates: params.verifier_friendly_channel_updates,
+    nVerifierFriendlyCommitmentLayers: params.n_verifier_friendly_commitment_layers,
+  };
+}
+
+export function generateStoneParams(baseParams, airPublicInput, options = {}) {
   const nSteps = parseNonNegativeBigInt(airPublicInput.n_steps, 'air_public_input.n_steps');
   if (nSteps === 0n) {
     throw new Error('air_public_input.n_steps must be greater than zero');
@@ -120,10 +170,19 @@ export function generateStoneParams(baseParams, airPublicInput) {
   const baseFriStepList = Array.isArray(fri.fri_step_list) ? fri.fri_step_list : [];
   const generatedFriStepList = buildFriStepList(targetFriStepSum, baseFriStepList);
   fri.fri_step_list = generatedFriStepList;
+  const profileName = options.profile ?? 'integrity';
+  if (profileName !== 'integrity' && profileName !== 'base') {
+    throw new Error(`unsupported Stone params profile '${profileName}'`);
+  }
+  const profile =
+    profileName === 'base'
+      ? { name: 'base' }
+      : { name: 'integrity', ...applyIntegrityProfile(params, options) };
 
   return {
     params,
     metadata: {
+      profile,
       nSteps: nSteps.toString(),
       starkDegreeLog,
       starkDegreeBound: (1n << BigInt(starkDegreeLog)).toString(),

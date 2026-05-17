@@ -274,6 +274,14 @@ annotations. If this step fails with `missing field annotations` or
 `annotations are incomplete`, rerun only the Stone proof step against the
 existing AIR run before serializing calldata.
 
+The generated Stone params must also use the Integrity-compatible profile.
+The default proof command now generates that profile automatically: Poseidon
+transcript, verifier-friendly Poseidon commitment layers, and
+`keccak256_masked160_lsb` bottom commitments. A proof generated with Stone's
+plain example params can still pass `cpu_air_verifier`, but swiftness will
+reject it with `Commit(Oods(EvaluationInvalid ...))` because its transcript
+challenge does not match Integrity's Poseidon transcript.
+
 Some Stone verifier builds emit OODS values as repeated `Field Element(...)`
 annotation lines instead of one `Field Elements(...)` span. The split calldata
 wrapper normalizes that form automatically and writes
