@@ -198,6 +198,25 @@ source_executable_name() {
   esac
 }
 
+source_entry_path() {
+  case "$1" in
+    add-new-key-native) echo "add_new_key::add_new_key_native_main" ;;
+    process-messages-boundary-native) echo "native_process_messages::process_messages_native_boundary_main" ;;
+    process-message-coord-key-native) echo "process_messages::process_message_coord_key_native_main" ;;
+    process-message-ecdh-native) echo "process_messages::process_message_ecdh_native_main" ;;
+    process-message-decrypt-native) echo "process_messages::process_message_decrypt_native_main" ;;
+    process-message-signature-native) echo "process_messages::process_message_signature_native_main" ;;
+    process-message-step-core-native) echo "process_messages::process_message_step_core_native_main" ;;
+    process-deactivate-boundary-native) echo "native_process_deactivate::process_deactivate_native_boundary_main" ;;
+    process-deactivate-coord-key-native) echo "process_deactivate::process_deactivate_coord_key_native_main" ;;
+    process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native) echo "process_deactivate::process_deactivate_ecdh_native_main" ;;
+    process-deactivate-signature-native) echo "process_deactivate::process_deactivate_signature_native_main" ;;
+    process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native) echo "process_deactivate::process_deactivate_decrypt_native_main" ;;
+    process-deactivate-step-core-native) echo "process_deactivate::process_deactivate_step_core_native_main" ;;
+    *) echo "unsupported direct Stone circuit: $1" >&2; exit 1 ;;
+  esac
+}
+
 fixture_circuit_name() {
   case "$1" in
     add-new-key-native) echo "add-new-key" ;;
@@ -470,11 +489,14 @@ STONE_PACKAGE_NAME="zkstark_amaci_$(printf '%s' "$CIRCUIT" | tr '-' '_')_stone"
 STONE_EXECUTABLE_NAME="${SOURCE_EXECUTABLE_NAME}_stone"
 STONE_ENTRY_MODULE="stone_entry"
 STONE_ENTRY_FUNCTION="stone_main"
+STONE_ENTRY_MODE="executable-wrapper"
 case "$CIRCUIT" in
   tally-native)
+    STONE_ENTRY_MODE="array-wrapper"
     STONE_MODULES=(native_tally_votes "$STONE_ENTRY_MODULE")
     ;;
   tally)
+    STONE_ENTRY_MODE="array-wrapper"
     STONE_MODULES=(
       hash_gates
       poseidon_bn254
@@ -537,6 +559,20 @@ case "$CIRCUIT" in
     ;;
 esac
 
+if [[ "$STONE_ENTRY_MODE" == "executable-wrapper" ]]; then
+  STONE_SOURCE_ENTRY_PATH="$(source_entry_path "$CIRCUIT")"
+  STONE_SOURCE_ENTRY_MODULE="${STONE_SOURCE_ENTRY_PATH%%::*}"
+  STONE_SOURCE_ENTRY_FUNCTION="${STONE_SOURCE_ENTRY_PATH##*::}"
+  STONE_TARGET_FUNCTION="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_PATH"
+  STONE_EXPORT_FUNCTION="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_MODULE::__executable_wrapper__$STONE_SOURCE_ENTRY_FUNCTION"
+  STONE_RUNNER_MAIN_NAME="$STONE_PACKAGE_NAME::$STONE_SOURCE_ENTRY_MODULE::main"
+else
+  STONE_SOURCE_ENTRY_PATH="$STONE_ENTRY_MODULE::$STONE_ENTRY_FUNCTION"
+  STONE_TARGET_FUNCTION="$STONE_PACKAGE_NAME::$STONE_ENTRY_MODULE::$STONE_ENTRY_FUNCTION"
+  STONE_EXPORT_FUNCTION="$STONE_TARGET_FUNCTION"
+  STONE_RUNNER_MAIN_NAME="$STONE_PACKAGE_NAME::$STONE_ENTRY_MODULE::main"
+fi
+
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 GENERATED_INPUT=false
@@ -598,10 +634,16 @@ fi
 node "${PREPARE_ARGS[@]}"
 
 echo "==> Converting args for cairo1-run proof mode"
-node "$ROOT_DIR/tools/convert-cairo1-run-args.mjs" \
+CONVERT_ARGS=(
+  "$ROOT_DIR/tools/convert-cairo1-run-args.mjs"
   "$SCARB_ARGS_JSON" \
   --out "$CAIRO1_ARGS_TXT" \
   --text
+)
+if [[ "$STONE_ENTRY_MODE" == "direct" ]]; then
+  CONVERT_ARGS+=(--flat)
+fi
+node "${CONVERT_ARGS[@]}"
 
 echo "==> Building minimal Stone Cairo package"
 rm -rf "$STONE_PACKAGE_DIR"
@@ -620,7 +662,7 @@ mkdir -p "$STONE_PACKAGE_DIR/src"
   printf 'casm = true\n'
   printf '\n[[target.executable]]\n'
   printf 'name = "%s"\n' "$STONE_EXECUTABLE_NAME"
-  printf 'function = "%s::%s::%s"\n' "$STONE_PACKAGE_NAME" "$STONE_ENTRY_MODULE" "$STONE_ENTRY_FUNCTION"
+  printf 'function = "%s"\n' "$STONE_TARGET_FUNCTION"
 } > "$STONE_PACKAGE_DIR/Scarb.toml"
 
 {
@@ -655,8 +697,8 @@ fi
 echo "==> Exporting cairo1-run Sierra artifact"
 node "$ROOT_DIR/tools/export-cairo1-run-sierra.mjs" \
   "$PACKAGE_SIERRA_JSON" \
-  --function "$STONE_PACKAGE_NAME::$STONE_ENTRY_MODULE::$STONE_ENTRY_FUNCTION" \
-  --main-name "$STONE_PACKAGE_NAME::$STONE_ENTRY_MODULE::main" \
+  --function "$STONE_EXPORT_FUNCTION" \
+  --main-name "$STONE_RUNNER_MAIN_NAME" \
   --out "$RUNNER_SIERRA_JSON"
 
 echo "==> Running cairo1-run proof mode for $CIRCUIT"
@@ -680,6 +722,10 @@ printf '  "circuit": "%s",\n' "$CIRCUIT" >> "$RUN_JSON"
 printf '  "prepareCircuit": "%s",\n' "$PREPARE_CIRCUIT" >> "$RUN_JSON"
 printf '  "sourceExecutable": "%s",\n' "$SOURCE_EXECUTABLE_NAME" >> "$RUN_JSON"
 printf '  "stoneExecutable": "%s",\n' "$STONE_EXECUTABLE_NAME" >> "$RUN_JSON"
+printf '  "stoneEntryMode": "%s",\n' "$STONE_ENTRY_MODE" >> "$RUN_JSON"
+printf '  "stoneTargetFunction": "%s",\n' "$STONE_TARGET_FUNCTION" >> "$RUN_JSON"
+printf '  "stoneExportFunction": "%s",\n' "$STONE_EXPORT_FUNCTION" >> "$RUN_JSON"
+printf '  "stoneRunnerMainName": "%s",\n' "$STONE_RUNNER_MAIN_NAME" >> "$RUN_JSON"
 printf '  "executable": "%s",\n' "$EXECUTABLE_JSON" >> "$RUN_JSON"
 printf '  "generatedInput": %s,\n' "$GENERATED_INPUT" >> "$RUN_JSON"
 if [[ -n "$MESSAGE_INDEX" ]]; then
