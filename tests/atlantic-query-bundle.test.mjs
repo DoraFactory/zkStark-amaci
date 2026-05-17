@@ -51,8 +51,8 @@ test('exports Atlantic-compatible program and input files from a Stone AIR run',
 
   const submitScript = readFileSync(result.files.submitScript, 'utf8');
   assert.match(submitScript, /atlantic\.api\.herodotus\.cloud\/atlantic-query/);
-  assert.match(submitScript, /programFile=@/);
-  assert.match(submitScript, /inputFile=@/);
+  assert.match(submitScript, /programFile=@.*;type=application\/json/);
+  assert.match(submitScript, /inputFile=@.*;type=text\/plain/);
   assert.match(submitScript, /result=PROOF_VERIFICATION_ON_L2/);
 });
 
@@ -78,4 +78,3 @@ test('warns when the Cairo1 input file is not one array argument', () => {
   assert.equal(result.manifest.files.inputFile.arrayWrapped, false);
   assert.match(result.manifest.warnings[0], /not bracketed/);
 });
-

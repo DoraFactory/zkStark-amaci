@@ -74,8 +74,8 @@ function buildCurlScript(manifest) {
   if (manifest.fields.hints) {
     forms.push(['hints', manifest.fields.hints]);
   }
-  forms.push(['programFile', `@${manifest.files.programFile.path}`]);
-  forms.push(['inputFile', `@${manifest.files.inputFile.path}`]);
+  forms.push(['programFile', `@${manifest.files.programFile.path};type=application/json`]);
+  forms.push(['inputFile', `@${manifest.files.inputFile.path};type=text/plain`]);
 
   const lines = [
     '#!/usr/bin/env bash',
@@ -193,4 +193,3 @@ export function createAtlanticQueryBundle(stoneAirRunPath, outDir, options = {})
     },
   };
 }
-
