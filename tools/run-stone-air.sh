@@ -640,7 +640,7 @@ CONVERT_ARGS=(
   --out "$CAIRO1_ARGS_TXT" \
   --text
 )
-if [[ "$STONE_ENTRY_MODE" == "direct" ]]; then
+if [[ "$STONE_ENTRY_MODE" != "array-wrapper" ]]; then
   CONVERT_ARGS+=(--flat)
 fi
 node "${CONVERT_ARGS[@]}"
