@@ -90,6 +90,7 @@
     "export:wrapper-call": "node tools/export-amaci-wrapper-call.mjs",
     "export:native-stwo-handoff": "node tools/export-native-stwo-handoff.mjs",
     "export:proof-inventory": "node tools/export-proof-artifact-inventory.mjs",
+    "export:atlantic-query": "node tools/export-atlantic-query-bundle.mjs",
     "serialize:integrity-split-calldata": "node tools/serialize-integrity-split-calldata.mjs",
     "submit:integrity-fact": "node tools/submit-integrity-fact.mjs",
     "check:stone-toolchain": "tools/run-stone.sh --check",
