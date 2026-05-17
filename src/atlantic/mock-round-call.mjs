@@ -260,6 +260,9 @@ function currentWrapperCanSubmitCandidate(candidate, tallyProgramHash) {
   if (!candidate || !tallyProgramHash) {
     return false;
   }
+  if (isAtlanticMetadataTallyCandidate(candidate)) {
+    return true;
+  }
   const expectedProgramHash = normalizeHex(tallyProgramHash, 'tallyProgramHash');
   if (candidate.mode === 'plain') {
     return candidate.programHash === expectedProgramHash;
@@ -268,6 +271,13 @@ function currentWrapperCanSubmitCandidate(candidate, tallyProgramHash) {
     return candidate.childProgramHash === expectedProgramHash;
   }
   return false;
+}
+
+function isAtlanticMetadataTallyCandidate(candidate) {
+  return candidate?.mode === 'bootloaded'
+    && candidate.outputLabel === 'metadata-output'
+    && candidate.childProgramHashRole === 'metadata-program'
+    && candidate.bootloaderLabel === 'sharp';
 }
 
 function submitTallyCommand({ candidate, wrapperAddress, profile, sncast, state, tallyProgramHash }) {
@@ -281,6 +291,23 @@ function submitTallyCommand({ candidate, wrapperAddress, profile, sncast, state,
   const newTallyCommitment = normalizeHex(state.newTallyCommitment, 'newTallyCommitment');
   const stateCommitment = normalizeHex(state.stateCommitment, 'stateCommitment');
   const output = candidate.outputFelts;
+  if (isAtlanticMetadataTallyCandidate(candidate)) {
+    return sncastInvokeCommand({
+      sncast,
+      profile,
+      contractAddress: wrapperAddress,
+      functionName: 'submit_tally_atlantic_metadata_fact',
+      calldata: [
+        currentTallyCommitment,
+        newTallyCommitment,
+        stateCommitment,
+        candidate.childProgramHash,
+        output.length,
+        ...output,
+        candidate.factHash,
+      ],
+    });
+  }
   if (candidate.mode === 'plain') {
     return sncastInvokeCommand({
       sncast,
@@ -474,11 +501,13 @@ export function buildAtlanticMockRoundCall({
     },
     submit: {
       function: selectedCandidate?.mode
-        ? {
-            plain: 'submit_tally_plain_output_fact',
-            bootloaded: 'submit_tally_bootloaded_output_fact',
-            wrapped_bootloaded: 'submit_tally_wrapped_bootloaded_output_fact',
-          }[selectedCandidate.mode]
+        ? isAtlanticMetadataTallyCandidate(selectedCandidate)
+          ? 'submit_tally_atlantic_metadata_fact'
+          : {
+              plain: 'submit_tally_plain_output_fact',
+              bootloaded: 'submit_tally_bootloaded_output_fact',
+              wrapped_bootloaded: 'submit_tally_wrapped_bootloaded_output_fact',
+            }[selectedCandidate.mode]
         : undefined,
       command: selectedCandidate && tallyState
         ? submitTallyCommand({

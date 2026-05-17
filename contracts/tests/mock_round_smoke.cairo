@@ -13,6 +13,9 @@ const ADD_NEW_KEY_PROGRAM_HASH: felt252 = 0x1111;
 const PROCESS_MESSAGES_PROGRAM_HASH: felt252 = 0x2222;
 const PROCESS_DEACTIVATE_PROGRAM_HASH: felt252 = 0x3333;
 const TALLY_PROGRAM_HASH: felt252 = 0x4444;
+const ATLANTIC_METADATA_PROGRAM_HASH: felt252 = 0x5555;
+const SHARP_BOOTLOADER_PROGRAM_HASH: felt252 =
+    0x5ab580b04e3532b6b18f81cfa654a05e29dd8e2352d88df1e765a84072db07;
 const VERIFIER_CONFIG_HASH: felt252 = 0x9abc;
 const MIN_SECURITY_BITS: u32 = 80;
 const INITIAL_STATE_COMMITMENT: felt252 = 0x100;
@@ -27,6 +30,10 @@ const ADD_NEW_KEY_OUTPUT_HASH: felt252 = 0xa01;
 const PROCESS_MESSAGES_OUTPUT_HASH: felt252 = 0xa02;
 const PROCESS_DEACTIVATE_OUTPUT_HASH: felt252 = 0xa03;
 const TALLY_OUTPUT_HASH: felt252 = 0xa04;
+const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
+const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
+const TALLY_VOTES_NATIVE_CIRCUIT_ID: felt252 = 0x414d4143495f54414c4c595f4e4154495645;
+const STARKNET_POSEIDON_HASH_SCHEME: felt252 = 0x535441524b4e45545f504f534549444f4e;
 
 fn deploy_mock_integrity() -> IMockIntegrityDispatcher {
     let contract = declare("MockIntegrity").unwrap().contract_class();
@@ -134,6 +141,37 @@ fn mock_round_accepts_generic_split_component_fact() {
         );
 
     assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
+}
+
+#[test]
+fn mock_round_accepts_atlantic_metadata_tally_fact() {
+    let integrity = deploy_mock_integrity();
+    let round = deploy_round(integrity.contract_address, 0);
+    let metadata_output = array![
+        0, 0x99, 1, 14, TALLY_PROGRAM_HASH, 0, 12, PUBLIC_OUTPUT_MAGIC,
+        NATIVE_PUBLIC_OUTPUT_VERSION, TALLY_VOTES_NATIVE_CIRCUIT_ID, STARKNET_POSEIDON_HASH_SCHEME,
+        2, 1, 1, 0xf00000000, INITIAL_STATE_COMMITMENT, INITIAL_TALLY_COMMITMENT,
+        FINAL_TALLY_COMMITMENT, 0x777, 0x88,
+    ];
+    let fact_hash = round
+        .get_expected_bootloaded_fact_hash_for_output(
+            SHARP_BOOTLOADER_PROGRAM_HASH, ATLANTIC_METADATA_PROGRAM_HASH, metadata_output.span(),
+        );
+    integrity.set_fact_security_bits(fact_hash, MIN_SECURITY_BITS);
+
+    round
+        .submit_tally_atlantic_metadata_fact(
+            INITIAL_TALLY_COMMITMENT,
+            FINAL_TALLY_COMMITMENT,
+            INITIAL_STATE_COMMITMENT,
+            ATLANTIC_METADATA_PROGRAM_HASH,
+            metadata_output.span(),
+            fact_hash,
+        );
+
+    assert(round.get_tally_commitment() == FINAL_TALLY_COMMITMENT, 'TALLY_NOT_UPDATED');
+    assert(round.get_total_facts_accepted() == 1, 'FACT_COUNT_BAD');
+    assert(round.get_tally_submitted(), 'TALLY_NOT_SUBMITTED');
 }
 
 #[test]

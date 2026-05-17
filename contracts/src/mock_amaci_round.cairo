@@ -95,6 +95,15 @@ pub trait IMockAmaciRound<TContractState> {
         child_output: Span<felt252>,
         fact_hash: felt252,
     );
+    fn submit_tally_atlantic_metadata_fact(
+        ref self: TContractState,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+        current_state_commitment: felt252,
+        metadata_program_hash: felt252,
+        metadata_output: Span<felt252>,
+        fact_hash: felt252,
+    );
 }
 
 #[starknet::contract]
@@ -109,6 +118,16 @@ pub mod MockAmaciRound {
     use crate::integrity_fact_registry::{
         is_fact_hash_valid_with_security, is_verification_hash_valid,
     };
+
+    const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b; // MACISTARK
+    const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
+    const TALLY_VOTES_NATIVE_CIRCUIT_ID: felt252 =
+        0x414d4143495f54414c4c595f4e4154495645; // AMACI_TALLY_NATIVE
+    const STARKNET_POSEIDON_HASH_SCHEME: felt252 =
+        0x535441524b4e45545f504f534549444f4e; // STARKNET_POSEIDON
+    const SHARP_BOOTLOADER_PROGRAM_HASH: felt252 =
+        0x5ab580b04e3532b6b18f81cfa654a05e29dd8e2352d88df1e765a84072db07;
+    const TALLY_NATIVE_OUTPUT_LEN: usize = 12;
 
     #[storage]
     struct Storage {
@@ -555,6 +574,51 @@ pub mod MockAmaciRound {
                 verification_hash,
             );
         }
+
+        fn submit_tally_atlantic_metadata_fact(
+            ref self: ContractState,
+            current_tally_commitment: felt252,
+            new_tally_commitment: felt252,
+            current_state_commitment: felt252,
+            metadata_program_hash: felt252,
+            metadata_output: Span<felt252>,
+            fact_hash: felt252,
+        ) {
+            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
+            assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
+            assert(metadata_output.len() > 4, 'METADATA_OUTPUT_SHORT');
+            assert(
+                *metadata_output.at(4) == self.tally_program_hash.read(), 'TALLY_PROGRAM_MISMATCH',
+            );
+
+            let tally_output_start = find_native_tally_output_start(metadata_output);
+            assert_native_tally_output_at(
+                metadata_output,
+                tally_output_start,
+                current_state_commitment,
+                current_tally_commitment,
+                new_tally_commitment,
+            );
+
+            let expected_fact_hash = bootloaded_fact_hash_for_output(
+                SHARP_BOOTLOADER_PROGRAM_HASH, metadata_program_hash, metadata_output,
+            );
+            assert(fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
+            let verification_hash = validate_registered_fact(@self, fact_hash);
+            let public_output_hash = poseidon_hash_output_at(
+                metadata_output, tally_output_start, TALLY_NATIVE_OUTPUT_LEN,
+            );
+            accept_tally_fact(
+                ref self,
+                current_tally_commitment,
+                new_tally_commitment,
+                current_state_commitment,
+                public_output_hash,
+                fact_hash,
+                verification_hash,
+            );
+        }
     }
 
     fn validate_fact(
@@ -686,6 +750,61 @@ pub mod MockAmaciRound {
             .update(child_program_hash);
         for x in child_output {
             output_hash = output_hash.update(*x);
+        }
+        output_hash.finalize()
+    }
+
+    fn find_native_tally_output_start(metadata_output: Span<felt252>) -> usize {
+        assert(metadata_output.len() >= TALLY_NATIVE_OUTPUT_LEN, 'METADATA_OUTPUT_SHORT');
+        let limit = metadata_output.len() - TALLY_NATIVE_OUTPUT_LEN + 1;
+        let mut found = false;
+        let mut found_start: usize = 0;
+        let mut i: usize = 0;
+        while i < limit {
+            if *metadata_output.at(i) == PUBLIC_OUTPUT_MAGIC {
+                if *metadata_output.at(i + 1) == NATIVE_PUBLIC_OUTPUT_VERSION {
+                    if *metadata_output.at(i + 2) == TALLY_VOTES_NATIVE_CIRCUIT_ID {
+                        found = true;
+                        found_start = i;
+                        i = limit;
+                    } else {
+                        i += 1;
+                    }
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        assert(found, 'TALLY_OUTPUT_MISSING');
+        found_start
+    }
+
+    fn assert_native_tally_output_at(
+        metadata_output: Span<felt252>,
+        start: usize,
+        current_state_commitment: felt252,
+        current_tally_commitment: felt252,
+        new_tally_commitment: felt252,
+    ) {
+        assert(*metadata_output.at(start) == PUBLIC_OUTPUT_MAGIC, 'TALLY_MAGIC_BAD');
+        assert(*metadata_output.at(start + 1) == NATIVE_PUBLIC_OUTPUT_VERSION, 'TALLY_VERSION_BAD');
+        assert(
+            *metadata_output.at(start + 2) == TALLY_VOTES_NATIVE_CIRCUIT_ID, 'TALLY_CIRCUIT_BAD',
+        );
+        assert(*metadata_output.at(start + 3) == STARKNET_POSEIDON_HASH_SCHEME, 'TALLY_HASH_BAD');
+        assert(*metadata_output.at(start + 8) == current_state_commitment, 'STATE_OUTPUT_BAD');
+        assert(*metadata_output.at(start + 9) == current_tally_commitment, 'TALLY_CURRENT_BAD');
+        assert(*metadata_output.at(start + 10) == new_tally_commitment, 'TALLY_NEW_BAD');
+    }
+
+    fn poseidon_hash_output_at(output: Span<felt252>, start: usize, len: usize) -> felt252 {
+        let mut output_hash = PoseidonTrait::new();
+        let mut i: usize = 0;
+        while i < len {
+            output_hash = output_hash.update(*output.at(start + i));
+            i += 1;
         }
         output_hash.finalize()
     }

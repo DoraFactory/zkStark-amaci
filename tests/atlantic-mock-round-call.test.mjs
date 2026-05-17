@@ -118,7 +118,9 @@ test('recognizes Atlantic metadata-level bootloaded fact shape', () => {
   assert.equal(result.selectedCandidate.outputLabel, 'metadata-output');
   assert.equal(result.selectedCandidate.childProgramHashRole, 'metadata-program');
   assert.equal(result.selectedCandidate.bootloaderLabel, 'sharp');
-  assert.equal(result.submit.supportedByCurrentWrapper, false);
-  assert.equal(result.submit.command, undefined);
-  assert.match(result.blockers.join('\n'), /metadata\/bootloader-level output/);
+  assert.equal(result.submit.supportedByCurrentWrapper, true);
+  assert.equal(result.submit.function, 'submit_tally_atlantic_metadata_fact');
+  assert.match(result.submit.command, /submit_tally_atlantic_metadata_fact/);
+  assert.match(result.submit.command, /0x9999/);
+  assert.equal(result.blockers.length, 0);
 });
