@@ -93,6 +93,26 @@ test('wraps split Integrity calldata into standard JSON package', () => {
   assert.ok(parsed.settings.verifierConfigHash);
 });
 
+test('does not block split calldata wrapping when optional full file is malformed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-split-calldata-full-'));
+  writeFileSync(join(dir, 'initial'), '1 2 3\n');
+  writeFileSync(join(dir, 'step1'), '4 5\n');
+  writeFileSync(join(dir, 'final'), '6 7\n');
+  writeFileSync(join(dir, 'full'), '1 2 not-a-felt\n');
+  const out = join(dir, 'integrity-split-calldata.json');
+
+  const result = buildIntegritySplitCalldataPackage({
+    splitCalldataDir: dir,
+    out,
+  });
+
+  assert.equal(result.calldataFelts, 7);
+  const parsed = JSON.parse(readFileSync(out, 'utf8'));
+  assert.equal(parsed.files.initial.feltCount, 3);
+  assert.equal(parsed.files.full.exists, true);
+  assert.match(parsed.files.full.parseError, /decimal or hex felt/);
+});
+
 test('runs swiftness split generator and copies cli/calldata output', () => {
   const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-swiftness-calldata-'));
   const fakeBin = join(dir, 'bin');

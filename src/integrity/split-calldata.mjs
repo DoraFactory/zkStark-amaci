@@ -68,6 +68,21 @@ function readFeltFile(path) {
   };
 }
 
+function readOptionalFeltFile(path) {
+  if (!existsSync(path)) {
+    return undefined;
+  }
+
+  try {
+    return readFeltFile(path);
+  } catch (error) {
+    return {
+      ...fileMetadata(path),
+      parseError: error.message,
+    };
+  }
+}
+
 function normalizeOodsAnnotationSpan(proof) {
   if (proof.annotations.some((line) => OODS_VALUES_SPAN_RE.test(String(line)))) {
     return {
@@ -242,7 +257,7 @@ export function readSplitCalldataDirectory(dir) {
     initial: readFeltFile(initialPath),
     steps,
     final: readFeltFile(finalPath),
-    full: existsSync(fullPath) ? readFeltFile(fullPath) : undefined,
+    full: readOptionalFeltFile(fullPath),
     contractAddress: existsSync(contractAddressPath)
       ? readFileSync(contractAddressPath, 'utf8').trim()
       : undefined,
