@@ -64,11 +64,8 @@ This is an alias for:
 tools/run-stone-air.sh --circuit tally-native --input fixtures/tally-small/000000.json
 ```
 
-The old compatibility path is still available explicitly:
-
-```sh
-npm run stone:air:tally-legacy
-```
+The old compatibility Stone path has been removed from exposed npm scripts so
+new runs do not accidentally generate legacy BN254/SHA artifacts.
 
 ### Stone AIR/Proof Tooling
 
@@ -123,10 +120,11 @@ Relevant commits:
 
 ### Legacy Stone Tally Baseline
 
-This was the old compatibility Stone path:
+This was the old compatibility Stone path before it was removed from the
+exposed run commands:
 
 - circuit: `tally`
-- executable: `tally_votes_stone`
+- executable: removed legacy BN254/SHA Stone tally wrapper
 - layout: `recursive`
 - Cairo args: `488` felts
 - AIR `n_steps`: `67,108,864`
@@ -169,7 +167,7 @@ Stone proof command:
 ```sh
 /usr/bin/time -v npm run stone:prove:tally -- \
   --air-run "$STONE_OUT/stone-air/stone-air-run.json" \
-  --out-dir "$STONE_OUT/stone-proof"
+  --out-dir "$STONE_OUT/stone-proof-integrity"
 ```
 
 Stone proof result:
@@ -269,7 +267,7 @@ path rather than monolith serialization.
 Integrity's split calldata generator expects verifier-side Stone annotations,
 including OODS values. `npm run stone:prove:tally` now runs
 `cpu_air_verifier --annotation_file --extra_output_file` after proving and
-rewrites `$STONE_OUT/stone-proof/stone-proof.json` with those verifier
+rewrites `$STONE_OUT/stone-proof-integrity/stone-proof.json` with those verifier
 annotations. If this step fails with `missing field annotations` or
 `annotations are incomplete`, rerun only the Stone proof step against the
 existing AIR run before serializing calldata.
@@ -290,9 +288,10 @@ serializer when needed.
 
 ```sh
 export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
+export STONE_PROOF_DIR="$STONE_OUT/stone-proof-integrity"
 
 npm run serialize:integrity-split-calldata -- \
-  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --stone-proof "$STONE_PROOF_DIR/stone-proof.json" \
   --calldata-generator ~/integrity-calldata-generator \
   --out-dir "$STONE_OUT/integrity-split" \
   --out "$STONE_OUT/integrity-split-calldata.json" \
@@ -310,7 +309,7 @@ Extract the program hash and expected fact from the Stone proof public input:
 
 ```sh
 npm run inspect:stone-fact -- \
-  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --stone-proof "$STONE_PROOF_DIR/stone-proof.json" \
   --out "$STONE_OUT/stone-fact.json" \
   --text
 

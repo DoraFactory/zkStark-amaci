@@ -196,10 +196,10 @@ Prepare any supported circuit input through the unified CLI:
 
 ```sh
 npm run prepare:circuit -- \
-  --circuit tally \
+  --circuit tally-native \
   fixtures/tally-small/000000.json \
-  --out /tmp/zkstark-amaci-tally-prepared.json \
-  --cairo-args-out /tmp/zkstark-amaci-tally-args.json
+  --out /tmp/zkstark-amaci-tally-native-prepared.json \
+  --cairo-args-out /tmp/zkstark-amaci-tally-native-args.json
 ```
 
 Run small synthetic fixtures through the actual Cairo executables with:
@@ -248,14 +248,10 @@ The current AMACI execution is intentionally small-parameter and expensive:
 - bitwise builtin uses: `2,880`
 - output felts: `16`
 
-This executes the migrated AMACI `TallyVotes(2, 1, 1)` relation locally. A full
-local proof attempt with `npm run prove:tally` currently reaches
-`scarb prove --execute` and is then killed by this macOS/arm64 machine with
-exit code `137` / `Killed: 9`. The relation implementation is therefore
-validated by execution and tests, but AMACI local proving needs a larger
-Linux/amd64 machine or CI runner. Native Starknet proof broadcast wiring,
-Integrity proof serialization, a pinned FactRegistry interface, and wrapper
-deployment/testing are still open.
+This executes the migrated AMACI `TallyVotes(2, 1, 1)` relation locally. The
+current proof-facing path is the native AMACI v2 flow. Use
+`npm run prove:tally-native` for local Scarb/Stwo checks and the Stone/Integrity
+runbook for Starknet-compatible proof artifacts.
 
 ## Generating Proofs On A High-Performance Machine
 
@@ -406,22 +402,19 @@ the remaining tools:
 npm run check:stone-toolchain
 ```
 
-If it reports missing `cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`,
-`proof_serializer`, or `cargo`, install the extra toolchain on the
-Linux/amd64 prover machine:
+If it reports missing `cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`, or
+`cargo`, install the extra toolchain on the Linux/amd64 prover machine:
 
 ```sh
 npm run install:stone-integrity-toolchain -- --install-docker
 ```
 
-This script installs/builds:
+This script installs/builds the Stone-side tools:
 
 - Rust/cargo, when missing.
 - Stone prover `cpu_air_prover` and `cpu_air_verifier`, built through the
   upstream Stone Dockerfile.
 - `cairo1-run`, built from `lambdaclass/cairo-vm`.
-- Herodotus Integrity `proof_serializer`, built from
-  `HerodotusDev/integrity`.
 
 The build is heavier than the local Scarb installer and can take a long time.
 If Docker is already installed and running, omit `--install-docker`:
@@ -436,12 +429,10 @@ Useful overrides:
 BIN_DIR=~/.local/bin npm run install:stone-integrity-toolchain
 STONE_PROVER_DIR=~/stone-prover npm run install:stone-integrity-toolchain
 CAIRO_VM_DIR=~/cairo-vm npm run install:stone-integrity-toolchain
-INTEGRITY_DIR=~/integrity npm run install:stone-integrity-toolchain
 STARKNET_TYPES_CORE_PACKAGE=starknet-types-core@0.1.8 npm run install:stone-integrity-toolchain
 STARKNET_TYPES_CORE_VERSION=0.1.9 npm run install:stone-integrity-toolchain
 npm run install:stone-integrity-toolchain -- --skip-stone
 npm run install:stone-integrity-toolchain -- --skip-cairo1-run
-npm run install:stone-integrity-toolchain -- --skip-integrity
 ```
 
 If `cairo-vm/cairo1-run` fails while compiling `size-of 0.1.5` with
@@ -455,9 +446,8 @@ cargo update -p starknet-types-core@0.1.8 --precise 0.1.9
 cargo build --release
 ```
 
-If `cairo1-run` or Integrity `proof_serializer` still leaves `size-of 0.1.5`
-in the build graph, apply the local Linux/amd64 compatibility patch and retry
-the failed build:
+If `cairo1-run` still leaves `size-of 0.1.5` in the build graph, apply the
+local Linux/amd64 compatibility patch and retry the failed build:
 
 ```sh
 SIZE_OF_DIR="$(find ~/.cargo/registry/src -type d -path '*/size-of-0.1.5' | head -n 1)"
@@ -478,32 +468,6 @@ else
 fi
 ```
 
-For Integrity `proof_serializer`, retry and link the binary:
-
-```sh
-cd ~/integrity
-cargo build --release --bin proof_serializer
-mkdir -p ~/.local/bin
-ln -sf ~/integrity/target/release/proof_serializer ~/.local/bin/proof_serializer
-```
-
-If `proof_serializer` then fails in `cairo-vm 1.0.2` with
-`is_multiple_of(&...)` type errors, patch the legacy calls for the current
-Rust toolchain and retry:
-
-```sh
-CAIRO_VM_102="$(find ~/.cargo/registry/src -type d -path '*/cairo-vm-1.0.2' | head -n 1)"
-perl -0pi -e 's/\.is_multiple_of\(&\(CELLS_PER_SIGNATURE as usize\)\)/.is_multiple_of(CELLS_PER_SIGNATURE as usize)/g' \
-  "$CAIRO_VM_102/src/hint_processor/builtin_hint_processor/signature.rs"
-perl -0pi -e 's/\.is_multiple_of\(&CELL_BYTE_LEN\)/.is_multiple_of(CELL_BYTE_LEN)/g' \
-  "$CAIRO_VM_102/src/vm/runners/cairo_pie.rs"
-
-cd ~/integrity
-cargo clean -p cairo-vm
-cargo build --release --bin proof_serializer
-ln -sf ~/integrity/target/release/proof_serializer ~/.local/bin/proof_serializer
-```
-
 After installation, rerun:
 
 ```sh
@@ -520,33 +484,22 @@ npm run inspect:stone-pipeline -- \
 ```
 
 This writes `stone-pipeline-inspection.json` plus stdout/stderr captures for
-`cairo1-run`, `cpu_air_prover`, `cpu_air_verifier`, and `proof_serializer`.
-For tally, the default Stone path now uses the native optimized circuit through
-the proof-mode wrapper executable named `tally_votes_native_stone`. It accepts
-one `Array<felt252>` input and returns one `Array<felt252>` public output
-because `cairo1-run --proof_mode` only supports that input/output shape.
-Generate the native tally AIR files with:
+`cairo1-run`, `cpu_air_prover`, and `cpu_air_verifier`.
+For tally, the Stone path uses the native optimized circuit through the
+proof-mode wrapper executable named `tally_votes_native_stone`. It accepts one
+`Array<felt252>` input and returns one `Array<felt252>` public output because
+`cairo1-run --proof_mode` only supports that input/output shape. Generate the
+native tally AIR files with:
 
 ```sh
 npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-native
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native/stone-air
 ```
 
 `stone:air:tally` is an alias for the native circuit. The native default layout
 is `recursive_with_poseidon`, because the optimized circuit uses the Starknet
-Poseidon builtin. The old BN254/SHA tally wrapper is still available only as an
-explicit compatibility command:
-
-```sh
-npm run stone:air:tally-legacy -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-legacy \
-  --layout recursive
-```
-
-For the legacy wrapper, `plain`, `small`, and `dex` are not valid because they
-do not provide `Bitwise`. Do not use `all_cairo` for either tally wrapper:
-`all_cairo` expects `add_mod`/`mul_mod` builtin segments in the Stone AIR public
-input, but the current Cairo runner does not emit those segments.
+Poseidon builtin. The old BN254/SHA tally Stone wrapper has been removed from
+the exposed run path to avoid accidental legacy proof generation.
 
 `cairo1-run` must be able to find a development `corelib`. The script checks
 `CAIRO_CORELIB_DIR`, `CAIRO_VM_DIR`, and the default
@@ -556,7 +509,7 @@ prints `Failed to find development corelib`, run:
 ```sh
 cd ~/zkStark-amaci
 CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib npm run stone:air:tally -- \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-native
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native/stone-air
 ```
 
 If `~/cairo-vm/cairo1-run/corelib` is missing, create it with:
@@ -595,7 +548,7 @@ The remaining Stone/Integrity path is:
 ```text
 cpu_air_prover -> Stone proof JSON
 cpu_air_verifier -> local Stone proof verification
-proof_serializer -> Integrity calldata
+integrity-calldata-generator -> Integrity split calldata
 ```
 
 After `npm run stone:air:tally` succeeds, generate and locally verify the Stone
@@ -603,8 +556,8 @@ proof:
 
 ```sh
 npm run stone:prove:tally -- \
-  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air-run.json \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-native-proof
+  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native/stone-proof-integrity
 ```
 
 By default this uses:
@@ -649,8 +602,8 @@ Override those files if the trace size requires a different parameter file:
 
 ```sh
 npm run stone:prove:tally -- \
-  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air-run.json \
-  --out-dir ~/zkstark-amaci-proofs/stone-tally-native-proof \
+  --air-run ~/zkstark-amaci-proofs/stone-tally-native/stone-air/stone-air-run.json \
+  --out-dir ~/zkstark-amaci-proofs/stone-tally-native/stone-proof-integrity \
   --prover-config ~/stone-prover/e2e_test/Cairo/cpu_air_prover_config.json \
   --parameter-file ~/stone-prover/e2e_test/Cairo/cpu_air_params.json
 ```
@@ -764,40 +717,26 @@ Expected small execution characteristics on the current local machine:
 If `scarb execute` fails, do not run the prover. Fix the input, toolchain, or
 Cairo build first.
 
-### Run All Small Proofs
+### Run All Native Small Proofs
 
-Run all four current small proof flows:
+Run the current native small proof flow:
 
 ```sh
 INPUT=fixtures/tally-small/000000.json
 OUT_DIR=/absolute/path/to/zkstark-amaci-proofs
 
-/usr/bin/time -v tools/run-cairo-proof.sh \
-  --all \
+/usr/bin/time -v npm run prove:all-native-split-small -- \
   --tally-input "$INPUT" \
-  --out-dir "$OUT_DIR"
-```
-
-The standalone npm shortcut uses the checked-in tally fixture:
-
-```sh
-npm run prove:all-small
-```
-
-For the optimized split path, prefer:
-
-```sh
-/usr/bin/time -v npm run prove:all-split-small -- \
-  --out-dir "$OUT_DIR/all-split"
+  --out-dir "$OUT_DIR/all-native-split"
 ```
 
 The script runs these circuits in order:
 
 ```text
-tally
-add-new-key
-process-messages
-process-deactivate
+tally-native
+add-new-key-native
+process-messages-native split
+process-deactivate-native split
 ```
 
 The non-tally inputs are generated from the current small synthetic fixtures.
@@ -807,53 +746,36 @@ The non-tally inputs are generated from the current small synthetic fixtures.
 Use these commands to isolate one circuit:
 
 ```sh
-tools/run-cairo-proof.sh --circuit tally --input "$INPUT" --out-dir "$OUT_DIR/tally"
-tools/run-cairo-proof.sh --circuit add-new-key --out-dir "$OUT_DIR/add-new-key"
-tools/run-cairo-proof.sh --circuit process-messages --out-dir "$OUT_DIR/process-messages"
-tools/run-cairo-proof.sh --circuit process-messages-boundary --out-dir "$OUT_DIR/process-messages-boundary"
-tools/run-cairo-proof.sh --circuit process-message-step --message-index 0 --out-dir "$OUT_DIR/process-message-step-0"
-tools/run-cairo-proof.sh --circuit process-message-coord-key --out-dir "$OUT_DIR/process-message-coord-key"
-tools/run-cairo-proof.sh --circuit process-message-ecdh --message-index 0 --out-dir "$OUT_DIR/process-message-ecdh-0"
-tools/run-cairo-proof.sh --circuit process-message-signature --message-index 0 --out-dir "$OUT_DIR/process-message-signature-0"
-tools/run-cairo-proof.sh --circuit process-message-step-core --message-index 0 --out-dir "$OUT_DIR/process-message-step-core-0"
-tools/run-cairo-proof.sh --circuit process-deactivate --out-dir "$OUT_DIR/process-deactivate"
-tools/run-cairo-proof.sh --circuit process-deactivate-boundary --out-dir "$OUT_DIR/process-deactivate-boundary"
-tools/run-cairo-proof.sh --circuit process-deactivate-step --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-coord-key --out-dir "$OUT_DIR/process-deactivate-coord-key"
-tools/run-cairo-proof.sh --circuit process-deactivate-ecdh-command --message-index 0 --out-dir "$OUT_DIR/process-deactivate-command-ecdh-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-signature --message-index 0 --out-dir "$OUT_DIR/process-deactivate-signature-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-current --message-index 0 --out-dir "$OUT_DIR/process-deactivate-current-decrypt-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-decrypt-new --message-index 0 --out-dir "$OUT_DIR/process-deactivate-new-decrypt-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-ecdh-leaf --message-index 0 --out-dir "$OUT_DIR/process-deactivate-leaf-ecdh-0"
-tools/run-cairo-proof.sh --circuit process-deactivate-step-core --message-index 0 --out-dir "$OUT_DIR/process-deactivate-step-core-0"
-```
-
-The legacy tally-only form is still supported:
-
-```sh
-tools/run-cairo-proof.sh "$INPUT" "$OUT_DIR/tally"
+npm run prove:tally-native -- --out-dir "$OUT_DIR/tally-native"
+npm run prove:add-new-key-native -- --out-dir "$OUT_DIR/add-new-key-native"
+npm run prove:process-message-step-core-native -- \
+  --message-index 0 \
+  --out-dir "$OUT_DIR/process-message-step-core-native-0"
+npm run prove:process-deactivate-step-core-native -- \
+  --message-index 0 \
+  --out-dir "$OUT_DIR/process-deactivate-step-core-native-0"
 ```
 
 For Linux memory diagnostics, wrap any command with `/usr/bin/time -v`.
 
-### Split ProcessMessages Proofs
+### Native Split ProcessMessages Proofs
 
-If the dense `process-messages` proof is killed by memory pressure, run the
-split path first:
+Use the native split path for message processing:
 
 ```sh
-/usr/bin/time -v npm run prove:process-messages-split -- \
-  --out-dir "$OUT_DIR/process-messages-split"
+/usr/bin/time -v npm run prove:process-messages-native-split -- \
+  --out-dir "$OUT_DIR/process-messages-native-split"
 ```
 
 This proves:
 
 ```text
-process-messages-boundary
-process-message-coord-key
-process-message-ecdh --message-index 0..4
-process-message-signature --message-index 0..4
-process-message-step-core --message-index 0..4
+process-messages-boundary-native
+process-message-coord-key-native
+process-message-ecdh-native --message-index 0..4
+process-message-decrypt-native --message-index 0..4
+process-message-signature-native --message-index 0..4
+process-message-step-core-native --message-index 0..4
 ```
 
 The deep split path lowers peak prover memory by moving the most expensive
@@ -867,26 +789,26 @@ signature proof binds `pubKeyHash + R8Hash + packedCommandHash + S` to
 `new_state_root`. Production wrapper logic still needs to check all facts and
 enforce that these public outputs form one consistent hash/root chain.
 
-### Split ProcessDeactivate Proofs
+### Native Split ProcessDeactivate Proofs
 
-If the dense `process-deactivate` proof is killed by memory pressure, run:
+Use the native split path for deactivate processing:
 
 ```sh
-/usr/bin/time -v npm run prove:process-deactivate-split -- \
-  --out-dir "$OUT_DIR/process-deactivate-split"
+/usr/bin/time -v npm run prove:process-deactivate-native-split -- \
+  --out-dir "$OUT_DIR/process-deactivate-native-split"
 ```
 
 This proves:
 
 ```text
-process-deactivate-boundary
-process-deactivate-coord-key
-process-deactivate-ecdh-command --message-index 0..4
-process-deactivate-signature --message-index 0..4
-process-deactivate-decrypt-current --message-index 0..4
-process-deactivate-decrypt-new --message-index 0..4
-process-deactivate-ecdh-leaf --message-index 0..4
-process-deactivate-step-core --message-index 0..4
+process-deactivate-boundary-native
+process-deactivate-coord-key-native
+process-deactivate-ecdh-command-native --message-index 0..4
+process-deactivate-signature-native --message-index 0..4
+process-deactivate-decrypt-current-native --message-index 0..4
+process-deactivate-decrypt-new-native --message-index 0..4
+process-deactivate-ecdh-leaf-native --message-index 0..4
+process-deactivate-step-core-native --message-index 0..4
 ```
 
 The deep split path moves the heavy BabyJubJub work out of the core root
@@ -933,22 +855,15 @@ For each circuit, the script writes:
 - `cairo/target/execute/zkstark_amaci_tally/execution<id>/proof/proof.json`:
   generated local proof.
 
-For `--all`, the root output directory also contains:
+For `prove:all-native-split-small`, the root output directory contains:
 
 ```text
-all-proofs.json
+all-native-split-proofs.json
 ```
 
-which points to every per-circuit `proof-run.json`.
-
-For `prove:all-split-small`, the root output directory contains:
-
-```text
-all-split-proofs.json
-```
-
-which points to the tally proof, add-new-key proof, ProcessMessages split
-metadata, and ProcessDeactivate split metadata.
+which points to the native tally proof, native add-new-key proof,
+ProcessMessages native split metadata, and ProcessDeactivate native split
+metadata.
 
 The final command inside the script is:
 
@@ -964,11 +879,9 @@ circuit.
 After a successful run:
 
 ```sh
-cat "$OUT_DIR/all-proofs.json"
-cat "$OUT_DIR/tally/proof-run.json"
-cat "$OUT_DIR/add-new-key/proof-run.json"
-cat "$OUT_DIR/process-messages/proof-run.json"
-cat "$OUT_DIR/process-deactivate/proof-run.json"
+cat "$OUT_DIR/all-native-split/all-native-split-proofs.json"
+cat "$OUT_DIR/all-native-split/tally-native/proof-run.json"
+cat "$OUT_DIR/all-native-split/add-new-key-native/proof-run.json"
 ```
 
 The `publicOutput.felts` in each `*-prepared.json` is the canonical output that
@@ -983,7 +896,7 @@ exporter first when targeting Starknet's in-protocol proof verification path:
 
 ```sh
 npm run export:native-stwo-handoff -- \
-  /absolute/path/to/tally/proof-run.json \
+  /absolute/path/to/all-native-split/tally-native/proof-run.json \
   --program-hash <real_tally_program_hash> \
   --out-dir /absolute/path/to/tally-native-stwo-handoff \
   --text
@@ -1027,7 +940,7 @@ trying to derive native proof transaction fields:
 
 ```sh
 npm run export:proof-inventory -- \
-  /absolute/path/to/all-split \
+  /absolute/path/to/all-native-split \
   --target-dev cairo/target/dev \
   --out /absolute/path/to/proof-artifact-inventory.json \
   --text
@@ -1047,7 +960,7 @@ step:
 
 ```sh
 npm run check:integrity -- \
-  /absolute/path/to/tally/proof-run.json \
+  "$STONE_PROOF_DIR/proof-run.json" \
   --program-hash <tally_program_hash> \
   --text
 ```
@@ -1082,7 +995,7 @@ That means the next integration step must add or supply:
 - `cairo1-run` proof-mode execution that emits trace, memory, AIR public input,
   and AIR private input for the selected Cairo executable;
 - `cpu_air_prover` and `cpu_air_verifier` over those AIR files;
-- Herodotus Integrity `proof_serializer` output for the Stone proof.
+- Herodotus `integrity-calldata-generator` split calldata for the Stone proof.
 
 The expected intermediate result for the current local Scarb/Stwo proof path
 is:
@@ -1101,7 +1014,7 @@ Stone/Integrity-compatible calldata. The native tally Stone proof uses
 Integrity's split calldata generator expects verifier-side Stone annotations,
 including OODS values. `npm run stone:prove:tally` now runs
 `cpu_air_verifier --annotation_file --extra_output_file` after proving and
-rewrites `$STONE_OUT/stone-proof/stone-proof.json` with those verifier
+rewrites `$STONE_OUT/stone-proof-integrity/stone-proof.json` with those verifier
 annotations. If an older `stone-proof.json` fails with `missing field
 annotations`, `annotations are incomplete`, or
 `Commit(Oods(EvaluationInvalid ...))`, rerun only the Stone proof step against
@@ -1116,14 +1029,15 @@ serializer when needed.
 ```sh
 npm run stone:prove:tally -- \
   --air-run "$STONE_OUT/stone-air/stone-air-run.json" \
-  --out-dir "$STONE_OUT/stone-proof"
+  --out-dir "$STONE_OUT/stone-proof-integrity"
 ```
 
 ```sh
 export STONE_OUT=/data/zkstark-amaci-proofs/stone-native-tally-20260516-144921
+export STONE_PROOF_DIR="$STONE_OUT/stone-proof-integrity"
 
 npm run serialize:integrity-split-calldata -- \
-  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --stone-proof "$STONE_PROOF_DIR/stone-proof.json" \
   --calldata-generator ~/integrity-calldata-generator \
   --out-dir "$STONE_OUT/integrity-split" \
   --out "$STONE_OUT/integrity-split-calldata.json" \
@@ -1151,7 +1065,7 @@ Then rerun the checker:
 
 ```sh
 npm run inspect:stone-fact -- \
-  --stone-proof "$STONE_OUT/stone-proof/stone-proof.json" \
+  --stone-proof "$STONE_PROOF_DIR/stone-proof.json" \
   --out "$STONE_OUT/stone-fact.json" \
   --text
 
@@ -1160,7 +1074,7 @@ FACT_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.a
 VERIFIER_CONFIG_HASH=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).settings.verifierConfigHash)' "$STONE_OUT/integrity-split-calldata.json")
 
 npm run check:integrity -- \
-  "$STONE_OUT/stone-proof/proof-run.json" \
+  "$STONE_PROOF_DIR/proof-run.json" \
   --program-hash "$PROGRAM_HASH" \
   --proof-producer stone \
   --integrity-calldata "$STONE_OUT/integrity-split-calldata.json" \
@@ -1169,32 +1083,10 @@ npm run check:integrity -- \
   --text
 ```
 
-Generate the JSON calldata wrapper from Herodotus Integrity's monolith
-`proof_serializer` after you have a Stone proof JSON:
-
-```sh
-git clone https://github.com/HerodotusDev/integrity.git ~/integrity
-
-npm run serialize:integrity-calldata -- \
-  --stone-proof /absolute/path/to/stone-proof.json \
-  --integrity-repo ~/integrity \
-  --out /absolute/path/to/integrity-calldata.json \
-  --text
-```
-
-If the serializer has already produced a raw calldata file, wrap it into the
-same JSON shape with:
-
-```sh
-npm run serialize:integrity-calldata -- \
-  --raw-calldata /absolute/path/to/raw-calldata \
-  --out /absolute/path/to/integrity-calldata.json \
-  --text
-```
-
 Do not pass the current `scarb prove` / Scarb-Stwo `proof.json` as
 `--stone-proof`; Integrity verifies Stone prover proofs and the serializer
-expects that proof format.
+expects that proof format. The exact current native Stone/Integrity command
+sequence is recorded in `docs/native-stone-integrity-runbook.md`.
 
 After split calldata is ready, prepare or send the FactRegistry transactions:
 
@@ -1221,7 +1113,7 @@ Finally export the AMACI wrapper call:
 
 ```sh
 npm run export:wrapper-call -- \
-  "$STONE_OUT/stone-proof/proof-run.json" \
+  "$STONE_PROOF_DIR/proof-run.json" \
   --program-hash "$PROGRAM_HASH" \
   --verifier-config-hash "$VERIFIER_CONFIG_HASH" \
   --security-bits <security_bits> \
@@ -1244,8 +1136,10 @@ Stone/Integrity integration step:
 
 ```sh
 npm run export:integrity-handoff -- \
-  /absolute/path/to/tally/proof-run.json \
-  --program-hash <tally_program_hash> \
+  "$STONE_PROOF_DIR/proof-run.json" \
+  --program-hash "$PROGRAM_HASH" \
+  --proof-producer stone \
+  --integrity-calldata "$STONE_OUT/integrity-split-calldata.json" \
   --out-dir /absolute/path/to/tally-integrity-handoff \
   --text
 ```
@@ -1261,20 +1155,6 @@ proof-run.json
 prepared.json
 proof.json
 verify.log
-```
-
-For the current Scarb/Stwo proof path, the handoff status should be
-`local_proof_and_wrapper_binding_ready`. After a Stone/Integrity calldata
-artifact exists, export again with:
-
-```sh
-npm run export:integrity-handoff -- \
-  /absolute/path/to/tally/proof-run.json \
-  --program-hash <real_tally_program_hash> \
-  --proof-producer stone \
-  --integrity-calldata /absolute/path/to/integrity-calldata.json \
-  --out-dir /absolute/path/to/tally-integrity-handoff \
-  --text
 ```
 
 For tally, the encoding is:

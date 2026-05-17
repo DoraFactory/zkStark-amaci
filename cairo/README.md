@@ -216,7 +216,7 @@ scarb execute \
   --executable-name process_messages_stateful_with_ecdh \
   --arguments-file /tmp/zkstark-amaci-process-messages-stateful-ecdh-args.json \
   --print-program-output
-npm --prefix .. run prove:tally
+npm --prefix .. run prove:tally-native
 ```
 
 `tools/run-cairo-proof.sh` performs the full local flow:

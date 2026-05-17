@@ -10,24 +10,30 @@ Usage:
   tools/run-stone.sh --check
   tools/run-stone.sh --help
 
-This repository has a complete local Scarb/Stwo proof path and a tally-focused
-Cairo 1 -> Stone AIR input -> cpu_air_prover pipeline.
+This repository keeps Scarb/Stwo for local feasibility checks and uses the
+native Cairo 1 -> Stone AIR -> cpu_air_prover -> Integrity split-calldata path
+for Starknet-compatible proof submission work.
 
-Use these commands for the current local proof path:
-  npm run prove:tally
-  npm run prove:all-split-small
+Use these commands for local native Scarb/Stwo checks:
+  npm run prove:tally-native
+  npm run prove:all-native-split-small
 
 For the current native tally Stone proof path:
-  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally-native
+  npm run stone:air:tally -- --out-dir /absolute/path/to/stone-tally-native/stone-air
   npm run stone:prove:tally -- \
-    --air-run /absolute/path/to/stone-tally-native/stone-air-run.json \
-    --out-dir /absolute/path/to/stone-tally-native-proof
+    --air-run /absolute/path/to/stone-tally-native/stone-air/stone-air-run.json \
+    --out-dir /absolute/path/to/stone-tally-native/stone-proof-integrity
 
-For the Integrity path, produce a real Stone proof first, then serialize it:
-  npm run serialize:integrity-calldata -- \
-    --stone-proof /absolute/path/to/stone-proof.json \
-    --integrity-repo /absolute/path/to/integrity \
-    --out /absolute/path/to/integrity-calldata.json \
+For the Integrity path, serialize the verified Stone proof into split calldata:
+  npm run serialize:integrity-split-calldata -- \
+    --stone-proof /absolute/path/to/stone-tally-native/stone-proof-integrity/stone-proof.json \
+    --calldata-generator /absolute/path/to/integrity-calldata-generator \
+    --out-dir /absolute/path/to/stone-tally-native/integrity-split \
+    --out /absolute/path/to/stone-tally-native/integrity-split-calldata.json \
+    --layout recursive_with_poseidon \
+    --hasher keccak_160_lsb \
+    --stone-version stone6 \
+    --memory-verification cairo1 \
     --text
 
 Do not pass the Scarb/Stwo proof.json produced by scarb prove as a Stone proof.
@@ -79,7 +85,6 @@ config_status() {
 
 check_toolchain() {
   local missing=0
-  local serializer_ready=0
 
   echo "Local proof tools:"
   tool_status node || missing=1
@@ -98,30 +103,19 @@ check_toolchain() {
   echo
 
   echo "Integrity serialization tools:"
-  if tool_status proof_serializer; then
-    serializer_ready=1
-  fi
-  if tool_status cargo; then
-    serializer_ready=1
-  fi
+  tool_status cargo || missing=1
   echo
 
   cat <<'EOF'
 Status:
-  - node/scarb are enough for this repo's current local Scarb/Stwo proof flow.
+  - node/scarb are enough for this repo's local native Scarb/Stwo proof checks.
   - cairo1-run + cpu_air_prover + cpu_air_verifier are required before this
     repo can generate a real Stone proof artifact.
   - cpu_air_prover_config.json + cpu_air_params.json are also required; they
     are usually present under stone-prover/e2e_test/Cairo.
-  - proof_serializer can be supplied either as a PATH binary or via
-    --proof-serializer to npm run serialize:integrity-calldata.
-  - cargo is enough only when --integrity-repo points to a local Integrity
-    checkout, because the serializer command can then run through cargo.
+  - cargo is required for npm run serialize:integrity-split-calldata when
+    --calldata-generator points to a local integrity-calldata-generator checkout.
 EOF
-
-  if [[ "$serializer_ready" -ne 1 ]]; then
-    missing=1
-  fi
 
   if [[ "$missing" -ne 0 ]]; then
     return 1

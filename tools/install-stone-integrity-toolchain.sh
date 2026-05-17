@@ -5,11 +5,9 @@ INSTALL_RUST="${INSTALL_RUST:-1}"
 INSTALL_DOCKER="${INSTALL_DOCKER:-0}"
 INSTALL_STONE="${INSTALL_STONE:-1}"
 INSTALL_CAIRO1_RUN="${INSTALL_CAIRO1_RUN:-1}"
-INSTALL_INTEGRITY="${INSTALL_INTEGRITY:-1}"
 
 STONE_PROVER_DIR="${STONE_PROVER_DIR:-$HOME/stone-prover}"
 CAIRO_VM_DIR="${CAIRO_VM_DIR:-$HOME/cairo-vm}"
-INTEGRITY_DIR="${INTEGRITY_DIR:-$HOME/integrity}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 STONE_DOCKER_IMAGE="${STONE_DOCKER_IMAGE:-zkstark-amaci-stone-prover}"
 STARKNET_TYPES_CORE_PACKAGE="${STARKNET_TYPES_CORE_PACKAGE:-starknet-types-core@0.1.8}"
@@ -26,13 +24,11 @@ Installs the extra toolchain needed after local Scarb/Stwo proving:
   - Rust/cargo
   - Stone prover binaries: cpu_air_prover and cpu_air_verifier
   - cairo-vm/cairo1-run
-  - Herodotus Integrity proof_serializer
 
 Defaults:
   - install Rust with rustup when cargo is missing
   - build Stone prover through the official Dockerfile and copy binaries to BIN_DIR
   - build cairo1-run from lambdaclass/cairo-vm
-  - build proof_serializer from HerodotusDev/integrity
   - do not install Docker automatically unless --install-docker is passed
 
 Options:
@@ -40,14 +36,12 @@ Options:
   --skip-rust           Do not install Rust/cargo.
   --skip-stone          Do not build Stone cpu_air_prover/cpu_air_verifier.
   --skip-cairo1-run     Do not build cairo-vm/cairo1-run.
-  --skip-integrity      Do not build Integrity proof_serializer.
   --help                Show this help.
 
 Environment overrides:
   BIN_DIR=~/.local/bin
   STONE_PROVER_DIR=~/stone-prover
   CAIRO_VM_DIR=~/cairo-vm
-  INTEGRITY_DIR=~/integrity
   STONE_DOCKER_IMAGE=zkstark-amaci-stone-prover
   STARKNET_TYPES_CORE_PACKAGE=starknet-types-core@0.1.8
   STARKNET_TYPES_CORE_VERSION=0.1.9
@@ -224,40 +218,6 @@ patch_size_of_unsupported_abis() {
   perl -0pi -e 's/impl_function_ptrs!\s*\{\s*"C",\s*"Rust",\s*"aapcs",\s*"cdecl",\s*"stdcall",\s*"fastcall",\s*\}/impl_function_ptrs! {\n    "C",\n    "Rust",\n}/s' "$core_impls"
 }
 
-patch_cairo_vm_legacy_is_multiple_of() {
-  local registry_dir
-  local cairo_vm_dir
-  local signature_rs
-  local cairo_pie_rs
-
-  registry_dir="$HOME/.cargo/registry/src"
-  if [[ ! -d "$registry_dir" ]]; then
-    echo "warning: Cargo registry source directory does not exist: $registry_dir" >&2
-    return 1
-  fi
-
-  cairo_vm_dir="$(find "$registry_dir" -type d -path '*/cairo-vm-1.0.2' | head -n 1 || true)"
-  if [[ -z "$cairo_vm_dir" ]]; then
-    echo "warning: could not find cairo-vm-1.0.2 under $registry_dir" >&2
-    return 1
-  fi
-
-  signature_rs="$cairo_vm_dir/src/hint_processor/builtin_hint_processor/signature.rs"
-  cairo_pie_rs="$cairo_vm_dir/src/vm/runners/cairo_pie.rs"
-
-  if [[ -f "$signature_rs" ]]; then
-    log "Patching cairo-vm 1.0.2 signature is_multiple_of call"
-    cp "$signature_rs" "$signature_rs.zkstark-amaci.bak"
-    perl -0pi -e 's/\.is_multiple_of\(&\(CELLS_PER_SIGNATURE as usize\)\)/.is_multiple_of(CELLS_PER_SIGNATURE as usize)/g' "$signature_rs"
-  fi
-
-  if [[ -f "$cairo_pie_rs" ]]; then
-    log "Patching cairo-vm 1.0.2 cairo_pie is_multiple_of call"
-    cp "$cairo_pie_rs" "$cairo_pie_rs.zkstark-amaci.bak"
-    perl -0pi -e 's/\.is_multiple_of\(&CELL_BYTE_LEN\)/.is_multiple_of(CELL_BYTE_LEN)/g' "$cairo_pie_rs"
-  fi
-}
-
 install_stone_binaries() {
   if has_command cpu_air_prover && has_command cpu_air_verifier; then
     log "Stone prover binaries already available"
@@ -331,40 +291,6 @@ EOF
   chmod +x "$BIN_DIR/cairo1-run"
 }
 
-install_integrity_serializer() {
-  if has_command proof_serializer; then
-    log "proof_serializer already available"
-    return
-  fi
-
-  require_command cargo
-  clone_if_missing "https://github.com/HerodotusDev/integrity.git" "$INTEGRITY_DIR"
-
-  log "Building Integrity proof_serializer"
-  (
-    cd "$INTEGRITY_DIR"
-    cargo build --release --bin proof_serializer || {
-      patch_size_of_unsupported_abis
-      cargo build --release --bin proof_serializer || {
-        patch_cairo_vm_legacy_is_multiple_of
-        cargo build --release --bin proof_serializer
-      }
-    }
-  )
-
-  if [[ -x "$INTEGRITY_DIR/target/release/proof_serializer" ]]; then
-    ln -sf "$INTEGRITY_DIR/target/release/proof_serializer" "$BIN_DIR/proof_serializer"
-    return
-  fi
-
-  log "Creating proof_serializer cargo wrapper"
-  cat > "$BIN_DIR/proof_serializer" <<EOF
-#!/usr/bin/env bash
-exec cargo run --release --manifest-path "$INTEGRITY_DIR/Cargo.toml" --bin proof_serializer -- "\$@"
-EOF
-  chmod +x "$BIN_DIR/proof_serializer"
-}
-
 persist_path_hint() {
   local line='export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"'
   if [[ -f "$HOME/.profile" ]] && grep -Fq "$line" "$HOME/.profile"; then
@@ -399,10 +325,6 @@ while [[ $# -gt 0 ]]; do
       INSTALL_CAIRO1_RUN=0
       shift
       ;;
-    --skip-integrity)
-      INSTALL_INTEGRITY=0
-      shift
-      ;;
     --help|-h)
       usage
       exit 0
@@ -430,10 +352,6 @@ fi
 
 if [[ "$INSTALL_CAIRO1_RUN" == "1" ]]; then
   install_cairo1_run
-fi
-
-if [[ "$INSTALL_INTEGRITY" == "1" ]]; then
-  install_integrity_serializer
 fi
 
 persist_path_hint

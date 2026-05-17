@@ -7,7 +7,6 @@ usage() {
   cat <<'EOF'
 Usage:
   tools/run-stone-air.sh --circuit <native-circuit> [--input <input.json>] [--out-dir <dir>] [--message-index <n>] [--layout <layout>]
-  tools/run-stone-air.sh --circuit tally [--input <tally-input.json>] [--out-dir <dir>] [--layout <layout>]
 
 Generates Stone AIR input files for a Cairo proof-mode executable. This does
 not run cpu_air_prover yet.
@@ -30,12 +29,8 @@ Supported native circuits:
   process-deactivate-decrypt-new-native
   process-deactivate-step-core-native
 
-Legacy compatibility:
-  tally
-
 Default layout:
-  native circuits: recursive_with_poseidon
-  tally: recursive
+  recursive_with_poseidon
 
 Outputs:
   prepared.json
@@ -142,7 +137,7 @@ done
 
 is_supported_circuit() {
   case "$1" in
-    tally|tally-native|add-new-key-native|process-messages-boundary-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    tally-native|add-new-key-native|process-messages-boundary-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -156,7 +151,6 @@ is_message_index_circuit() {
 
 prepare_circuit_name() {
   case "$1" in
-    tally) echo "tally" ;;
     tally-native) echo "tally-native" ;;
     add-new-key-native) echo "add-new-key-native" ;;
     process-messages-boundary-native) echo "process-messages-boundary-native" ;;
@@ -179,7 +173,6 @@ prepare_circuit_name() {
 
 source_executable_name() {
   case "$1" in
-    tally) echo "tally_votes" ;;
     tally-native) echo "tally_votes_native" ;;
     add-new-key-native) echo "add_new_key_native" ;;
     process-messages-boundary-native) echo "process_messages_native_boundary" ;;
@@ -228,12 +221,6 @@ fixture_circuit_name() {
 
 wrapper_imports() {
   case "$1" in
-    tally)
-      cat <<'EOF'
-use crate::public_output::{TallyPublicFields, TallyPublicOutput};
-use crate::tally_votes::{TallyWitness, main as target_main};
-EOF
-      ;;
     tally-native)
       cat <<'EOF'
 use crate::native_tally_votes::{
@@ -378,31 +365,9 @@ write_stone_wrapper() {
   local circuit="$1"
   local wrapper_file="$2"
 
-  if [[ "$circuit" == "tally" ]]; then
-    {
-      wrapper_imports "$circuit"
-      cat <<'EOF'
-
-#[executable]
-pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
-    let mut serialized = input.span();
-    let fields: TallyPublicFields = Serde::<TallyPublicFields>::deserialize(ref serialized)
-        .expect('STONE_FIELDS');
-    let witness: TallyWitness = Serde::<TallyWitness>::deserialize(ref serialized)
-        .expect('STONE_WITNESS');
-    assert(serialized.len() == 0, 'STONE_ARGS');
-
-    let output: TallyPublicOutput = target_main(fields, witness);
-    let mut serialized_output = array![];
-    output.serialize(ref serialized_output);
-    serialized_output
-}
-EOF
-    } > "$wrapper_file"
-  else
-    {
-      wrapper_imports "$circuit"
-      cat <<'EOF'
+  {
+    wrapper_imports "$circuit"
+    cat <<'EOF'
 
 #[executable]
 pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
@@ -419,12 +384,11 @@ pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
     serialized_output
 }
 EOF
-    } > "$wrapper_file"
-  fi
+  } > "$wrapper_file"
 }
 
 if ! is_supported_circuit "$CIRCUIT"; then
-  echo "--circuit must be one of the supported native circuits or tally" >&2
+  echo "--circuit must be one of the supported native circuits" >&2
   usage >&2
   exit 1
 fi
@@ -441,38 +405,18 @@ if is_message_index_circuit "$CIRCUIT"; then
 fi
 
 if [[ -z "$LAYOUT" ]]; then
-  if [[ "$CIRCUIT" == "tally" ]]; then
-    LAYOUT="recursive"
-  else
-    LAYOUT="recursive_with_poseidon"
-  fi
+  LAYOUT="recursive_with_poseidon"
 fi
 
-if [[ "$CIRCUIT" != "tally" ]]; then
-  if [[ "$LAYOUT" != "recursive_with_poseidon" ]]; then
-    echo "layout '$LAYOUT' is not compatible with native Stone AIR" >&2
-    echo "native AMACI circuits use the Starknet Poseidon builtin; use --layout recursive_with_poseidon" >&2
-    exit 1
-  fi
-else
-  case "$LAYOUT" in
-    plain|small|dex)
-      echo "layout '$LAYOUT' does not provide the Bitwise builtin required by tally_votes_stone" >&2
-      echo "use --layout recursive" >&2
-      exit 1
-      ;;
-    all_cairo|all_cairo_stwo)
-      echo "layout '$LAYOUT' is not compatible with the legacy Stone tally path" >&2
-      echo "it requires add_mod/mul_mod AIR segments that this Cairo runner does not emit" >&2
-      echo "use --layout recursive" >&2
-      exit 1
-      ;;
-  esac
+if [[ "$LAYOUT" != "recursive_with_poseidon" ]]; then
+  echo "layout '$LAYOUT' is not compatible with native Stone AIR" >&2
+  echo "native AMACI circuits use the Starknet Poseidon builtin; use --layout recursive_with_poseidon" >&2
+  exit 1
 fi
 
 if [[ -z "$INPUT_PATH" ]]; then
   case "$CIRCUIT" in
-    tally|tally-native)
+    tally-native)
       INPUT_PATH="$ROOT_DIR/fixtures/tally-small/000000.json"
       ;;
   esac
@@ -494,19 +438,6 @@ case "$CIRCUIT" in
   tally-native)
     STONE_ENTRY_MODE="array-wrapper"
     STONE_MODULES=(native_tally_votes "$STONE_ENTRY_MODULE")
-    ;;
-  tally)
-    STONE_ENTRY_MODE="array-wrapper"
-    STONE_MODULES=(
-      hash_gates
-      poseidon_bn254
-      poseidon_constants
-      public_output
-      sha256_u256
-      tally_votes
-      types
-      "$STONE_ENTRY_MODULE"
-    )
     ;;
   process-messages-boundary-native)
     STONE_MODULES=(native_process_messages "$STONE_ENTRY_MODULE")

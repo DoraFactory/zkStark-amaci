@@ -17,7 +17,7 @@ function parseArgs(argv) {
     input: '',
     functionName: '',
     out: '',
-    mainName: 'zkstark_amaci_tally::stone_tally_votes::main',
+    mainName: 'zkstark_amaci_tally::stone_entry::main',
   };
 
   const args = [...argv];

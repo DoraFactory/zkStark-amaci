@@ -15,7 +15,7 @@ test('exports one cairo1-run main and hides package mains', () => {
     `${JSON.stringify({
       funcs: [
         { id: { debug_name: 'pkg::native_tally_votes::main' } },
-        { id: { debug_name: 'pkg::stone_tally_votes::tally_votes_stone_main' } },
+        { id: { debug_name: 'pkg::stone_entry::stone_main' } },
         { id: { debug_name: 'pkg::tally_votes::main' } },
         { id: { debug_name: 'pkg::helper' } },
       ],
@@ -28,9 +28,9 @@ test('exports one cairo1-run main and hides package mains', () => {
       'tools/export-cairo1-run-sierra.mjs',
       input,
       '--function',
-      'pkg::stone_tally_votes::tally_votes_stone_main',
+      'pkg::stone_entry::stone_main',
       '--main-name',
-      'pkg::stone_tally_votes::main',
+      'pkg::stone_entry::main',
       '--out',
       output,
     ],
@@ -45,7 +45,7 @@ test('exports one cairo1-run main and hides package mains', () => {
 
   assert.deepEqual(
     debugNames.filter((debugName) => debugName.endsWith('::main')),
-    ['pkg::stone_tally_votes::main'],
+    ['pkg::stone_entry::main'],
   );
   assert.ok(debugNames.includes('pkg::native_tally_votes::__cairo1_run_hidden_main'));
   assert.ok(debugNames.includes('pkg::tally_votes::__cairo1_run_hidden_main'));

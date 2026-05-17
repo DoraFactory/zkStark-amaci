@@ -244,9 +244,9 @@ INPUT_PATH="$(json_field "$AIR_RUN_JSON" inputPath)"
 EXECUTABLE="$(json_field "$AIR_RUN_JSON" executable)"
 RUNNER_SIERRA_JSON="$(json_field "$AIR_RUN_JSON" runnerSierraJson)"
 CIRCUIT="$(json_field_optional "$AIR_RUN_JSON" circuit)"
-CIRCUIT="${CIRCUIT:-tally}"
+CIRCUIT="${CIRCUIT:-tally-native}"
 STONE_EXECUTABLE="$(json_field_optional "$AIR_RUN_JSON" stoneExecutable)"
-STONE_EXECUTABLE="${STONE_EXECUTABLE:-tally_votes_stone}"
+STONE_EXECUTABLE="${STONE_EXECUTABLE:-tally_votes_native_stone}"
 
 if [[ ! -f "$AIR_PUBLIC_INPUT" ]]; then
   echo "missing AIR public input: $AIR_PUBLIC_INPUT" >&2
@@ -389,8 +389,8 @@ const verifierAnnotationsPresent =
 const verifierExtraOutputPresent =
   fs.existsSync(verifierExtraOutputFile) && fs.statSync(verifierExtraOutputFile).size > 0;
 const output = {
-  circuit: airRun.circuit ?? 'tally',
-  executable: airRun.stoneExecutable ?? 'tally_votes_stone',
+  circuit: airRun.circuit ?? 'tally-native',
+  executable: airRun.stoneExecutable ?? 'tally_votes_native_stone',
   sourceExecutable: airRun.sourceExecutable ?? executable,
   sourceExecutableJson: executable,
   runnerSierraJson,
