@@ -29,7 +29,7 @@ const TWO_POW_64: u256 = 0x10000000000000000;
 const U128_TWO_POW_32: u128 = 0x100000000;
 const U128_TWO_POW_64: u128 = 0x10000000000000000;
 const U128_TWO_POW_96: u128 = 0x1000000000000000000000000;
-const CIRCOM_UINT32_TO_96_HIGH_FACTOR: u256 = 18446744073709552000;
+const VOTE_WEIGHT_HIGH_FACTOR: u256 = 18446744073709552000;
 const MAX_VOTE_OPTIONS: u256 = 5;
 const MAX_SIGNUPS: u256 = 25;
 const MAX_STATE_INDEX: u256 = 24;
@@ -610,7 +610,7 @@ fn validate_packed_command(witness: ProcessOneStateTransitionWitness) {
     let unpacked = unpack_command_data(witness.packed_command.v0);
     let unpacked_vote_weight = unpacked.v3
         + unpacked.v2 * TWO_POW_32
-        + unpacked.v1 * CIRCOM_UINT32_TO_96_HIGH_FACTOR;
+        + unpacked.v1 * VOTE_WEIGHT_HIGH_FACTOR;
     assert_u256_eq(witness.cmd_poll_id, unpacked.v0);
     assert_u256_eq(witness.cmd_new_vote_weight, unpacked_vote_weight);
     assert_u256_eq(witness.cmd_vote_option_index, unpacked.v4);

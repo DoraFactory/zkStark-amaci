@@ -17,10 +17,6 @@ sierra = true
 casm = true
 
 [[target.executable]]
-name = "tally_votes"
-function = "zkstark_amaci_tally::tally_votes::main"
-
-[[target.executable]]
 name = "tally_votes_native"
 function = "zkstark_amaci_tally::native_tally_votes::main"
 
@@ -29,52 +25,16 @@ name = "tally_votes_native_stone"
 function = "zkstark_amaci_tally::stone_native_tally_votes::tally_votes_native_stone_main"
 
 [[target.executable]]
-name = "add_new_key"
-function = "zkstark_amaci_tally::add_new_key::add_new_key_main"
-
-[[target.executable]]
 name = "add_new_key_native"
 function = "zkstark_amaci_tally::native_add_new_key::add_new_key_native_main"
-
-[[target.executable]]
-name = "process_messages_boundary"
-function = "zkstark_amaci_tally::process_messages::process_messages_boundary_main"
 
 [[target.executable]]
 name = "process_messages_native_boundary"
 function = "zkstark_amaci_tally::native_process_messages::process_messages_native_boundary_main"
 
 [[target.executable]]
-name = "process_one_state_transition"
-function = "zkstark_amaci_tally::process_messages::process_one_state_transition_main"
-
-[[target.executable]]
-name = "process_one_with_ecdh"
-function = "zkstark_amaci_tally::process_messages::process_one_with_ecdh_main"
-
-[[target.executable]]
-name = "process_one_with_signature"
-function = "zkstark_amaci_tally::process_messages::process_one_with_signature_main"
-
-[[target.executable]]
-name = "process_one_with_ecdh_signature"
-function = "zkstark_amaci_tally::process_messages::process_one_with_ecdh_signature_main"
-
-[[target.executable]]
-name = "process_message_step_with_ecdh_signature"
-function = "zkstark_amaci_tally::process_messages::process_message_step_with_ecdh_signature_main"
-
-[[target.executable]]
-name = "process_message_coord_key"
-function = "zkstark_amaci_tally::process_messages::process_message_coord_key_main"
-
-[[target.executable]]
 name = "process_message_coord_key_native"
 function = "zkstark_amaci_tally::native_process_message_components::process_message_coord_key_native_main"
-
-[[target.executable]]
-name = "process_message_ecdh"
-function = "zkstark_amaci_tally::process_messages::process_message_ecdh_main"
 
 [[target.executable]]
 name = "process_message_ecdh_native"
@@ -85,105 +45,33 @@ name = "process_message_decrypt_native"
 function = "zkstark_amaci_tally::native_process_message_components::process_message_decrypt_native_main"
 
 [[target.executable]]
-name = "process_message_signature"
-function = "zkstark_amaci_tally::process_messages::process_message_signature_main"
-
-[[target.executable]]
 name = "process_message_signature_native"
 function = "zkstark_amaci_tally::native_process_message_components::process_message_signature_native_main"
-
-[[target.executable]]
-name = "process_message_step_core"
-function = "zkstark_amaci_tally::process_messages::process_message_step_core_main"
 
 [[target.executable]]
 name = "process_message_step_core_native"
 function = "zkstark_amaci_tally::native_process_message_step_core::process_message_step_core_native_main"
 
 [[target.executable]]
-name = "process_messages_state_transition"
-function = "zkstark_amaci_tally::process_messages::process_messages_state_transition_main"
-
-[[target.executable]]
-name = "process_messages_stateful"
-function = "zkstark_amaci_tally::process_messages::process_messages_stateful_main"
-
-[[target.executable]]
-name = "process_messages_stateful_with_ecdh"
-function = "zkstark_amaci_tally::process_messages::process_messages_stateful_with_ecdh_main"
-
-[[target.executable]]
-name = "process_messages_stateful_with_ecdh_signature"
-function = "zkstark_amaci_tally::process_messages::process_messages_stateful_with_ecdh_signature_main"
-
-[[target.executable]]
-name = "process_deactivate_one"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_one_main"
-
-[[target.executable]]
-name = "process_deactivate_messages_boundary"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_messages_boundary_main"
-
-[[target.executable]]
 name = "process_deactivate_native_boundary"
 function = "zkstark_amaci_tally::native_process_deactivate::process_deactivate_native_boundary_main"
-
-[[target.executable]]
-name = "process_deactivate_message_step"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_message_step_main"
-
-[[target.executable]]
-name = "process_deactivate_coord_key"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_coord_key_main"
 
 [[target.executable]]
 name = "process_deactivate_coord_key_native"
 function = "zkstark_amaci_tally::native_process_deactivate_components::process_deactivate_coord_key_native_main"
 
 [[target.executable]]
-name = "process_deactivate_ecdh"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_ecdh_main"
-
-[[target.executable]]
 name = "process_deactivate_ecdh_native"
 function = "zkstark_amaci_tally::native_process_deactivate_components::process_deactivate_ecdh_native_main"
-
-[[target.executable]]
-name = "process_deactivate_signature"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_signature_main"
 
 [[target.executable]]
 name = "process_deactivate_signature_native"
 function = "zkstark_amaci_tally::native_process_deactivate_components::process_deactivate_signature_native_main"
 
 [[target.executable]]
-name = "process_deactivate_decrypt"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_decrypt_main"
-
-[[target.executable]]
 name = "process_deactivate_decrypt_native"
 function = "zkstark_amaci_tally::native_process_deactivate_components::process_deactivate_decrypt_native_main"
 
 [[target.executable]]
-name = "process_deactivate_step_core"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_step_core_main"
-
-[[target.executable]]
 name = "process_deactivate_step_core_native"
 function = "zkstark_amaci_tally::native_process_deactivate_step_core::process_deactivate_step_core_native_main"
-
-[[target.executable]]
-name = "process_deactivate_messages_state_transition"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_messages_state_transition_main"
-
-[[target.executable]]
-name = "process_deactivate_messages_stateful"
-function = "zkstark_amaci_tally::process_deactivate::process_deactivate_messages_stateful_main"
-
-[[target.executable]]
-name = "ecdh_shared_key"
-function = "zkstark_amaci_tally::babyjub::ecdh_shared_key_main"
-
-[[target.executable]]
-name = "verify_signature"
-function = "zkstark_amaci_tally::babyjub::verify_signature_main"

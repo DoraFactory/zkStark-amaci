@@ -44,35 +44,11 @@ function runCircuit(circuit, options = {}) {
 }
 
 test(
-  'executes the small AddNewKey Cairo program with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const metadata = runCircuit('add-new-key');
-    assert.equal(metadata.executable, 'add_new_key');
-  },
-);
-
-test(
   'executes the small native AddNewKey Cairo program with synthetic fixture args',
   { skip: !runExecutionTests, timeout: 600000 },
   () => {
     const metadata = runCircuit('add-new-key-native');
     assert.equal(metadata.executable, 'add_new_key_native');
-  },
-);
-
-test(
-  'executes deeply split ProcessMessages Cairo programs with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const coordKey = runCircuit('process-message-coord-key');
-    const ecdh = runCircuit('process-message-ecdh', { messageIndex: 3 });
-    const signature = runCircuit('process-message-signature', { messageIndex: 3 });
-    const core = runCircuit('process-message-step-core', { messageIndex: 3 });
-    assert.equal(coordKey.executable, 'process_message_coord_key');
-    assert.equal(ecdh.executable, 'process_message_ecdh');
-    assert.equal(signature.executable, 'process_message_signature');
-    assert.equal(core.executable, 'process_message_step_core');
   },
 );
 
@@ -94,15 +70,6 @@ test(
 );
 
 test(
-  'executes the small ProcessMessages Cairo program with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const metadata = runCircuit('process-messages');
-    assert.equal(metadata.executable, 'process_messages_stateful_with_ecdh_signature');
-  },
-);
-
-test(
   'executes the native ProcessMessages boundary Cairo program with synthetic fixture args',
   { skip: !runExecutionTests, timeout: 600000 },
   () => {
@@ -112,41 +79,11 @@ test(
 );
 
 test(
-  'executes the small ProcessDeactivateMessages Cairo program with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const metadata = runCircuit('process-deactivate');
-    assert.equal(metadata.executable, 'process_deactivate_messages_stateful');
-  },
-);
-
-test(
   'executes the native ProcessDeactivateMessages boundary Cairo program with synthetic fixture args',
   { skip: !runExecutionTests, timeout: 600000 },
   () => {
     const metadata = runCircuit('process-deactivate-boundary-native');
     assert.equal(metadata.executable, 'process_deactivate_native_boundary');
-  },
-);
-
-test(
-  'executes deeply split ProcessDeactivateMessages Cairo programs with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const coordKey = runCircuit('process-deactivate-coord-key');
-    const commandEcdh = runCircuit('process-deactivate-ecdh-command', { messageIndex: 2 });
-    const signature = runCircuit('process-deactivate-signature', { messageIndex: 2 });
-    const currentDecrypt = runCircuit('process-deactivate-decrypt-current', { messageIndex: 2 });
-    const newDecrypt = runCircuit('process-deactivate-decrypt-new', { messageIndex: 2 });
-    const leafEcdh = runCircuit('process-deactivate-ecdh-leaf', { messageIndex: 2 });
-    const core = runCircuit('process-deactivate-step-core', { messageIndex: 2 });
-    assert.equal(coordKey.executable, 'process_deactivate_coord_key');
-    assert.equal(commandEcdh.executable, 'process_deactivate_ecdh');
-    assert.equal(signature.executable, 'process_deactivate_signature');
-    assert.equal(currentDecrypt.executable, 'process_deactivate_decrypt');
-    assert.equal(newDecrypt.executable, 'process_deactivate_decrypt');
-    assert.equal(leafEcdh.executable, 'process_deactivate_ecdh');
-    assert.equal(core.executable, 'process_deactivate_step_core');
   },
 );
 
