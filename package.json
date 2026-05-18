@@ -18,6 +18,8 @@
     "discover:fixtures": "node tools/discover-amaci-fixtures.mjs",
     "execute:circuit": "node tools/run-cairo-execute.mjs",
     "write:small-fixture": "node tools/write-small-fixture.mjs",
+    "write:minimal-round-fixture": "node tools/write-minimal-round-fixture.mjs",
+    "write:full-round-fixture": "node tools/write-full-round-fixture.mjs",
     "prepare:circuit": "node tools/prepare-amaci-circuit-input.mjs",
     "prepare:msg": "node tools/prepare-process-messages-input.mjs",
     "prepare:add-new-key": "node tools/prepare-add-new-key-input.mjs",

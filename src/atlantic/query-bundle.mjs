@@ -81,10 +81,14 @@ function buildCurlScript(manifest) {
     '#!/usr/bin/env bash',
     'set -euo pipefail',
     ': "${ATLANTIC_API_KEY:?set ATLANTIC_API_KEY from the Herodotus console}"',
+    'CURL_CONFIG="$(mktemp)"',
+    'trap \'rm -f "$CURL_CONFIG"\' EXIT',
+    'printf \'header = "api-key: %s"\\n\' "$ATLANTIC_API_KEY" > "$CURL_CONFIG"',
     '',
     'curl --request POST \\',
+    '  --fail-with-body \\',
     `  --url ${shellQuote(manifest.endpoint)} \\`,
-    '  --header "api-key: ${ATLANTIC_API_KEY}" \\',
+    '  --config "$CURL_CONFIG" \\',
   ];
 
   forms.forEach(([key, value], index) => {

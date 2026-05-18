@@ -1,4 +1,5 @@
-use core::poseidon::poseidon_hash_span;
+use core::hash::HashStateTrait;
+use core::poseidon::PoseidonTrait;
 use crate::babyjub::{
     BabyJubJubPoseidonSignatureWitness, BabyJubJubScalarMulWitness, assert_babyjub_add,
     babyjub_base8, verify_babyjub_poseidon_signature, verify_babyjub_scalar_mul,
@@ -605,7 +606,6 @@ fn validate_poseidon_decryption(witness: ProcessOneStateTransitionWitness) {
 }
 
 fn validate_packed_command(witness: ProcessOneStateTransitionWitness) {
-    validate_poseidon_decryption(witness);
     assert_u256_eq(witness.packed_command.v0, witness.decrypted_command.v0);
     assert_u256_eq(witness.packed_command.v1, witness.decrypted_command.v1);
     assert_u256_eq(witness.packed_command.v2, witness.decrypted_command.v2);
@@ -980,17 +980,133 @@ fn felt_from_u256(value: u256) -> felt252 {
     felt_from_u128(value.low) + felt_from_u128(value.high) * FELT_TWO_POW_128
 }
 
+fn native_hash_values_1(v0: felt252) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state.finalize()
+}
+
+fn native_hash_values_2(v0: felt252, v1: felt252) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state.finalize()
+}
+
+fn native_hash_values_3(v0: felt252, v1: felt252, v2: felt252) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state.finalize()
+}
+
+fn native_hash_values_4(v0: felt252, v1: felt252, v2: felt252, v3: felt252) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state = state.update(v3);
+    state.finalize()
+}
+
+fn native_hash_values_5(
+    v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252,
+) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state = state.update(v3);
+    state = state.update(v4);
+    state.finalize()
+}
+
+fn native_hash_values_7(
+    v0: felt252,
+    v1: felt252,
+    v2: felt252,
+    v3: felt252,
+    v4: felt252,
+    v5: felt252,
+    v6: felt252,
+) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state = state.update(v3);
+    state = state.update(v4);
+    state = state.update(v5);
+    state = state.update(v6);
+    state.finalize()
+}
+
+fn native_hash_values_8(
+    v0: felt252,
+    v1: felt252,
+    v2: felt252,
+    v3: felt252,
+    v4: felt252,
+    v5: felt252,
+    v6: felt252,
+    v7: felt252,
+) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state = state.update(v3);
+    state = state.update(v4);
+    state = state.update(v5);
+    state = state.update(v6);
+    state = state.update(v7);
+    state.finalize()
+}
+
+fn native_hash_values_13(
+    v0: felt252,
+    v1: felt252,
+    v2: felt252,
+    v3: felt252,
+    v4: felt252,
+    v5: felt252,
+    v6: felt252,
+    v7: felt252,
+    v8: felt252,
+    v9: felt252,
+    v10: felt252,
+    v11: felt252,
+    v12: felt252,
+) -> felt252 {
+    let mut state = PoseidonTrait::new();
+    state = state.update(v0);
+    state = state.update(v1);
+    state = state.update(v2);
+    state = state.update(v3);
+    state = state.update(v4);
+    state = state.update(v5);
+    state = state.update(v6);
+    state = state.update(v7);
+    state = state.update(v8);
+    state = state.update(v9);
+    state = state.update(v10);
+    state = state.update(v11);
+    state = state.update(v12);
+    state.finalize()
+}
+
 fn native_hash_u256(value: u256) -> felt252 {
-    poseidon_hash_span([felt_from_u256(value)].span())
+    native_hash_values_1(felt_from_u256(value))
 }
 
 fn native_hash_u256x2(value: U256x2) -> felt252 {
-    poseidon_hash_span([felt_from_u256(value.v0), felt_from_u256(value.v1)].span())
+    native_hash_values_2(felt_from_u256(value.v0), felt_from_u256(value.v1))
 }
 
 fn native_hash_u256x3(value: U256x3) -> felt252 {
-    poseidon_hash_span(
-        [felt_from_u256(value.v0), felt_from_u256(value.v1), felt_from_u256(value.v2)].span(),
+    native_hash_values_3(
+        felt_from_u256(value.v0), felt_from_u256(value.v1), felt_from_u256(value.v2),
     )
 }
 
@@ -1002,17 +1118,14 @@ fn native_command_auth_hash(
     cmd_salt: u256,
     is_signature_valid: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [
-            NATIVE_COMMAND_AUTH_DOMAIN,
-            pub_key_hash,
-            r8_hash,
-            packed_command_hash,
-            cmd_sig_s_hash,
-            felt_from_u256(cmd_salt),
-            is_signature_valid,
-        ]
-            .span(),
+    native_hash_values_7(
+        NATIVE_COMMAND_AUTH_DOMAIN,
+        pub_key_hash,
+        r8_hash,
+        packed_command_hash,
+        cmd_sig_s_hash,
+        felt_from_u256(cmd_salt),
+        is_signature_valid,
     )
 }
 
@@ -1025,18 +1138,15 @@ fn native_command_plaintext_binding_hash(
     cmd_sig_s_hash: felt252,
     command_auth_hash: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [
-            NATIVE_COMMAND_PLAINTEXT_DOMAIN,
-            next_message_hash,
-            shared_key_hash,
-            packed_command_hash,
-            signature_pub_key_hash,
-            signature_r8_hash,
-            cmd_sig_s_hash,
-            command_auth_hash,
-        ]
-            .span(),
+    native_hash_values_8(
+        NATIVE_COMMAND_PLAINTEXT_DOMAIN,
+        next_message_hash,
+        shared_key_hash,
+        packed_command_hash,
+        signature_pub_key_hash,
+        signature_r8_hash,
+        cmd_sig_s_hash,
+        command_auth_hash,
     )
 }
 
@@ -1046,36 +1156,27 @@ fn native_decrypt_binding_hash(
     c2_hash: felt252,
     decrypt_is_odd: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [
-            NATIVE_DECRYPT_BINDING_DOMAIN,
-            coord_priv_key_hash,
-            c1_hash,
-            c2_hash,
-            decrypt_is_odd,
-        ]
-            .span(),
+    native_hash_values_5(
+        NATIVE_DECRYPT_BINDING_DOMAIN, coord_priv_key_hash, c1_hash, c2_hash, decrypt_is_odd,
     )
 }
 
 fn native_coord_key_binding_hash(
     coord_pub_key_hash: felt252, coord_priv_key_hash: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [NATIVE_COORD_KEY_BINDING_DOMAIN, coord_pub_key_hash, coord_priv_key_hash].span(),
-    )
+    native_hash_values_3(NATIVE_COORD_KEY_BINDING_DOMAIN, coord_pub_key_hash, coord_priv_key_hash)
 }
 
 fn native_shared_key_binding_hash(
     coord_priv_key_hash: felt252, enc_pub_key_hash: felt252, shared_key_hash: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [NATIVE_SHARED_KEY_DOMAIN, coord_priv_key_hash, enc_pub_key_hash, shared_key_hash].span(),
+    native_hash_values_4(
+        NATIVE_SHARED_KEY_DOMAIN, coord_priv_key_hash, enc_pub_key_hash, shared_key_hash,
     )
 }
 
 fn native_hash5_values(v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252) -> felt252 {
-    poseidon_hash_span([v0, v1, v2, v3, v4].span())
+    native_hash_values_5(v0, v1, v2, v3, v4)
 }
 
 fn native_hash10_values(
@@ -1090,12 +1191,9 @@ fn native_hash10_values(
     v8: felt252,
     v9: felt252,
 ) -> felt252 {
-    poseidon_hash_span(
-        [
-            native_hash5_values(v0, v1, v2, v3, v4),
-            native_hash5_values(v5, v6, v7, v8, v9),
-        ]
-            .span(),
+    native_hash_values_2(
+        native_hash5_values(v0, v1, v2, v3, v4),
+        native_hash5_values(v5, v6, v7, v8, v9),
     )
 }
 
@@ -1115,29 +1213,24 @@ fn native_hash_state_leaf(value: U256x10, vote_root: felt252) -> felt252 {
 }
 
 fn native_coord_priv_key_hash(coord_priv_key: u256) -> felt252 {
-    poseidon_hash_span(
-        [felt_from_u256(coord_priv_key), NATIVE_COORD_PRIV_KEY_HASH_DOMAIN].span(),
-    )
+    native_hash_values_2(felt_from_u256(coord_priv_key), NATIVE_COORD_PRIV_KEY_HASH_DOMAIN)
 }
 
 fn native_message_hash(message: U256x10, enc_pub_key: U256x2, previous_hash: felt252) -> felt252 {
-    poseidon_hash_span(
-        [
-            felt_from_u256(message.v0),
-            felt_from_u256(message.v1),
-            felt_from_u256(message.v2),
-            felt_from_u256(message.v3),
-            felt_from_u256(message.v4),
-            felt_from_u256(message.v5),
-            felt_from_u256(message.v6),
-            felt_from_u256(message.v7),
-            felt_from_u256(message.v8),
-            felt_from_u256(message.v9),
-            felt_from_u256(enc_pub_key.v0),
-            felt_from_u256(enc_pub_key.v1),
-            previous_hash,
-        ]
-            .span(),
+    native_hash_values_13(
+        felt_from_u256(message.v0),
+        felt_from_u256(message.v1),
+        felt_from_u256(message.v2),
+        felt_from_u256(message.v3),
+        felt_from_u256(message.v4),
+        felt_from_u256(message.v5),
+        felt_from_u256(message.v6),
+        felt_from_u256(message.v7),
+        felt_from_u256(message.v8),
+        felt_from_u256(message.v9),
+        felt_from_u256(enc_pub_key.v0),
+        felt_from_u256(enc_pub_key.v1),
+        previous_hash,
     )
 }
 
@@ -1152,7 +1245,7 @@ fn native_message_hash_or_empty(
 }
 
 fn native_felt_commitment(root: felt252, salt: u256) -> felt252 {
-    poseidon_hash_span([root, felt_from_u256(salt)].span())
+    native_hash_values_2(root, felt_from_u256(salt))
 }
 
 fn native_path_hash(leaf: felt252, path_elements: U256x4, index: u128) -> felt252 {

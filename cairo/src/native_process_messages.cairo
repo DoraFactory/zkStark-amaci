@@ -1,4 +1,5 @@
-use core::poseidon::poseidon_hash_span;
+use core::hash::HashStateTrait;
+use core::poseidon::PoseidonTrait;
 
 pub const TREE_ARITY: u32 = 5;
 pub const MAX_SIGNUPS: u32 = 25;
@@ -92,28 +93,28 @@ pub struct ProcessMessagesNativePublicOutput {
 }
 
 fn hash2(left: felt252, right: felt252) -> felt252 {
-    poseidon_hash_span([left, right].span())
+    let mut state = PoseidonTrait::new();
+    state = state.update(left);
+    state = state.update(right);
+    state.finalize()
 }
 
 fn message_hash(message: Felt10, enc_pub_key: Felt2, previous_hash: felt252) -> felt252 {
-    poseidon_hash_span(
-        [
-            message.v0,
-            message.v1,
-            message.v2,
-            message.v3,
-            message.v4,
-            message.v5,
-            message.v6,
-            message.v7,
-            message.v8,
-            message.v9,
-            enc_pub_key.v0,
-            enc_pub_key.v1,
-            previous_hash,
-        ]
-            .span(),
-    )
+    let mut state = PoseidonTrait::new();
+    state = state.update(message.v0);
+    state = state.update(message.v1);
+    state = state.update(message.v2);
+    state = state.update(message.v3);
+    state = state.update(message.v4);
+    state = state.update(message.v5);
+    state = state.update(message.v6);
+    state = state.update(message.v7);
+    state = state.update(message.v8);
+    state = state.update(message.v9);
+    state = state.update(enc_pub_key.v0);
+    state = state.update(enc_pub_key.v1);
+    state = state.update(previous_hash);
+    state.finalize()
 }
 
 fn message_hash_or_empty(
@@ -127,20 +128,17 @@ fn message_hash_or_empty(
 }
 
 fn input_hash(fields: ProcessMessagesNativePublicFields) -> felt252 {
-    poseidon_hash_span(
-        [
-            PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
-            fields.packed_vals,
-            fields.coord_pub_key_hash,
-            fields.batch_start_hash,
-            fields.batch_end_hash,
-            fields.current_state_commitment,
-            fields.new_state_commitment,
-            fields.deactivate_commitment,
-            fields.expected_poll_id,
-        ]
-            .span(),
-    )
+    let mut state = PoseidonTrait::new();
+    state = state.update(PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN);
+    state = state.update(fields.packed_vals);
+    state = state.update(fields.coord_pub_key_hash);
+    state = state.update(fields.batch_start_hash);
+    state = state.update(fields.batch_end_hash);
+    state = state.update(fields.current_state_commitment);
+    state = state.update(fields.new_state_commitment);
+    state = state.update(fields.deactivate_commitment);
+    state = state.update(fields.expected_poll_id);
+    state.finalize()
 }
 
 fn assert_packed_vals(
