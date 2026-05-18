@@ -15,10 +15,13 @@ import {
   PROCESS_MESSAGES_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
   PUBLIC_OUTPUT_VERSION,
+  NATIVE_PUBLIC_OUTPUT_VERSION,
   SMALL_PROCESS_DEACTIVATE_PARAMS,
   SMALL_PROCESS_MESSAGES_PARAMS,
   SMALL_TALLY_PARAMS,
+  STARKNET_POSEIDON_HASH_SCHEME,
   TALLY_VOTES_CIRCUIT_ID,
+  TALLY_VOTES_NATIVE_CIRCUIT_ID,
 } from './constants.mjs';
 import { decimalize, splitU256ToU128 } from './compat/encoding.mjs';
 
@@ -51,6 +54,43 @@ export function canonicalTallyPublicOutput(fields, params = SMALL_TALLY_PARAMS) 
   pushU256(output, labels, 'current_tally_commitment', fields.currentTallyCommitment);
   pushU256(output, labels, 'new_tally_commitment', fields.newTallyCommitment);
   pushU256(output, labels, 'input_hash', fields.inputHash);
+
+  return {
+    labels,
+    felts: output,
+    decimalFelts: output.map(decimalize),
+  };
+}
+
+export function canonicalNativeTallyPublicOutput(fields, params = SMALL_TALLY_PARAMS) {
+  const labels = [
+    'magic',
+    'version',
+    'circuit_id',
+    'hash_scheme',
+    'state_tree_depth',
+    'int_state_tree_depth',
+    'vote_option_tree_depth',
+    'packed_vals',
+    'state_commitment',
+    'current_tally_commitment',
+    'new_tally_commitment',
+    'input_hash',
+  ];
+  const output = [
+    PUBLIC_OUTPUT_MAGIC,
+    NATIVE_PUBLIC_OUTPUT_VERSION,
+    TALLY_VOTES_NATIVE_CIRCUIT_ID,
+    STARKNET_POSEIDON_HASH_SCHEME,
+    BigInt(params.stateTreeDepth),
+    BigInt(params.intStateTreeDepth),
+    BigInt(params.voteOptionTreeDepth),
+    fields.packedVals,
+    fields.stateCommitment,
+    fields.currentTallyCommitment,
+    fields.newTallyCommitment,
+    fields.inputHash,
+  ];
 
   return {
     labels,

@@ -13,14 +13,29 @@ const CIRCUITS = Object.freeze({
     executable: 'tally_votes',
     synthetic: false,
   },
+  'tally-native': {
+    prepareCircuit: 'tally-native',
+    executable: 'tally_votes_native',
+    synthetic: false,
+  },
   'add-new-key': {
     prepareCircuit: 'add-new-key',
     executable: 'add_new_key',
     synthetic: true,
   },
+  'add-new-key-native': {
+    prepareCircuit: 'add-new-key-native',
+    executable: 'add_new_key_native',
+    synthetic: true,
+  },
   'process-messages': {
     prepareCircuit: 'process-messages-stateful-ecdh-signature',
     executable: 'process_messages_stateful_with_ecdh_signature',
+    synthetic: true,
+  },
+  'process-messages-boundary-native': {
+    prepareCircuit: 'process-messages-boundary-native',
+    executable: 'process_messages_native_boundary',
     synthetic: true,
   },
   'process-message-step': {
@@ -34,9 +49,26 @@ const CIRCUITS = Object.freeze({
     executable: 'process_message_coord_key',
     synthetic: true,
   },
+  'process-message-coord-key-native': {
+    prepareCircuit: 'process-message-coord-key-native',
+    executable: 'process_message_coord_key_native',
+    synthetic: true,
+  },
   'process-message-ecdh': {
     prepareCircuit: 'process-message-ecdh',
     executable: 'process_message_ecdh',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-message-ecdh-native': {
+    prepareCircuit: 'process-message-ecdh-native',
+    executable: 'process_message_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-message-decrypt-native': {
+    prepareCircuit: 'process-message-decrypt-native',
+    executable: 'process_message_decrypt_native',
     synthetic: true,
     requiresMessageIndex: true,
   },
@@ -46,15 +78,32 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-signature-native': {
+    prepareCircuit: 'process-message-signature-native',
+    executable: 'process_message_signature_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-message-step-core': {
     prepareCircuit: 'process-message-step-core',
     executable: 'process_message_step_core',
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-message-step-core-native': {
+    prepareCircuit: 'process-message-step-core-native',
+    executable: 'process_message_step_core_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate': {
     prepareCircuit: 'process-deactivate-stateful',
     executable: 'process_deactivate_messages_stateful',
+    synthetic: true,
+  },
+  'process-deactivate-boundary-native': {
+    prepareCircuit: 'process-deactivate-boundary-native',
+    executable: 'process_deactivate_native_boundary',
     synthetic: true,
   },
   'process-deactivate-step': {
@@ -66,6 +115,11 @@ const CIRCUITS = Object.freeze({
   'process-deactivate-coord-key': {
     prepareCircuit: 'process-deactivate-coord-key',
     executable: 'process_deactivate_coord_key',
+    synthetic: true,
+  },
+  'process-deactivate-coord-key-native': {
+    prepareCircuit: 'process-deactivate-coord-key-native',
+    executable: 'process_deactivate_coord_key_native',
     synthetic: true,
   },
   'process-deactivate-ecdh-command': {
@@ -80,9 +134,27 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-deactivate-ecdh-command-native': {
+    prepareCircuit: 'process-deactivate-ecdh-command-native',
+    executable: 'process_deactivate_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-ecdh-leaf-native': {
+    prepareCircuit: 'process-deactivate-ecdh-leaf-native',
+    executable: 'process_deactivate_ecdh_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate-signature': {
     prepareCircuit: 'process-deactivate-signature',
     executable: 'process_deactivate_signature',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-signature-native': {
+    prepareCircuit: 'process-deactivate-signature-native',
+    executable: 'process_deactivate_signature_native',
     synthetic: true,
     requiresMessageIndex: true,
   },
@@ -98,9 +170,27 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     requiresMessageIndex: true,
   },
+  'process-deactivate-decrypt-current-native': {
+    prepareCircuit: 'process-deactivate-decrypt-current-native',
+    executable: 'process_deactivate_decrypt_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-decrypt-new-native': {
+    prepareCircuit: 'process-deactivate-decrypt-new-native',
+    executable: 'process_deactivate_decrypt_native',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
   'process-deactivate-step-core': {
     prepareCircuit: 'process-deactivate-step-core',
     executable: 'process_deactivate_step_core',
+    synthetic: true,
+    requiresMessageIndex: true,
+  },
+  'process-deactivate-step-core-native': {
+    prepareCircuit: 'process-deactivate-step-core-native',
+    executable: 'process_deactivate_step_core_native',
     synthetic: true,
     requiresMessageIndex: true,
   },
@@ -191,7 +281,9 @@ function ensureInput(args, circuit, outDir) {
     throw new Error(`input.json is required for ${args.circuit}`);
   }
   const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
-  const syntheticCircuit = args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
+  const syntheticCircuit = args.circuit === 'add-new-key-native'
+    ? 'add-new-key'
+    : args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
     ? 'process-messages'
     : args.circuit === 'process-deactivate-step' || args.circuit.startsWith('process-deactivate-')
       ? 'process-deactivate'

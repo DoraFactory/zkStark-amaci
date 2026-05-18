@@ -115,7 +115,6 @@ function inspect(args) {
     ['cairo1-run', ['--help']],
     ['cpu_air_prover', ['--help']],
     ['cpu_air_verifier', ['--help']],
-    ['proof_serializer', ['--help']],
   ];
 
   const tools = {};

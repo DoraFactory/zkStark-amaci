@@ -85,10 +85,13 @@ function textReport(report) {
   lines.push(
     `Integrity calldata: ${
       report.integrityCalldata.exists
-        ? `${report.integrityCalldata.feltCount} felts`
+        ? `${report.integrityCalldata.feltCount} felts (${report.integrityCalldata.serializationType ?? 'unknown'})`
         : 'missing'
     }`,
   );
+  if (report.integrityCalldata.settings?.verifierConfigHash) {
+    lines.push(`Verifier config hash: ${report.integrityCalldata.settings.verifierConfigHash}`);
+  }
   lines.push(`Integrity submission ready: ${report.integritySubmissionReady ? 'yes' : 'no'}`);
   if (report.hashes.plain) {
     lines.push(`Plain output hash: ${report.hashes.plain.outputHash}`);

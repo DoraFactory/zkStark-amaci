@@ -118,3 +118,27 @@ test('rejects declared Stone proof runs with malformed calldata', () => {
   assert.equal(report.integritySubmissionReady, false);
   assert.match(report.blockers.join('\n'), /not a non-empty felt array/);
 });
+
+test('accepts declared Stone proof runs with split Integrity calldata package', () => {
+  const { proofRunJson, dir } = setupProofRun();
+  const calldataJson = join(dir, 'integrity-split-calldata.json');
+  writeJson(calldataJson, {
+    schema: 'zkstark-amaci.integrity-split-calldata.v1',
+    files: {
+      initial: { calldata: ['0x1', '2'] },
+      steps: [{ index: 1, calldata: ['3'] }],
+      final: { calldata: ['4', '5'] },
+    },
+  });
+
+  const report = analyzeProofRunIntegrityCompatibility(proofRunJson, {
+    programHash: 0x1234n,
+    proofProducer: 'stone',
+    integrityCalldata: calldataJson,
+  });
+
+  assert.equal(report.integrityCalldata.serializationType, 'split');
+  assert.equal(report.integrityCalldata.validFeltArray, true);
+  assert.equal(report.integrityCalldata.feltCount, 5);
+  assert.equal(report.integrityCalldata.stepCount, 1);
+});

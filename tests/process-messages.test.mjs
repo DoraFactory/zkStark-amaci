@@ -10,11 +10,20 @@ import {
   serializeCairoProcessMessagesExecutableArgs,
 } from '../src/msg/cairo-input.mjs';
 import {
+  buildNativeCairoProcessMessagesBoundaryInput,
+  serializeNativeCairoProcessMessagesBoundaryExecutableArgs,
+} from '../src/msg/native-cairo-input.mjs';
+import { isIntegrityHashingAvailable } from '../src/integrity/hashes.mjs';
+import { STARK_FIELD } from '../src/constants.mjs';
+import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
+import {
   evaluateProcessMessages,
   packProcessMessagesVals,
   processMessageHashChain,
   unpackProcessMessagesPackedVals,
 } from '../src/msg/process-messages.mjs';
+
+const nativePoseidonSkip = isIntegrityHashingAvailable() ? false : 'starknet.js hashing helpers are not installed';
 
 function decimalize(value) {
   if (typeof value === 'bigint') {
@@ -142,6 +151,25 @@ test('builds Cairo executable arguments for ProcessMessages boundary', () => {
     cairoInput.program_input.witness.hashes.input_hash.out.low,
     cairoInput.program_input.fields.input_hash.low,
   );
+  assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('evaluates a Starknet-native ProcessMessages boundary v2 fixture', { skip: nativePoseidonSkip }, () => {
+  const input = buildFixture();
+  const legacy = evaluateProcessMessages(input);
+  const evaluated = evaluateNativeProcessMessagesBoundary(input);
+  const cairoInput = buildNativeCairoProcessMessagesBoundaryInput(input, evaluated);
+  const args = serializeNativeCairoProcessMessagesBoundaryExecutableArgs(cairoInput);
+
+  assert.equal(evaluated.publicOutput.felts.length, 16);
+  assert.equal(evaluated.publicOutput.labels[1], 'version');
+  assert.equal(evaluated.publicOutput.felts[1], 2n);
+  assert.equal(evaluated.publicOutput.labels[3], 'hash_scheme');
+  assert.equal(evaluated.derived.messageHashChain.length, 6);
+  assert.notEqual(evaluated.publicFields.batchEndHash.toString(), legacy.publicFields.batchEndHash.toString());
+  assert.ok(evaluated.publicOutput.felts.every((felt) => felt >= 0n && felt < STARK_FIELD));
+  assert.equal(args.length, 81);
+  assert.equal(cairoInput.public_output.length, 16);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 

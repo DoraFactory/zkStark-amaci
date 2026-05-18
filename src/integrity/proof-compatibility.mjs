@@ -134,6 +134,27 @@ function extractCalldata(value) {
   return undefined;
 }
 
+function inspectSplitCalldataPackage(value) {
+  if (value?.schema !== 'zkstark-amaci.integrity-split-calldata.v1') {
+    return undefined;
+  }
+  const initial = value.files?.initial?.calldata;
+  const final = value.files?.final?.calldata;
+  const steps = value.files?.steps ?? [];
+  const allParts = [initial, ...steps.map((step) => step.calldata), final];
+  const validFeltArray =
+    allParts.every((part) => Array.isArray(part) && part.length > 0) &&
+    allParts.flat().every((felt) => isFeltLike(felt));
+  const feltCount = allParts.reduce((sum, part) => sum + (Array.isArray(part) ? part.length : 0), 0);
+  return {
+    serializationType: 'split',
+    feltCount,
+    validFeltArray,
+    stepCount: steps.length,
+    settings: value.settings,
+  };
+}
+
 function inspectIntegrityCalldata(path) {
   if (!path) {
     return {
@@ -167,12 +188,25 @@ function inspectIntegrityCalldata(path) {
     };
   }
 
+  const split = inspectSplitCalldataPackage(parsed.value);
+  if (split) {
+    return {
+      ...metadata,
+      parseable: true,
+      ...split,
+      description: split.validFeltArray
+        ? 'Integrity split calldata JSON contains initial, step, and final felt arrays'
+        : 'Integrity split calldata JSON does not contain valid initial, step, and final felt arrays',
+    };
+  }
+
   const calldata = extractCalldata(parsed.value);
   const validFeltArray =
     Array.isArray(calldata) && calldata.length > 0 && calldata.every((value) => isFeltLike(value));
   return {
     ...metadata,
     parseable: true,
+    serializationType: 'monolith',
     feltCount: Array.isArray(calldata) ? calldata.length : 0,
     validFeltArray,
     description: validFeltArray

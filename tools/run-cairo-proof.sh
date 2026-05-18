@@ -12,34 +12,52 @@ Usage:
 
 Circuits:
   tally
+  tally-native
   add-new-key
+  add-new-key-native
   process-messages
   process-messages-boundary
+  process-messages-boundary-native
   process-message-step
   process-message-coord-key
+  process-message-coord-key-native
   process-message-ecdh
+  process-message-ecdh-native
+  process-message-decrypt-native
   process-message-signature
+  process-message-signature-native
   process-message-step-core
+  process-message-step-core-native
   process-deactivate-boundary
+  process-deactivate-boundary-native
   process-deactivate-step
   process-deactivate-coord-key
+  process-deactivate-coord-key-native
   process-deactivate-ecdh-command
   process-deactivate-ecdh-leaf
+  process-deactivate-ecdh-command-native
+  process-deactivate-ecdh-leaf-native
   process-deactivate-signature
+  process-deactivate-signature-native
   process-deactivate-decrypt-current
   process-deactivate-decrypt-new
+  process-deactivate-decrypt-current-native
+  process-deactivate-decrypt-new-native
   process-deactivate-step-core
+  process-deactivate-step-core-native
   process-deactivate
 
 Notes:
   - The legacy positional form runs only the tally proof.
-  - tally requires an input JSON.
+  - tally and tally-native require an input JSON.
   - add-new-key, process-messages, process-messages-boundary,
+    process-messages-boundary-native,
     process-message-step, process-message-*, and process-deactivate generate the current small
     synthetic fixture when --input is omitted.
-  - process-message-step, process-message-ecdh, process-message-signature,
+  - process-message-step, process-message-ecdh, process-message-decrypt-native,
+    process-message-signature,
     process-message-step-core, process-deactivate-step,
-    process-deactivate-ecdh-*, process-deactivate-signature,
+    process-deactivate-ecdh-*, process-deactivate-signature*,
     process-deactivate-decrypt-*, and process-deactivate-step-core require --message-index
     0..4 and prove one linked message step.
   - --all runs tally plus the three small synthetic circuit proofs.
@@ -65,23 +83,39 @@ require_tool() {
 prepare_circuit_name() {
   case "$1" in
     tally) echo "tally" ;;
+    tally-native) echo "tally-native" ;;
     add-new-key) echo "add-new-key" ;;
+    add-new-key-native) echo "add-new-key-native" ;;
     process-messages) echo "process-messages-stateful-ecdh-signature" ;;
     process-messages-boundary) echo "process-messages-boundary" ;;
+    process-messages-boundary-native) echo "process-messages-boundary-native" ;;
     process-message-step) echo "process-message-step-ecdh-signature" ;;
     process-message-coord-key) echo "process-message-coord-key" ;;
+    process-message-coord-key-native) echo "process-message-coord-key-native" ;;
     process-message-ecdh) echo "process-message-ecdh" ;;
+    process-message-ecdh-native) echo "process-message-ecdh-native" ;;
+    process-message-decrypt-native) echo "process-message-decrypt-native" ;;
     process-message-signature) echo "process-message-signature" ;;
+    process-message-signature-native) echo "process-message-signature-native" ;;
     process-message-step-core) echo "process-message-step-core" ;;
+    process-message-step-core-native) echo "process-message-step-core-native" ;;
     process-deactivate-boundary) echo "process-deactivate-boundary" ;;
+    process-deactivate-boundary-native) echo "process-deactivate-boundary-native" ;;
     process-deactivate-step) echo "process-deactivate-step" ;;
     process-deactivate-coord-key) echo "process-deactivate-coord-key" ;;
+    process-deactivate-coord-key-native) echo "process-deactivate-coord-key-native" ;;
     process-deactivate-ecdh-command) echo "process-deactivate-ecdh-command" ;;
     process-deactivate-ecdh-leaf) echo "process-deactivate-ecdh-leaf" ;;
+    process-deactivate-ecdh-command-native) echo "process-deactivate-ecdh-command-native" ;;
+    process-deactivate-ecdh-leaf-native) echo "process-deactivate-ecdh-leaf-native" ;;
     process-deactivate-signature) echo "process-deactivate-signature" ;;
+    process-deactivate-signature-native) echo "process-deactivate-signature-native" ;;
     process-deactivate-decrypt-current) echo "process-deactivate-decrypt-current" ;;
     process-deactivate-decrypt-new) echo "process-deactivate-decrypt-new" ;;
+    process-deactivate-decrypt-current-native) echo "process-deactivate-decrypt-current-native" ;;
+    process-deactivate-decrypt-new-native) echo "process-deactivate-decrypt-new-native" ;;
     process-deactivate-step-core) echo "process-deactivate-step-core" ;;
+    process-deactivate-step-core-native) echo "process-deactivate-step-core-native" ;;
     process-deactivate) echo "process-deactivate-stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -90,23 +124,39 @@ prepare_circuit_name() {
 executable_name() {
   case "$1" in
     tally) echo "tally_votes" ;;
+    tally-native) echo "tally_votes_native" ;;
     add-new-key) echo "add_new_key" ;;
+    add-new-key-native) echo "add_new_key_native" ;;
     process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
     process-messages-boundary) echo "process_messages_boundary" ;;
+    process-messages-boundary-native) echo "process_messages_native_boundary" ;;
     process-message-step) echo "process_message_step_with_ecdh_signature" ;;
     process-message-coord-key) echo "process_message_coord_key" ;;
+    process-message-coord-key-native) echo "process_message_coord_key_native" ;;
     process-message-ecdh) echo "process_message_ecdh" ;;
+    process-message-ecdh-native) echo "process_message_ecdh_native" ;;
+    process-message-decrypt-native) echo "process_message_decrypt_native" ;;
     process-message-signature) echo "process_message_signature" ;;
+    process-message-signature-native) echo "process_message_signature_native" ;;
     process-message-step-core) echo "process_message_step_core" ;;
+    process-message-step-core-native) echo "process_message_step_core_native" ;;
     process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
+    process-deactivate-boundary-native) echo "process_deactivate_native_boundary" ;;
     process-deactivate-step) echo "process_deactivate_message_step" ;;
     process-deactivate-coord-key) echo "process_deactivate_coord_key" ;;
+    process-deactivate-coord-key-native) echo "process_deactivate_coord_key_native" ;;
     process-deactivate-ecdh-command) echo "process_deactivate_ecdh" ;;
     process-deactivate-ecdh-leaf) echo "process_deactivate_ecdh" ;;
+    process-deactivate-ecdh-command-native) echo "process_deactivate_ecdh_native" ;;
+    process-deactivate-ecdh-leaf-native) echo "process_deactivate_ecdh_native" ;;
     process-deactivate-signature) echo "process_deactivate_signature" ;;
+    process-deactivate-signature-native) echo "process_deactivate_signature_native" ;;
     process-deactivate-decrypt-current) echo "process_deactivate_decrypt" ;;
     process-deactivate-decrypt-new) echo "process_deactivate_decrypt" ;;
+    process-deactivate-decrypt-current-native) echo "process_deactivate_decrypt_native" ;;
+    process-deactivate-decrypt-new-native) echo "process_deactivate_decrypt_native" ;;
     process-deactivate-step-core) echo "process_deactivate_step_core" ;;
+    process-deactivate-step-core-native) echo "process_deactivate_step_core_native" ;;
     process-deactivate) echo "process_deactivate_messages_stateful" ;;
     *) echo "unsupported circuit: $1" >&2; exit 1 ;;
   esac
@@ -114,7 +164,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|process-messages|process-messages-boundary|process-message-step|process-message-coord-key|process-message-ecdh|process-message-signature|process-message-step-core|process-deactivate-boundary|process-deactivate-step|process-deactivate-coord-key|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-signature|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-step-core|process-deactivate) return 0 ;;
+    add-new-key|add-new-key-native|process-messages|process-messages-boundary|process-messages-boundary-native|process-message-step|process-message-coord-key|process-message-coord-key-native|process-message-ecdh|process-message-ecdh-native|process-message-decrypt-native|process-message-signature|process-message-signature-native|process-message-step-core|process-message-step-core-native|process-deactivate-boundary|process-deactivate-boundary-native|process-deactivate-step|process-deactivate-coord-key|process-deactivate-coord-key-native|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature|process-deactivate-signature-native|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core|process-deactivate-step-core-native|process-deactivate) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -182,9 +232,11 @@ run_one() {
     if can_generate_fixture "$circuit"; then
       input_path="$out_dir/$circuit-small-input.json"
       local fixture_circuit="$circuit"
-      if [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
+      if [[ "$circuit" == "add-new-key-native" ]]; then
+        fixture_circuit="add-new-key"
+      elif [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-messages-boundary-native" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
         fixture_circuit="process-messages"
-      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
+      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-boundary-native" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
         fixture_circuit="process-deactivate"
       fi
       node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$fixture_circuit" --out "$input_path"
@@ -204,7 +256,7 @@ run_one() {
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
 
-  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-step-core" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-step-core" ]]; then
+  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-ecdh-native" || "$circuit" == "process-message-decrypt-native" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-signature-native" || "$circuit" == "process-message-step-core" || "$circuit" == "process-message-step-core-native" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-ecdh-command-native" || "$circuit" == "process-deactivate-ecdh-leaf-native" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-signature-native" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-decrypt-current-native" || "$circuit" == "process-deactivate-decrypt-new-native" || "$circuit" == "process-deactivate-step-core" || "$circuit" == "process-deactivate-step-core-native" ]]; then
     if [[ -z "$message_index" ]]; then
       echo "$circuit requires --message-index" >&2
       exit 1

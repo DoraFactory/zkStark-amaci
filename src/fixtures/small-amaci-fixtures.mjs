@@ -12,8 +12,15 @@ import {
 } from '../compat/babyjub.mjs';
 import { hash5, hash10, hashLeftRight } from '../compat/poseidon.mjs';
 import { evaluateProcessDeactivateOne, elGamalDecryptPoint } from '../deactivate/process-deactivate-one.mjs';
+import { evaluateNativeTallyVotes } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessOneStateTransition, packCommandData, poseidonEncryptWithoutCheck7 } from '../msg/process-one.mjs';
-import { packProcessMessagesVals, processMessageHashChain } from '../msg/process-messages.mjs';
+import {
+  evaluateProcessMessagesStateful,
+  packProcessMessagesVals,
+  processMessageHashChain,
+} from '../msg/process-messages.mjs';
+import { evaluateNativeProcessMessagesBoundary } from '../msg/native-process-messages.mjs';
+import { nativeProcessMessageTransitionContexts } from '../msg/native-process-roots.mjs';
 import { processDeactivateMessageHashChain } from '../deactivate/process-deactivate-messages.mjs';
 import { requireZkKitPackage } from '../compat/zk-kit-require.mjs';
 
@@ -119,19 +126,37 @@ function processOneCost(isQuadraticCost, voteWeight) {
   return isQuadraticCost === 1n ? voteWeight * voteWeight : voteWeight;
 }
 
-function buildProcessMessagesState({ sharedKeys, signatureSecretKeys } = {}) {
+const DEFAULT_PROCESS_MESSAGES_COMMANDS = Object.freeze([
+  { isValid: true, stateIndex: 1, voteOptionIndex: 0, newVoteWeight: 31n },
+  { isValid: true, stateIndex: 7, voteOptionIndex: 3, newVoteWeight: 37n },
+  { isValid: false, stateIndex: 8, voteOptionIndex: 2, newVoteWeight: 41n },
+  { isValid: true, stateIndex: 12, voteOptionIndex: 4, newVoteWeight: 43n },
+  { isValid: true, stateIndex: 20, voteOptionIndex: 1, newVoteWeight: 47n },
+]);
+
+function normalizeProcessMessageCommands(commands) {
+  return commands.map((command) => ({
+    isValid: command.isValid,
+    stateIndex: Number(command.stateIndex),
+    voteOptionIndex: Number(command.voteOptionIndex),
+    newVoteWeight: BigInt(command.newVoteWeight),
+    invalidStateIndex: command.invalidStateIndex === undefined
+      ? 24
+      : Number(command.invalidStateIndex),
+  }));
+}
+
+function buildProcessMessagesState({
+  sharedKeys,
+  signatureSecretKeys,
+  commands = DEFAULT_PROCESS_MESSAGES_COMMANDS,
+} = {}) {
   const isQuadraticCost = 1n;
   const coordPrivKey = 5n;
   const numSignUps = 20n;
   const maxVoteOptions = 5n;
   const expectedPollId = 77n;
-  const commands = [
-    { isValid: true, stateIndex: 1, voteOptionIndex: 0, newVoteWeight: 31n },
-    { isValid: true, stateIndex: 7, voteOptionIndex: 3, newVoteWeight: 37n },
-    { isValid: false, stateIndex: 8, voteOptionIndex: 2, newVoteWeight: 41n },
-    { isValid: true, stateIndex: 12, voteOptionIndex: 4, newVoteWeight: 43n },
-    { isValid: true, stateIndex: 20, voteOptionIndex: 1, newVoteWeight: 47n },
-  ];
+  const normalizedCommands = normalizeProcessMessageCommands(commands);
   const emptyStateLeaf = Array.from({ length: 10 }, () => 0n);
   const voteLeavesByState = Array.from({ length: 25 }, (_, stateIndex) => [
     BigInt(stateIndex + 1),
@@ -141,14 +166,21 @@ function buildProcessMessagesState({ sharedKeys, signatureSecretKeys } = {}) {
     BigInt(stateIndex + 5),
   ]);
   const stateLeaves = Array.from({ length: 25 }, () => emptyStateLeaf.slice());
-  const touchedStateIndexes = [1, 7, 12, 20, 24];
+  const touchedStateIndexes = [
+    ...new Set(
+      normalizedCommands.map((command) =>
+        command.isValid ? command.stateIndex : command.invalidStateIndex,
+      ),
+    ),
+  ];
   const pubKeysByState = new Map();
 
-  for (let i = 0; i < commands.length; i += 1) {
+  for (let i = 0; i < normalizedCommands.length; i += 1) {
+    const command = normalizedCommands[i];
     if (signatureSecretKeys?.[i]) {
-      pubKeysByState.set(commands[i].stateIndex, derivePublicKeyFromSecret(signatureSecretKeys[i]));
-      if (!commands[i].isValid) {
-        pubKeysByState.set(24, derivePublicKeyFromSecret(signatureSecretKeys[i]));
+      pubKeysByState.set(command.stateIndex, derivePublicKeyFromSecret(signatureSecretKeys[i]));
+      if (!command.isValid) {
+        pubKeysByState.set(command.invalidStateIndex, derivePublicKeyFromSecret(signatureSecretKeys[i]));
       }
     }
   }
@@ -166,11 +198,11 @@ function buildProcessMessagesState({ sharedKeys, signatureSecretKeys } = {}) {
   const activeStateRoot = pathFor(activeLeaves, 2, 0).root;
   let stateLeafHashes = stateLeaves.map(hash10);
   const currentStateRoot = pathFor(stateLeafHashes, 2, 0).root;
-  const processOneWitnesses = Array.from({ length: commands.length });
+  const processOneWitnesses = Array.from({ length: normalizedCommands.length });
 
-  for (let i = commands.length - 1; i >= 0; i -= 1) {
-    const command = commands[i];
-    const stateIndex = command.isValid ? command.stateIndex : 24;
+  for (let i = normalizedCommands.length - 1; i >= 0; i -= 1) {
+    const command = normalizedCommands[i];
+    const stateIndex = command.isValid ? command.stateIndex : command.invalidStateIndex;
     const voteOptionIndex = command.isValid ? command.voteOptionIndex : 0;
     const stateTree = pathFor(stateLeafHashes, 2, stateIndex);
     const activeTree = pathFor(activeLeaves, 2, stateIndex);
@@ -252,6 +284,8 @@ function buildProcessMessagesState({ sharedKeys, signatureSecretKeys } = {}) {
     activeStateRoot,
     newStateRoot: pathFor(stateLeafHashes, 2, 0).root,
     processOneWitnesses,
+    finalStateLeaves: stateLeaves,
+    finalVoteLeavesByState: voteLeavesByState,
   });
 }
 
@@ -304,7 +338,7 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
   });
 }
 
-export function buildSmallProcessMessagesFixture() {
+function smallProcessMessageCryptoInputs() {
   const coordPrivKey = 5n;
   const encPubKeys = [2n, 3n, 4n, 6n, 7n].map((scalar) =>
     babyjubScalarMul(BABYJUB_BASE8, scalar),
@@ -317,8 +351,96 @@ export function buildSmallProcessMessagesFixture() {
     Buffer.from([3, 4, 5, 6, 7]),
     Buffer.from([4, 5, 6, 7, 8]),
   ];
-  const state = buildProcessMessagesState({ sharedKeys, signatureSecretKeys });
+  return { coordPrivKey, encPubKeys, sharedKeys, signatureSecretKeys };
+}
+
+export function buildSmallProcessMessagesFixture(options = {}) {
+  const { coordPrivKey, encPubKeys, sharedKeys, signatureSecretKeys } =
+    smallProcessMessageCryptoInputs();
+  const state = buildProcessMessagesState({
+    sharedKeys,
+    signatureSecretKeys,
+    commands: options.commands,
+  });
   return buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys });
+}
+
+export function buildSmallNativeRoundFixture() {
+  const commands = [
+    { isValid: true, stateIndex: 0, voteOptionIndex: 0, newVoteWeight: 2n },
+    { isValid: true, stateIndex: 1, voteOptionIndex: 1, newVoteWeight: 4n },
+    { isValid: true, stateIndex: 2, voteOptionIndex: 2, newVoteWeight: 6n },
+    { isValid: true, stateIndex: 3, voteOptionIndex: 3, newVoteWeight: 8n },
+    { isValid: true, stateIndex: 4, voteOptionIndex: 4, newVoteWeight: 10n },
+  ];
+  const processMessagesDraft = buildSmallProcessMessagesFixture({ commands });
+  const processMessagesEvaluated = evaluateNativeProcessMessagesBoundary(processMessagesDraft);
+  const processMessages = processMessagesDraft;
+  const stateResult = evaluateProcessMessagesStateful(processMessagesDraft).state;
+  const transitionContexts = nativeProcessMessageTransitionContexts(stateResult);
+  const contextsByStateIndex = new Map(
+    transitionContexts.map((context, index) => [
+      Number(stateResult.transitions[index].derived.stateIndex),
+      context,
+    ]),
+  );
+  const finalStateLeaves = [];
+  const finalVotes = [];
+  for (let stateIndex = 0; stateIndex < 5; stateIndex += 1) {
+    const context = contextsByStateIndex.get(stateIndex);
+    if (!context) {
+      throw new Error(`missing native transition context for state index ${stateIndex}`);
+    }
+    finalStateLeaves.push(context.newStateLeaf);
+    const command = commands.find((entry) => entry.stateIndex === stateIndex);
+    const votes = [
+      BigInt(stateIndex + 1),
+      BigInt(stateIndex + 2),
+      BigInt(stateIndex + 3),
+      BigInt(stateIndex + 4),
+      BigInt(stateIndex + 5),
+    ];
+    votes[command.voteOptionIndex] = command.newVoteWeight;
+    finalVotes.push(votes);
+  }
+
+  const batchZeroContext = contextsByStateIndex.get(0);
+  const tallyDraft = {
+    packedVals: (20n << 32n).toString(),
+    stateRoot: batchZeroContext.newStateRoot.toString(),
+    stateSalt: processMessages.newStateSalt,
+    stateLeaf: finalStateLeaves,
+    statePathElements: [batchZeroContext.stateLeafPathElements[1]],
+    votes: finalVotes,
+    currentResults: Array.from({ length: 5 }, () => 0n),
+    currentResultsRootSalt: '0',
+    newResultsRootSalt: '901',
+  };
+  const tallyEvaluated = evaluateNativeTallyVotes(tallyDraft);
+  const tally = {
+    ...tallyDraft,
+    stateCommitment: tallyEvaluated.publicFields.stateCommitment,
+    currentTallyCommitment: tallyEvaluated.publicFields.currentTallyCommitment,
+    newTallyCommitment: tallyEvaluated.publicFields.newTallyCommitment,
+    inputHash: tallyEvaluated.publicFields.inputHash,
+  };
+
+  return decimalize({
+    processMessages,
+    tally,
+    chain: {
+      initialStateCommitment: processMessagesEvaluated.publicFields.currentStateCommitment,
+      rawProcessMessagesCurrentStateCommitment: processMessages.currentStateCommitment,
+      initialDeactivateCommitment: processMessagesEvaluated.publicFields.deactivateCommitment,
+      processMessagesNewStateCommitment: processMessagesEvaluated.publicFields.newStateCommitment,
+      tallyStateCommitment: tally.stateCommitment,
+      processMessagesToTallyStateMatches:
+        processMessagesEvaluated.publicFields.newStateCommitment
+          === tallyEvaluated.publicFields.stateCommitment,
+      initialTallyCommitment: tally.currentTallyCommitment,
+      finalTallyCommitment: tally.newTallyCommitment,
+    },
+  });
 }
 
 export function buildSmallAddNewKeyFixture() {
