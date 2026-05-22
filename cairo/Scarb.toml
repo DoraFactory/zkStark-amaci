@@ -33,6 +33,14 @@ name = "process_messages_native_boundary"
 function = "zkstark_amaci_tally::native_process_messages::process_messages_native_boundary_main"
 
 [[target.executable]]
+name = "process_messages_stage_native"
+function = "zkstark_amaci_tally::native_process_messages_stage::process_messages_stage_native_main"
+
+[[target.executable]]
+name = "process_messages_stage_segment_native"
+function = "zkstark_amaci_tally::native_process_messages_stage_segment::process_messages_stage_segment_native_main"
+
+[[target.executable]]
 name = "process_message_coord_key_native"
 function = "zkstark_amaci_tally::native_process_message_components::process_message_coord_key_native_main"
 

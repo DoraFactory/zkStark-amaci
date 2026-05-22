@@ -79,6 +79,26 @@ test(
 );
 
 test(
+  'executes the native ProcessMessages stage Cairo program with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const metadata = runCircuit('process-messages-stage-native');
+    assert.equal(metadata.executable, 'process_messages_stage_native');
+  },
+);
+
+test(
+  'executes native ProcessMessages stage segment Cairo programs with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const head2 = runCircuit('process-messages-stage-head2-native');
+    const tail3 = runCircuit('process-messages-stage-tail3-native');
+    assert.equal(head2.executable, 'process_messages_stage_segment_native');
+    assert.equal(tail3.executable, 'process_messages_stage_segment_native');
+  },
+);
+
+test(
   'executes the native ProcessDeactivateMessages boundary Cairo program with synthetic fixture args',
   { skip: !runExecutionTests, timeout: 600000 },
   () => {

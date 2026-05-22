@@ -44,7 +44,11 @@ import {
   packProcessMessagesVals,
   processMessageHashChain,
 } from '../src/msg/process-messages.mjs';
-import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
+import {
+  evaluateNativeProcessMessagesBoundary,
+  evaluateNativeProcessMessagesBoundarySegment,
+} from '../src/msg/native-process-messages.mjs';
+import { buildNativeCairoProcessMessagesStageSegmentInput } from '../src/msg/native-cairo-input.mjs';
 import { nativeProcessMessageTransitionContexts } from '../src/msg/native-process-roots.mjs';
 import {
   evaluateProcessOneStateTransition,
@@ -573,6 +577,28 @@ test('builds native public hash arguments for split ProcessMessages helper proof
     [...coordArgs, ...ecdhArgs, ...decryptArgs, ...signatureArgs, ...coreArgs].every((value) =>
       /^0x[0-9a-f]+$/.test(value),
     ),
+  );
+});
+
+test('links native ProcessMessages stage segment commitments', () => {
+  const input = buildStatefulEcdhSignatureFixture();
+  const full = evaluateNativeProcessMessagesBoundary(input);
+  const tail3 = evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 2, endIndex: 5 });
+  const head2 = evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 0, endIndex: 2 });
+
+  assert.equal(tail3.publicFields.currentStateCommitment, full.publicFields.currentStateCommitment);
+  assert.equal(tail3.publicFields.newStateCommitment, head2.publicFields.currentStateCommitment);
+  assert.equal(head2.publicFields.newStateCommitment, full.publicFields.newStateCommitment);
+
+  const tailInput = buildNativeCairoProcessMessagesStageSegmentInput(input, tail3);
+  const headInput = buildNativeCairoProcessMessagesStageSegmentInput(input, head2);
+  assert.equal(
+    tailInput.components.messages[0].core.program_input.fields.new_state_commitment_hash,
+    tail3.publicFields.newStateCommitment.toString(),
+  );
+  assert.equal(
+    headInput.components.messages[1].core.program_input.fields.current_state_commitment_hash,
+    head2.publicFields.currentStateCommitment.toString(),
   );
 });
 

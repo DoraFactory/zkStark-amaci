@@ -457,33 +457,6 @@ inputFile=@$ATLANTIC_OUT/tally_votes_native_stone.input.txt;type=text/plain
 
 ## 12. 如何继续查看状态
 
-推荐用 repo 工具保存 status、summary，并下载 artifacts：
-
-```sh
-export ATLANTIC_QUERY_ID=01KRSWP39Q5MGPDWX6SE7SNN36
-
-npm run atlantic:fetch-query -- \
-  --query-id "$ATLANTIC_QUERY_ID" \
-  --out-dir "$ATLANTIC_OUT/result" \
-  --download-artifacts \
-  --text
-```
-
-这会写入：
-
-```text
-$ATLANTIC_OUT/result/status.json
-$ATLANTIC_OUT/result/final-query-summary.json
-$ATLANTIC_OUT/result/atlantic-query-result.json
-$ATLANTIC_OUT/result/artifacts/proof.json
-$ATLANTIC_OUT/result/artifacts/metadata.json
-$ATLANTIC_OUT/result/artifacts/program.cairo1.json
-$ATLANTIC_OUT/result/artifacts/input.cairo1.txt
-...
-```
-
-也可以直接用 curl：
-
 ```sh
 export ATLANTIC_QUERY_ID=01KRSWP39Q5MGPDWX6SE7SNN36
 

@@ -1,198 +1,143 @@
 # zkStark-amaci
 
-Parallel Stark/STARK proof-layer prototype for AMACI.
+Starknet-native STARK proof-layer prototype for AMACI.
 
 This repository is intentionally independent from the existing Circom,
-CosmWasm, SDK, and operator code. The first completed milestone targets the
-`TallyVotes` relation for the small parameter set:
+CosmWasm, SDK, and operator code. The current implementation is a small,
+fixed-parameter AMACI migration used to prove and measure a Starknet-friendly
+round flow:
 
 - `stateTreeDepth = 2`
 - `intStateTreeDepth = 1`
 - `voteOptionTreeDepth = 1`
+- `messageBatchSize = 5`
 
-The current work-in-progress target also covers the first
-`ProcessMessages(2, 1, 5)` and `ProcessDeactivateMessages(2, 5)` migration
-slices.
+The proof-facing path is now **native AMACI**: public commitments, input
+hashes, fact bindings, and wrapper checks use Starknet-friendly `felt252`
+values and Starknet Poseidon. The older BN254 Poseidon/SHA-256 compatibility
+executables are still present for reference and regression tests, but they are
+not the default path for Starknet verification.
 
-The implementation keeps the existing AMACI public-input semantics:
+## Current Status
 
-- BN254 scalar field values are represented as unsigned 256-bit integers.
-- Poseidon uses the same Circom-compatible parameters as the existing
-  circuits.
-- AMACI state leaves use the existing `Hasher10` composition:
-  `HashLeftRight(Hasher5(first 5 fields), Hasher5(last 5 fields))`.
-- `inputHash = sha256(packedVals, stateCommitment, currentTallyCommitment,
-  newTallyCommitment) mod BN254_SCALAR_FIELD`.
-- Public output uses a fixed felt list with `u256` values split as
-  `low128, high128`.
+- Native Cairo circuits exist for add-key, process-messages, process-deactivate,
+  and tally.
+- The native process flows are split into smaller component proofs so the
+  expensive ECDH/signature/decrypt work can be verified as separate facts.
+- Stone AIR generation supports every native circuit used by the current small
+  round.
+- Atlantic/Herodotus submission uses the official-compatible shape:
+  Cairo1 `programFile`, Cairo1 Rust VM `inputFile`, and proving/verification
+  parameters. Do not upload local `stone-proof.json` or Integrity split calldata
+  for this path.
+- Starknet wrapper contracts exist for add-key, process-messages,
+  process-deactivate, tally, and the aggregate `MockAmaciRound` round-state
+  prototype.
+- The full component E2E round has been exercised on Sepolia with Atlantic
+  registered facts and wrapper-side fact consumption.
 
-## What is implemented
+The current prototype is for migration validation and cost measurement. It is
+not yet the final production AMACI round contract or SDK/operator integration.
 
-- `spec/tally-votes-compat.md`, `spec/process-messages-compat.md`,
-  `spec/add-new-key-compat.md`, and `spec/process-deactivate-compat.md`
-  document the migrated AMACI compatibility contracts.
-- `src/` contains a deterministic JavaScript reference implementation for the
-  `TallyVotes` relation and public-output encoding.
-- `src/compat/poseidon-bn254.mjs` contains a pure JavaScript implementation of
-  the same BN254 Poseidon permutation used by the existing Circom package. It
-  is used to generate and verify the Cairo Poseidon constants and test vectors.
-- `tools/prepare-tally-input.mjs` validates an existing tally input JSON and
-  emits canonical public output, fixed-size Cairo program input, plus optional
-  Integrity fact hashes when a program hash is supplied.
-- `src/native-proof/` and `tools/export-native-stwo-handoff.mjs` export a
-  project-local native Starknet/S-two handoff package from the current
-  `scarb-stwo-local` proof run.
-- `fixtures/tally-small/` vendors the small AMACI tally fixtures used for
-  standalone testing and proof generation.
-- `tests/` exercises valid and invalid tally inputs against those AMACI
-  fixtures with 10-field state leaves.
-- `cairo/` contains the first fixed-size `TallyVotes(2, 1, 1)` Cairo relation
-  migration. It computes AMACI `Hasher10`, Circom-compatible BN254 Poseidon
-  T3/T6, quinary tree hashes, and the SHA-256 `inputHash` inside Cairo, while
-  retaining hash claims only as witness compatibility assertions against the
-  generated input. It also contains the initial
-  `ProcessMessages(2, 1, 5)` public-boundary executable.
-- `cairo/src/native_tally_votes.cairo` is the first AMACI-STARK v2 spike. It
-  keeps the small tally state transition but replaces BN254 Poseidon hash
-  claims and SHA-256 input binding with Starknet-native Poseidon over `felt252`
-  values, producing a felt-native public output with `version = 2`.
-- `contracts/` contains the Starknet target scaffolding for the Integrity
-  wrapper.
-- `spec/process-messages-compat.md`, `src/msg/`, and the Cairo
-  `process_messages_boundary` executable start the next migration target by
-  pinning the `ProcessMessages(2, 1, 5)` public-input contract, packed values,
-  message hash chain, and canonical public output. They also include the first
-  `ProcessOne` migration slice: encrypted message binding,
-  Circom-compatible `PoseidonDecryptWithoutCheck(7)` over `msg[10]` and a
-  witness `sharedKey[2]`, decrypted-command field mapping, `packedCommand`
-  unpacking, deterministic `MessageValidator` constraints,
-  BabyJubJub signature binding, ElGamal active-state decrypt binding,
-  state-leaf inclusion, active-state inclusion, vote-option root update, and
-  new state-root derivation for the fixed
-  `(stateTreeDepth=2, voteOptionTreeDepth=1)` parameters. The
-  `process_messages_state_transition` executable chains five
-  `ProcessOne` witnesses in AMACI's reverse batch order into the
-  `ProcessMessages(2, 1, 5)` state-root transition, and
-  `process_messages_stateful` binds that transition back to the public
-  boundary and canonical public output, including empty-message handling,
-  boundary message matching, and boundary parameter matching for each
-  `ProcessOne` witness. The boundary now follows the current AMACI Circom
-  public hash shape:
-  message length `10`, message chain `Hasher13`, and
-  `Sha256Hasher(8)` with `expectedPollId`.
-- `src/compat/babyjub.mjs`, `tools/prepare-ecdh-input.mjs`, and the Cairo
-  `ecdh_shared_key` executable implement the first standalone ECDH migration
-  slice: BabyJubJub scalar multiplication is checked with a fixed 253-step
-  transcript, matching the existing `@zk-kit/baby-jubjub` result.
-- `tools/prepare-process-one-with-ecdh-input.mjs` and the Cairo
-  `process_one_with_ecdh` executable close the first single-message path:
-  ECDH transcript output must equal `ProcessOne.sharedKey`, then the same
-  shared key is used for Poseidon command decryption and the migrated
-  `ProcessOne` state transition.
-- `tools/prepare-process-messages-stateful-with-ecdh-input.mjs` and the Cairo
-  `process_messages_stateful_with_ecdh` executable wire that ECDH binding into
-  the fixed five-message batch: each non-empty boundary `encPubKey[2]` must be
-  the base point for an ECDH transcript using the same `coordPrivKey`, and the
-  transcript output must match the corresponding `ProcessOne.sharedKey`. The
-  same executable also proves
-  `PrivToPubKey(coordPrivKey) == coordPubKey` against the public boundary's
-  coordinator key.
-- `buildCairoBabyjubPoseidonSignatureInput` and the Cairo `verify_signature`
-  executable implement the standalone AMACI `VerifySignature` primitive:
-  `M = Poseidon(packedCommand[0..2])`, then
-  `S * Base8 == R8 + Poseidon(R8, A, M) * (8 * A)`.
-- `process_one_with_signature` and `process_one_with_ecdh_signature` wire that
-  signature result into one `ProcessOne` witness, so `isSignatureValid` can be
-  derived inside Cairo for a single decrypted message.
-- `process_messages_stateful_with_ecdh_signature` extends the five-message
-  stateful path with per-message signature witnesses, while keeping the
-  ECDH-only executable available for smaller compatibility checks.
-- `process_message_step_with_ecdh_signature` exposes a linked single-message
-  proof path for dense-batch debugging: each step proves one message hash
-  transition, coordinator key binding, ECDH shared key, signature check,
-  active-state decrypt parity, and state-root update. Its public output
-  carries the previous/next message hashes, previous/next state roots, and
-  current/new state commitments so a wrapper or off-chain checker can chain
-  five smaller proofs with one boundary proof.
-- The preferred ProcessMessages split path now uses smaller linked pieces:
-  `process_message_coord_key`, per-message `process_message_ecdh`,
-  per-message `process_message_signature`, and per-message
-  `process_message_step_core`. The core step no longer repeats coordinator
-  public-key derivation, ECDH, or EdDSA scalar multiplication; it exposes
-  hash links for `coordPrivKey`, `encPubKey`, shared key, signature pubkey,
-  `R8`, packed command, `S`, and `isSignatureValid`, so a wrapper can chain
-  the smaller facts.
-- `src/add-new-key/`, `tools/prepare-add-new-key-input.mjs`, and the Cairo
-  `add_new_key` executable start the next circuit migration target:
-  `AddNewKey(stateTreeDepth=2)`. The compatibility relation verifies the
-  round nullifier, ECDH-derived deactivate leaf, depth-4 deactivate tree
-  inclusion, ElGamal re-randomization, `Sha256Hasher(9)` input hash, and
-  canonical public output.
-- `src/deactivate/`, `tools/prepare-process-deactivate-one-input.mjs`,
-  `tools/prepare-process-deactivate-boundary-input.mjs`,
-  `tools/prepare-process-deactivate-stateful-input.mjs`, and the Cairo
-  `process_deactivate_one` / `process_deactivate_messages_boundary` /
-  `process_deactivate_messages_state_transition` /
-  `process_deactivate_messages_stateful`
-  executables start the `ProcessDeactivateMessages(2, 5)` migration target.
-  The single-message slice verifies EdDSA-Poseidon, ElGamal decrypt parity for
-  the current active flag and new deactivate ciphertext, state-root inclusion,
-  active-state root update, deactivate-tree insertion, ECDH-derived deactivate
-  leaf, and non-zero `newActiveState`. The boundary slice verifies
-  `Sha256Hasher(8)`, current deactivate commitment, canonical public output,
-  and the deactivate message hash chain where empty messages are detected by
-  `msg[0] == 0`. The stateful slice chains five `ProcessOne` witnesses in
-  forward order, binds `coordPrivKey` to the public `coordPubKey`, checks
-  final `newDeactivateRoot`, recomputes `newDeactivateCommitment`, and binds
-  every non-empty boundary encrypted message and `encPubKey` to its
-  `ProcessOne` command fields through ECDH and
-  `PoseidonDecryptWithoutCheck(7)`.
-  The preferred split path also exposes smaller deactivate slices:
-  `process_deactivate_coord_key`, per-message command ECDH, per-message
-  signature, current/new ElGamal decrypt parity, deactivate-leaf ECDH, and a
-  `process_deactivate_step_core` proof that links those claims to the root
-  transition.
-- `src/fixtures/` and `tools/discover-amaci-fixtures.mjs` classify existing
-  AMACI operator JSON fixtures and report which ones are directly runnable by
-  the current small-parameter Cairo targets.
-- `tools/prepare-amaci-circuit-input.mjs` is the unified offline input
-  preparer for all currently migrated circuit slices. It emits evaluated public
-  fields, canonical public output, structured Cairo input, and
-  `scarb execute --arguments-file` JSON.
-- `src/wrapper/amaci-wrapper-model.mjs` models the intended Starknet wrapper
-  checks for all migrated circuit families: fixed program hash, canonical
-  public output, Integrity fact hash, optional verification hash, and wrapper
-  state updates for tally, process-message, deactivate, and add-new-key flows.
+## Native Circuit Families
 
-## Fixture support status
+The active native circuit set is:
 
-The repository includes the small AMACI tally fixtures used during the
-migration:
+| Flow | Native circuits |
+| --- | --- |
+| Add key | `add-new-key-native` |
+| Process messages boundary | `process-messages-boundary-native` |
+| Process messages components | `process-message-coord-key-native`, `process-message-ecdh-native`, `process-message-decrypt-native`, `process-message-signature-native`, `process-message-step-core-native` |
+| Process deactivate boundary | `process-deactivate-boundary-native` |
+| Process deactivate components | `process-deactivate-coord-key-native`, `process-deactivate-ecdh-command-native`, `process-deactivate-ecdh-leaf-native`, `process-deactivate-signature-native`, `process-deactivate-decrypt-current-native`, `process-deactivate-decrypt-new-native`, `process-deactivate-step-core-native` |
+| Tally | `tally-native` |
+
+For `messageBatchSize = 5`, the full process-messages component set is:
 
 ```text
-fixtures/tally-small/000000.json
-fixtures/tally-small/000001.json
-fixtures/tally-small/000002.json
+1 boundary
+1 coordinator-key proof
+5 ECDH proofs
+5 decrypt proofs
+5 signature proofs
+5 step-core proofs
 ```
 
-External operator fixtures are still supported as explicit input paths, but
-this standalone repo no longer assumes a sibling `amaci-operator` checkout.
-Production `msg_inputs/*.json` fixtures are discoverable and classified when
-you provide them, but they are not directly runnable yet because the current
-Cairo migration is fixed to `ProcessMessages(2, 1, 5)` /
-`ProcessDeactivateMessages(2, 5)` and expects prepared
-`processOneWitnesses`. The production operator message inputs use larger
-parameters and do not include those expanded witnesses in the shape needed by
-these small Cairo executables.
+The process-deactivate component set is similar but includes both command ECDH
+and deactivate-leaf ECDH plus current/new decrypt parity proofs.
 
-Run fixture discovery with:
+## Repository Layout
+
+```text
+cairo/       Cairo native and legacy compatibility executables.
+contracts/   Starknet wrappers, mock Integrity registry, and mock round state.
+src/         JavaScript evaluators, public output encoders, Atlantic helpers.
+tools/       Fixture generation, proof orchestration, Stone/Atlantic scripts.
+tests/       JavaScript model, fixture, proof-link, and helper tests.
+fixtures/    Small tally fixtures retained from the original AMACI flow.
+spec/        Compatibility notes for the legacy migration surface.
+```
+
+Important current files:
+
+- `src/fixtures/small-amaci-fixtures.mjs` builds the coherent small native
+  round fixture.
+- `tools/write-full-round-fixture.mjs` writes add-key, process-messages,
+  tally, and chain-link input JSON files.
+- `tools/run-stone-air.sh` builds minimal Cairo1 packages for Atlantic/Stone
+  and writes `stone-air-run.json`.
+- `src/atlantic/query-bundle.mjs` exports Atlantic-compatible `programFile`
+  and `inputFile` bundles.
+- `src/atlantic/mock-round-call.mjs` reconstructs Atlantic fact candidates and
+  exports wrapper calls.
+- `contracts/src/mock_amaci_round.cairo` consumes registered facts and updates
+  round state.
+
+## Quick Start
+
+Install dependencies:
 
 ```sh
-npm run discover:fixtures -- fixtures/tally-small --validate \
-  --out /tmp/zkstark-amaci-fixture-report.json
+npm ci
 ```
 
-Prepare any supported circuit input through the unified CLI:
+Run the normal test suite:
+
+```sh
+npm test
+npm run test:contracts
+```
+
+The current expected baseline is:
+
+```text
+npm test              147 passed, 11 skipped, 0 failed
+npm run test:contracts 38 passed, 0 failed
+```
+
+Generate the coherent small native round fixture:
+
+```sh
+npm run write:full-round-fixture -- \
+  --out-dir target/full-native-round-fixture \
+  --text
+```
+
+This writes:
+
+```text
+add-new-key-native.json
+process-messages-boundary-native.json
+tally-native.json
+chain.json
+```
+
+The process-messages fixture is also reused for the per-message component
+circuits with `--message-index 0..4`.
+
+## Preparing Native Circuit Inputs
+
+Use the unified preparer for every supported native circuit:
 
 ```sh
 npm run prepare:circuit -- \
@@ -202,117 +147,213 @@ npm run prepare:circuit -- \
   --cairo-args-out /tmp/zkstark-amaci-tally-native-args.json
 ```
 
-Run small synthetic fixtures through the actual Cairo executables with:
+Examples for synthetic native circuits:
 
 ```sh
-npm run execute:circuit -- --circuit add-new-key
-npm run execute:circuit -- --circuit process-messages
-npm run execute:circuit -- --circuit process-deactivate
+npm run prepare:add-new-key-native -- \
+  --out /tmp/add-new-key-native-prepared.json
+
+npm run prepare:process-message-step-core-native -- \
+  --message-index 0 \
+  --out /tmp/process-message-step-core-native-0-prepared.json
+
+npm run prepare:process-deactivate-step-core-native -- \
+  --message-index 0 \
+  --out /tmp/process-deactivate-step-core-native-0-prepared.json
 ```
 
-These commands generate the current small fixture when no input path is
-provided, prepare Cairo arguments, run `scarb execute`, and write metadata plus
-stdout/stderr under `target/cairo-execute/<circuit>/`.
+The preparer emits evaluated public fields, canonical public output, structured
+Cairo input, and Scarb argument JSON when requested.
 
-The corresponding execution test is intentionally opt-in because these paths
-are much heavier than normal unit tests:
+## Local Proof Paths
+
+There are two local proof paths:
+
+1. `scarb prove` / `scarb verify` for local Scarb/Stwo validation.
+2. Stone AIR / Stone proof for Integrity and Atlantic compatibility.
+
+Run all small native Scarb/Stwo proofs:
 
 ```sh
-npm run test:cairo-execute
+OUT_DIR=/absolute/path/to/zkstark-amaci-proofs
+
+/usr/bin/time -v npm run prove:all-native-split-small -- \
+  --tally-input fixtures/tally-small/000000.json \
+  --out-dir "$OUT_DIR/all-native-split"
 ```
 
-## Current proof status
+Run one native circuit proof:
 
-The local Cairo execution flow succeeds for the existing AMACI fixture:
+```sh
+npm run prove:tally-native -- --out-dir "$OUT_DIR/tally-native"
+npm run prove:add-new-key-native -- --out-dir "$OUT_DIR/add-new-key-native"
+npm run prove:process-message-step-core-native -- \
+  --message-index 0 \
+  --out-dir "$OUT_DIR/process-message-step-core-native-0"
+npm run prove:process-deactivate-step-core-native -- \
+  --message-index 0 \
+  --out-dir "$OUT_DIR/process-deactivate-step-core-native-0"
+```
+
+The local Scarb/Stwo proof path is useful for development. For Starknet
+application-layer verification today, use the Stone/Atlantic path below.
+
+## Stone And Atlantic Path
+
+Check the local Stone toolchain:
+
+```sh
+npm run check:stone-toolchain
+```
+
+Generate Atlantic-compatible AIR bundle inputs for one circuit:
+
+```sh
+CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib \
+npm run stone:air:circuit -- \
+  --circuit tally-native \
+  --input fixtures/tally-small/000000.json \
+  --out-dir /tmp/zkstark-amaci-stone/tally-native/stone-air \
+  --skip-cairo1-run
+```
+
+For indexed component circuits:
+
+```sh
+CAIRO_CORELIB_DIR=~/cairo-vm/cairo1-run/corelib \
+npm run stone:air:circuit -- \
+  --circuit process-message-step-core-native \
+  --message-index 0 \
+  --out-dir /tmp/zkstark-amaci-stone/process-message-step-core-0/stone-air \
+  --skip-cairo1-run
+```
+
+Export the Atlantic multipart bundle:
+
+```sh
+npm run export:atlantic-query -- \
+  --stone-air-run /tmp/zkstark-amaci-stone/tally-native/stone-air/stone-air-run.json \
+  --out-dir /tmp/zkstark-amaci-atlantic/tally-native \
+  --network TESTNET \
+  --text
+```
+
+The output directory contains:
+
+```text
+programFile   Cairo1 Sierra JSON for Atlantic
+inputFile     Cairo1 Rust VM input for main(input: Array<felt252>)
+submit-atlantic-query.sh
+atlantic-query-bundle.json
+```
+
+Submit with an Atlantic API key:
+
+```sh
+ATLANTIC_API_KEY=... /tmp/zkstark-amaci-atlantic/tally-native/submit-atlantic-query.sh
+```
+
+Fetch the result and artifacts:
+
+```sh
+npm run atlantic:fetch-query -- \
+  --query-id <atlantic-query-id> \
+  --out-dir target/atlantic-query-check \
+  --download-artifacts \
+  --text
+```
+
+After the query reaches `DONE`, export a wrapper call:
+
+```sh
+npm run export:atlantic-round-call -- \
+  --query-result target/atlantic-query-check/atlantic-query-result.json \
+  --metadata target/atlantic-query-check/artifacts/metadata.json \
+  --wrapper-address <MockAmaciRound-or-wrapper-address> \
+  --profile <sncast-profile> \
+  --out /tmp/atlantic-round-call.json \
+  --text
+```
+
+## Starknet Wrappers
+
+The `contracts/` package contains:
+
+- `AddNewKeyStarkWrapper`
+- `ProcessMessagesStarkWrapper`
+- `ProcessDeactivateStarkWrapper`
+- `TallyVotesStarkWrapper`
+- `MockAmaciRound`
+- `MockIntegrity`
+
+The wrappers verify the registered Integrity fact shape and public output. The
+mock round also tracks round state:
+
+```text
+stateCommitment
+deactivateCommitment
+tallyCommitment
+keysAdded
+messageBatchesProcessed
+deactivateBatchesProcessed
+totalFactsAccepted
+tallySubmitted
+```
+
+The full component E2E prototype follows this shape:
+
+```text
+deploy MockAmaciRound
+  -> consume add-new-key-native fact
+  -> consume process-message component facts
+  -> consume process-messages-boundary-native fact
+  -> consume tally-native fact
+```
+
+For the current small round, plaintext votes are local fixture data. The chain
+stores and checks commitments/facts, not plaintext vote totals. Tally
+correctness is established by:
+
+```text
+local fixture data
+  -> JS evaluator computes expected native public fields
+  -> Cairo native program recomputes and constrains those fields
+  -> Atlantic verifies proof and registers Integrity fact on Starknet
+  -> wrapper checks fact hash, program hash, verifier config/security bits, and public output
+  -> wrapper updates the matching round commitment
+```
+
+## Fixture Support
+
+The repository includes the small AMACI tally fixtures used during migration:
 
 ```text
 fixtures/tally-small/000000.json
+fixtures/tally-small/000001.json
+fixtures/tally-small/000002.json
 ```
 
-Execute locally with:
+External operator fixtures can still be passed explicitly. Production operator
+message inputs are discoverable, but the current native Cairo programs are
+fixed to the small parameter set above and expect expanded synthetic witness
+data for the split component proofs.
+
+Run fixture discovery with:
 
 ```sh
-npm run prepare:cairo-args
-cd cairo
-scarb execute \
-  --executable-name tally_votes \
-  --arguments-file /tmp/zkstark-amaci-cairo-args.json \
-  --print-program-output
+npm run discover:fixtures -- fixtures/tally-small --validate \
+  --out /tmp/zkstark-amaci-fixture-report.json
 ```
 
-The current AMACI execution is intentionally small-parameter and expensive:
+## Legacy Compatibility Code
 
-- Cairo execution steps: `19,514,414`
-- max memory address: `27,947,371`
-- range-check builtin uses: `5,139,640`
-- bitwise builtin uses: `2,880`
-- output felts: `16`
-
-This executes the migrated AMACI `TallyVotes(2, 1, 1)` relation locally. The
-current proof-facing path is the native AMACI v2 flow. Use
-`npm run prove:tally-native` for local Scarb/Stwo checks and the Stone/Integrity
-runbook for Starknet-compatible proof artifacts.
+The repository still contains legacy compatibility helpers and executable
+targets for the original BN254 Poseidon/SHA-256 migration work. They are useful
+for regression testing and for comparing the migration path, but the current
+Starknet-oriented implementation uses the native circuit names ending in
+`-native`.
 
 ## Generating Proofs On A High-Performance Machine
-
-This is the current end-to-end local proof validation path for the migrated
-small-parameter AMACI Cairo programs:
-
-- `TallyVotes(2, 1, 1)` with the existing AMACI tally fixture.
-- `AddNewKey(stateTreeDepth=2)` with the current small synthetic fixture.
-- `ProcessMessages(2, 1, 5)` with the current full ECDH+signature synthetic
-  fixture.
-- `ProcessDeactivateMessages(2, 5)` with the current full stateful synthetic
-  fixture.
-
-This flow does not submit anything to Starknet or Integrity yet. Success means:
-
-1. each input is converted into canonical Cairo arguments,
-2. `scarb prove --execute` generates a local STARK proof for each Cairo
-   executable,
-3. `scarb verify` verifies every generated proof locally.
-
-### AMACI-STARK v2 native hash tally spike
-
-The compatibility tally executable remains `tally_votes`. A Starknet-native
-hash spike is available as `tally_votes_native`:
-
-```sh
-npm run prepare:tally-native -- \
-  --out /tmp/zkstark-amaci-native-prepared.json \
-  --cairo-input-out /tmp/zkstark-amaci-native-cairo-input.json \
-  --cairo-args-out /tmp/zkstark-amaci-native-cairo-args.json
-
-cd cairo
-scarb execute \
-  --executable-name tally_votes_native \
-  --arguments-file /tmp/zkstark-amaci-native-cairo-args.json \
-  --print-program-output \
-  --print-resource-usage
-
-npm run prove:tally-native -- --out-dir target/cairo-proof/tally-native
-```
-
-This v2 spike deliberately derives new Starknet-native commitments from the
-fixture witness instead of preserving the legacy Circom/BN254 public hashes.
-Its public output is 12 felts rather than the v1 split-`u256` 16-felt output.
-Use it to compare execution/proof cost before expanding native hashing to
-message processing and deactivate circuits.
-
-Native boundary spikes are also available for the message-processing flows:
-
-```sh
-npm run prove:process-messages-boundary-native -- \
-  --out-dir target/cairo-proof/process-messages-boundary-native
-
-npm run prove:process-deactivate-boundary-native -- \
-  --out-dir target/cairo-proof/process-deactivate-boundary-native
-```
-
-These boundary variants replace the legacy BN254 Poseidon/SHA-256 public hash
-claims with Starknet Poseidon commitments and input hashes. They intentionally
-cover only the public boundary/hash-chain layer; ECDH, signature, and state
-transition step/core native variants are the next migration layer.
 
 ### Machine requirements
 
@@ -786,8 +827,10 @@ ECDH proof binds `coordPrivKeyHash + encPubKeyHash -> sharedKeyHash`; each
 signature proof binds `pubKeyHash + R8Hash + packedCommandHash + S` to
 `isSignatureValid`; and each core step exposes the same link hashes plus
 `previous_message_hash`, `next_message_hash`, `current_state_root`, and
-`new_state_root`. Production wrapper logic still needs to check all facts and
-enforce that these public outputs form one consistent hash/root chain.
+`new_state_root`. `MockAmaciRound` and the wrapper model consume these facts
+for the current small-round cost prototype; production integration still needs
+to connect the same checks to the real AMACI round state machine and operator
+data model.
 
 ### Native Split ProcessDeactivate Proofs
 
@@ -815,9 +858,9 @@ The deep split path moves the heavy BabyJubJub work out of the core root
 transition. The core proof exposes link hashes for command ECDH, signature
 verification, current/new ElGamal decrypt parity, deactivate-leaf ECDH, and
 the same previous/next message hash plus active/deactivate root chain fields.
-Production wrapper logic still needs to check all linked facts, enforce
-hash/root chain continuity, enforce `deactivateIndex` increments by one, and
-bind the first/last per-step deactivate commitments to the boundary output.
+`MockAmaciRound` and the wrapper model support the native deactivate fact
+shape; production integration still needs to connect those checks to real
+round lifecycle rules, including deactivate index policy and operator data.
 
 ### Summarize Results
 
@@ -932,7 +975,7 @@ This separates three states that are easy to confuse:
 
 With the current `starknet.js@6.24.1` dependency, the exporter should usually
 report `Native handoff ready: yes` and `Native broadcast ready: no`. That means
-the proof artifacts are ready for the next native Starknet integration spike,
+the proof artifacts are ready for future native Starknet integration work,
 but this repo is not yet submitting them as a mainnet transaction.
 
 After a high-performance proof run, export a proof/executable inventory before
@@ -1172,31 +1215,26 @@ input_hash_low128, input_hash_high128
 ### Known limits of this proof run
 
 - This validates the current small-parameter PoC only.
-- `TallyVotes(2,1,1)` uses an existing AMACI operator fixture.
+- `TallyVotes(2,1,1)` can use the existing small AMACI tally fixture.
 - `AddNewKey(2)`, `ProcessMessages(2,1,5)`, and
   `ProcessDeactivateMessages(2,5)` use synthetic fixtures that exercise the
-  full migrated Cairo relation for those small parameters.
+  native split relation for those small parameters.
 - Production-size `9-4-3-125` targets are not generated or proven by this
   flow.
 - Real operator fixture cross-checking for non-tally circuits is still pending.
 - It does not replace AMACI's internal non-PQ cryptography yet.
-- It does not submit the proof to Integrity or Starknet.
-- It uses the current local Scarb/Stwo proof flow. Stone/Integrity proof
-  serialization remains a separate integration step.
+- Application-layer Starknet verification currently goes through
+  Stone/Atlantic/Integrity registered facts. Direct Starknet native Stwo
+  proof transaction submission remains an experimental handoff path.
 - The stateful Cairo paths now short-circuit empty message slots at runtime, so
   empty slots skip ECDH/signature/decrypt/state-update work. The checked-in
   small synthetic `ProcessMessages` and `ProcessDeactivateMessages` fixtures
   currently use five non-empty messages, so this optimization affects sparse
   batches but does not reduce the dense five-message benchmark.
-- Dense `ProcessMessages(2,1,5)` now has a deep split proof path. It is
-  suitable for local prover feasibility checks, but Starknet wrapper support
-  for verifying and chaining the boundary fact, coord-key fact, five ECDH
-  facts, five signature facts, and five core-step facts is not yet
-  implemented.
-- Dense `ProcessDeactivateMessages(2,5)` now has a deep split proof path;
-  wrapper support for checking the boundary fact, coord-key fact, command
-  ECDH facts, signature facts, decrypt facts, leaf ECDH facts, and core-step
-  facts is still pending.
+- Dense `ProcessMessages(2,1,5)` and `ProcessDeactivateMessages(2,5)` both
+  have deep split proof paths and wrapper-side fact shapes. The current E2E
+  contract is still a mock round used for validation and cost measurement, not
+  the final production AMACI contract.
 
 ## Commands
 

@@ -25,6 +25,24 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     fixtureCircuit: 'process-messages',
   },
+  'process-messages-stage-native': {
+    prepareCircuit: 'process-messages-stage-native',
+    executable: 'process_messages_stage_native',
+    synthetic: true,
+    fixtureCircuit: 'process-messages',
+  },
+  'process-messages-stage-head2-native': {
+    prepareCircuit: 'process-messages-stage-head2-native',
+    executable: 'process_messages_stage_segment_native',
+    synthetic: true,
+    fixtureCircuit: 'process-messages',
+  },
+  'process-messages-stage-tail3-native': {
+    prepareCircuit: 'process-messages-stage-tail3-native',
+    executable: 'process_messages_stage_segment_native',
+    synthetic: true,
+    fixtureCircuit: 'process-messages',
+  },
   'process-message-coord-key-native': {
     prepareCircuit: 'process-message-coord-key-native',
     executable: 'process_message_coord_key_native',

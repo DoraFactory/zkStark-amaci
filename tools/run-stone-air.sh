@@ -15,6 +15,9 @@ Supported native circuits:
   tally-native
   add-new-key-native
   process-messages-boundary-native
+  process-messages-stage-native
+  process-messages-stage-head2-native
+  process-messages-stage-tail3-native
   process-message-coord-key-native
   process-message-ecdh-native
   process-message-decrypt-native
@@ -146,7 +149,7 @@ done
 
 is_supported_circuit() {
   case "$1" in
-    tally-native|add-new-key-native|process-messages-boundary-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    tally-native|add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-messages-stage-head2-native|process-messages-stage-tail3-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -163,6 +166,9 @@ prepare_circuit_name() {
     tally-native) echo "tally-native" ;;
     add-new-key-native) echo "add-new-key-native" ;;
     process-messages-boundary-native) echo "process-messages-boundary-native" ;;
+    process-messages-stage-native) echo "process-messages-stage-native" ;;
+    process-messages-stage-head2-native) echo "process-messages-stage-head2-native" ;;
+    process-messages-stage-tail3-native) echo "process-messages-stage-tail3-native" ;;
     process-message-coord-key-native) echo "process-message-coord-key-native" ;;
     process-message-ecdh-native) echo "process-message-ecdh-native" ;;
     process-message-decrypt-native) echo "process-message-decrypt-native" ;;
@@ -185,6 +191,8 @@ source_executable_name() {
     tally-native) echo "tally_votes_native" ;;
     add-new-key-native) echo "add_new_key_native" ;;
     process-messages-boundary-native) echo "process_messages_native_boundary" ;;
+    process-messages-stage-native) echo "process_messages_stage_native" ;;
+    process-messages-stage-head2-native|process-messages-stage-tail3-native) echo "process_messages_stage_segment_native" ;;
     process-message-coord-key-native) echo "process_message_coord_key_native" ;;
     process-message-ecdh-native) echo "process_message_ecdh_native" ;;
     process-message-decrypt-native) echo "process_message_decrypt_native" ;;
@@ -204,6 +212,8 @@ source_entry_path() {
   case "$1" in
     add-new-key-native) echo "native_add_new_key::add_new_key_native_main" ;;
     process-messages-boundary-native) echo "native_process_messages::process_messages_native_boundary_main" ;;
+    process-messages-stage-native) echo "native_process_messages_stage::process_messages_stage_native_main" ;;
+    process-messages-stage-head2-native|process-messages-stage-tail3-native) echo "native_process_messages_stage_segment::process_messages_stage_segment_native_main" ;;
     process-message-coord-key-native) echo "native_process_message_components::process_message_coord_key_native_main" ;;
     process-message-ecdh-native) echo "native_process_message_components::process_message_ecdh_native_main" ;;
     process-message-decrypt-native) echo "native_process_message_components::process_message_decrypt_native_main" ;;
@@ -222,7 +232,7 @@ source_entry_path() {
 fixture_circuit_name() {
   case "$1" in
     add-new-key-native) echo "add-new-key" ;;
-    process-messages-boundary-native|process-message-*) echo "process-messages" ;;
+    process-messages-boundary-native|process-messages-stage-native|process-messages-stage-head2-native|process-messages-stage-tail3-native|process-message-*) echo "process-messages" ;;
     process-deactivate-boundary-native|process-deactivate-*) echo "process-deactivate" ;;
     *) echo "" ;;
   esac
@@ -657,6 +667,288 @@ write_stone_wrapper() {
   local circuit="$1"
   local wrapper_file="$2"
 
+  if [[ "$circuit" == "process-messages-stage-head2-native" || "$circuit" == "process-messages-stage-tail3-native" ]]; then
+    cat > "$wrapper_file" <<'EOF'
+use crate::native_process_message_components::{
+    NativeProcessMessageCoordKeyPublicFields as CoordKeyFields,
+    NativeProcessMessageCoordKeyWitness as CoordKeyWitness,
+    NativeProcessMessageDecryptPublicFields as DecryptFields,
+    NativeProcessMessageDecryptWitness as DecryptWitness,
+    NativeProcessMessageEcdhPublicFields as EcdhFields,
+    NativeProcessMessageEcdhWitness as EcdhWitness,
+    NativeProcessMessageSignaturePublicFields as SignatureFields,
+    NativeProcessMessageSignatureWitness as SignatureWitness,
+};
+use crate::native_process_message_step_core::{
+    NativeProcessMessageStepCorePublicFields as CoreFields,
+    NativeProcessMessageStepCoreWitness as CoreWitness,
+};
+use crate::native_process_messages::{
+    ProcessMessagesNativeBoundaryWitness as BoundaryWitness,
+    ProcessMessagesNativePublicFields as BoundaryFields,
+    ProcessMessagesNativePublicOutput as BoundaryOutput,
+};
+use crate::native_process_messages_stage_segment::process_messages_stage_segment_native_main as target_main;
+
+#[executable]
+pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
+    if input.len() == 0 {
+        let mut unreachable_output = array![];
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        return unreachable_output;
+    }
+
+    let mut serialized = input.span();
+    let segment_kind: felt252 = Serde::<felt252>::deserialize(ref serialized).expect('STONE_SEG_KIND');
+    let boundary_fields: BoundaryFields = Serde::<BoundaryFields>::deserialize(ref serialized)
+        .expect('STONE_B_FIELDS');
+    let boundary_witness: BoundaryWitness = Serde::<BoundaryWitness>::deserialize(ref serialized)
+        .expect('STONE_B_WIT');
+    let coord_fields: CoordKeyFields = Serde::<CoordKeyFields>::deserialize(ref serialized)
+        .expect('STONE_CK_FIELDS');
+    let coord_witness: CoordKeyWitness = Serde::<CoordKeyWitness>::deserialize(ref serialized)
+        .expect('STONE_CK_WIT');
+
+    let ecdh_0_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E0_F');
+    let ecdh_0_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E0_W');
+    let decrypt_0_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D0_F');
+    let decrypt_0_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D0_W');
+    let signature_0_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S0_F');
+    let signature_0_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S0_W');
+    let core_0_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE0_F');
+    let core_0_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE0_W');
+
+    let ecdh_1_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E1_F');
+    let ecdh_1_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E1_W');
+    let decrypt_1_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D1_F');
+    let decrypt_1_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D1_W');
+    let signature_1_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S1_F');
+    let signature_1_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S1_W');
+    let core_1_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE1_F');
+    let core_1_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE1_W');
+
+    let ecdh_2_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E2_F');
+    let ecdh_2_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E2_W');
+    let decrypt_2_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D2_F');
+    let decrypt_2_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D2_W');
+    let signature_2_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S2_F');
+    let signature_2_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S2_W');
+    let core_2_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE2_F');
+    let core_2_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE2_W');
+
+    assert(serialized.len() == 0, 'STONE_ARGS');
+
+    let output: BoundaryOutput = target_main(
+        segment_kind,
+        boundary_fields,
+        boundary_witness,
+        coord_fields,
+        coord_witness,
+        ecdh_0_fields,
+        ecdh_0_witness,
+        decrypt_0_fields,
+        decrypt_0_witness,
+        signature_0_fields,
+        signature_0_witness,
+        core_0_fields,
+        core_0_witness,
+        ecdh_1_fields,
+        ecdh_1_witness,
+        decrypt_1_fields,
+        decrypt_1_witness,
+        signature_1_fields,
+        signature_1_witness,
+        core_1_fields,
+        core_1_witness,
+        ecdh_2_fields,
+        ecdh_2_witness,
+        decrypt_2_fields,
+        decrypt_2_witness,
+        signature_2_fields,
+        signature_2_witness,
+        core_2_fields,
+        core_2_witness,
+    );
+    let mut serialized_output = array![];
+    output.serialize(ref serialized_output);
+    serialized_output
+}
+EOF
+    return
+  fi
+
+  if [[ "$circuit" == "process-messages-stage-native" ]]; then
+    cat > "$wrapper_file" <<'EOF'
+use crate::native_process_message_components::{
+    NativeProcessMessageCoordKeyPublicFields as CoordKeyFields,
+    NativeProcessMessageCoordKeyWitness as CoordKeyWitness,
+    NativeProcessMessageDecryptPublicFields as DecryptFields,
+    NativeProcessMessageDecryptWitness as DecryptWitness,
+    NativeProcessMessageEcdhPublicFields as EcdhFields,
+    NativeProcessMessageEcdhWitness as EcdhWitness,
+    NativeProcessMessageSignaturePublicFields as SignatureFields,
+    NativeProcessMessageSignatureWitness as SignatureWitness,
+};
+use crate::native_process_message_step_core::{
+    NativeProcessMessageStepCorePublicFields as CoreFields,
+    NativeProcessMessageStepCoreWitness as CoreWitness,
+};
+use crate::native_process_messages::{
+    ProcessMessagesNativeBoundaryWitness as BoundaryWitness,
+    ProcessMessagesNativePublicFields as BoundaryFields,
+    ProcessMessagesNativePublicOutput as BoundaryOutput,
+};
+use crate::native_process_messages_stage::process_messages_stage_native_main as target_main;
+
+#[executable]
+pub fn stone_main(input: Array<felt252>) -> Array<felt252> {
+    if input.len() == 0 {
+        let mut unreachable_output = array![];
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        unreachable_output.append(0);
+        return unreachable_output;
+    }
+
+    let mut serialized = input.span();
+    let boundary_fields: BoundaryFields = Serde::<BoundaryFields>::deserialize(ref serialized)
+        .expect('STONE_B_FIELDS');
+    let boundary_witness: BoundaryWitness = Serde::<BoundaryWitness>::deserialize(ref serialized)
+        .expect('STONE_B_WIT');
+    let coord_fields: CoordKeyFields = Serde::<CoordKeyFields>::deserialize(ref serialized)
+        .expect('STONE_CK_FIELDS');
+    let coord_witness: CoordKeyWitness = Serde::<CoordKeyWitness>::deserialize(ref serialized)
+        .expect('STONE_CK_WIT');
+
+    let ecdh_0_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E0_F');
+    let ecdh_0_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E0_W');
+    let decrypt_0_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D0_F');
+    let decrypt_0_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D0_W');
+    let signature_0_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S0_F');
+    let signature_0_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S0_W');
+    let core_0_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE0_F');
+    let core_0_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE0_W');
+
+    let ecdh_1_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E1_F');
+    let ecdh_1_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E1_W');
+    let decrypt_1_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D1_F');
+    let decrypt_1_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D1_W');
+    let signature_1_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S1_F');
+    let signature_1_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S1_W');
+    let core_1_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE1_F');
+    let core_1_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE1_W');
+
+    let ecdh_2_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E2_F');
+    let ecdh_2_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E2_W');
+    let decrypt_2_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D2_F');
+    let decrypt_2_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D2_W');
+    let signature_2_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S2_F');
+    let signature_2_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S2_W');
+    let core_2_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE2_F');
+    let core_2_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE2_W');
+
+    let ecdh_3_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E3_F');
+    let ecdh_3_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E3_W');
+    let decrypt_3_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D3_F');
+    let decrypt_3_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D3_W');
+    let signature_3_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S3_F');
+    let signature_3_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S3_W');
+    let core_3_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE3_F');
+    let core_3_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE3_W');
+
+    let ecdh_4_fields: EcdhFields = Serde::<EcdhFields>::deserialize(ref serialized).expect('STONE_E4_F');
+    let ecdh_4_witness: EcdhWitness = Serde::<EcdhWitness>::deserialize(ref serialized).expect('STONE_E4_W');
+    let decrypt_4_fields: DecryptFields = Serde::<DecryptFields>::deserialize(ref serialized).expect('STONE_D4_F');
+    let decrypt_4_witness: DecryptWitness = Serde::<DecryptWitness>::deserialize(ref serialized).expect('STONE_D4_W');
+    let signature_4_fields: SignatureFields = Serde::<SignatureFields>::deserialize(ref serialized).expect('STONE_S4_F');
+    let signature_4_witness: SignatureWitness = Serde::<SignatureWitness>::deserialize(ref serialized).expect('STONE_S4_W');
+    let core_4_fields: CoreFields = Serde::<CoreFields>::deserialize(ref serialized).expect('STONE_CORE4_F');
+    let core_4_witness: CoreWitness = Serde::<CoreWitness>::deserialize(ref serialized).expect('STONE_CORE4_W');
+
+    assert(serialized.len() == 0, 'STONE_ARGS');
+
+    let output: BoundaryOutput = target_main(
+        boundary_fields,
+        boundary_witness,
+        coord_fields,
+        coord_witness,
+        ecdh_0_fields,
+        ecdh_0_witness,
+        decrypt_0_fields,
+        decrypt_0_witness,
+        signature_0_fields,
+        signature_0_witness,
+        core_0_fields,
+        core_0_witness,
+        ecdh_1_fields,
+        ecdh_1_witness,
+        decrypt_1_fields,
+        decrypt_1_witness,
+        signature_1_fields,
+        signature_1_witness,
+        core_1_fields,
+        core_1_witness,
+        ecdh_2_fields,
+        ecdh_2_witness,
+        decrypt_2_fields,
+        decrypt_2_witness,
+        signature_2_fields,
+        signature_2_witness,
+        core_2_fields,
+        core_2_witness,
+        ecdh_3_fields,
+        ecdh_3_witness,
+        decrypt_3_fields,
+        decrypt_3_witness,
+        signature_3_fields,
+        signature_3_witness,
+        core_3_fields,
+        core_3_witness,
+        ecdh_4_fields,
+        ecdh_4_witness,
+        decrypt_4_fields,
+        decrypt_4_witness,
+        signature_4_fields,
+        signature_4_witness,
+        core_4_fields,
+        core_4_witness,
+    );
+    let mut serialized_output = array![];
+    output.serialize(ref serialized_output);
+    serialized_output
+}
+EOF
+    return
+  fi
+
   {
     wrapper_imports "$circuit"
     cat <<'EOF'
@@ -745,6 +1037,9 @@ fi
 PREPARE_CIRCUIT="$(prepare_circuit_name "$CIRCUIT")"
 SOURCE_EXECUTABLE_NAME="$(source_executable_name "$CIRCUIT")"
 STONE_PACKAGE_NAME="zkstark_amaci_$(printf '%s' "$CIRCUIT" | tr '-' '_')_stone"
+if [[ "$CIRCUIT" == "process-messages-stage-head2-native" || "$CIRCUIT" == "process-messages-stage-tail3-native" ]]; then
+  STONE_PACKAGE_NAME="zkstark_amaci_process_messages_stage_segment_native_stone"
+fi
 STONE_EXECUTABLE_NAME="${SOURCE_EXECUTABLE_NAME}_stone"
 STONE_ENTRY_MODULE="stone_entry"
 STONE_ENTRY_FUNCTION="stone_main"
@@ -755,6 +1050,24 @@ case "$CIRCUIT" in
     ;;
   process-messages-boundary-native)
     STONE_MODULES=(native_process_messages "$STONE_ENTRY_MODULE")
+    ;;
+  process-messages-stage-native)
+    STONE_MODULES=(
+      native_process_messages
+      native_process_message_components
+      native_process_message_step_core
+      native_process_messages_stage
+      "$STONE_ENTRY_MODULE"
+    )
+    ;;
+  process-messages-stage-head2-native|process-messages-stage-tail3-native)
+    STONE_MODULES=(
+      native_process_messages
+      native_process_message_components
+      native_process_message_step_core
+      native_process_messages_stage_segment
+      "$STONE_ENTRY_MODULE"
+    )
     ;;
   process-deactivate-boundary-native)
     STONE_MODULES=(native_process_deactivate "$STONE_ENTRY_MODULE")

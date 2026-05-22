@@ -106,7 +106,7 @@ export function createAtlanticQueryBundle(stoneAirRunPath, outDir, options = {})
   ensureFile(absoluteStoneAirRunPath, 'Stone AIR run metadata');
 
   const stoneAirRun = readJson(absoluteStoneAirRunPath);
-  const programSource = resolve(stoneAirRun.runnerSierraJson ?? '');
+  const programSource = resolve(options.programFile ?? stoneAirRun.runnerSierraJson ?? '');
   const inputSource = resolve(stoneAirRun.cairo1ArgsTxt ?? '');
   ensureFile(programSource, 'Atlantic programFile source');
   ensureFile(inputSource, 'Atlantic inputFile source');
