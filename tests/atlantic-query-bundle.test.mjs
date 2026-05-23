@@ -89,8 +89,8 @@ test('can reuse a shared Sierra program file for a different Stone AIR input', (
   writeJson(sharedProgram, { sierra_program: ['0x2'], entry_points_by_type: {} });
   writeFileSync(input, '[1 2 3]\n');
   writeJson(stoneAirRun, {
-    circuit: 'process-messages-stage-tail3-native',
-    stoneExecutable: 'process_messages_stage_segment_native_stone',
+    circuit: 'process-messages-stage-native',
+    stoneExecutable: 'process_messages_stage_native_stone',
     runnerSierraJson: localProgram,
     cairo1ArgsTxt: input,
     layout: 'recursive_with_poseidon',

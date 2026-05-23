@@ -57,10 +57,10 @@ test(
   { skip: !runExecutionTests, timeout: 600000 },
   () => {
     const coordKey = runCircuit('process-message-coord-key-native');
-    const ecdh = runCircuit('process-message-ecdh-native', { messageIndex: 3 });
-    const decrypt = runCircuit('process-message-decrypt-native', { messageIndex: 3 });
-    const signature = runCircuit('process-message-signature-native', { messageIndex: 3 });
-    const core = runCircuit('process-message-step-core-native', { messageIndex: 3 });
+    const ecdh = runCircuit('process-message-ecdh-native', { messageIndex: 2 });
+    const decrypt = runCircuit('process-message-decrypt-native', { messageIndex: 2 });
+    const signature = runCircuit('process-message-signature-native', { messageIndex: 2 });
+    const core = runCircuit('process-message-step-core-native', { messageIndex: 2 });
     assert.equal(coordKey.executable, 'process_message_coord_key_native');
     assert.equal(ecdh.executable, 'process_message_ecdh_native');
     assert.equal(decrypt.executable, 'process_message_decrypt_native');
@@ -84,17 +84,6 @@ test(
   () => {
     const metadata = runCircuit('process-messages-stage-native');
     assert.equal(metadata.executable, 'process_messages_stage_native');
-  },
-);
-
-test(
-  'executes native ProcessMessages stage segment Cairo programs with synthetic fixture args',
-  { skip: !runExecutionTests, timeout: 600000 },
-  () => {
-    const head2 = runCircuit('process-messages-stage-head2-native');
-    const tail3 = runCircuit('process-messages-stage-tail3-native');
-    assert.equal(head2.executable, 'process_messages_stage_segment_native');
-    assert.equal(tail3.executable, 'process_messages_stage_segment_native');
   },
 );
 

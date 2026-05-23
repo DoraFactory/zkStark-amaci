@@ -50,15 +50,11 @@ function buildFixture() {
     [1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n],
     [11n, 12n, 13n, 14n, 15n, 16n, 17n, 18n, 19n, 20n],
     [21n, 22n, 23n, 24n, 25n, 26n, 27n, 28n, 29n, 30n],
-    [31n, 32n, 33n, 34n, 35n, 36n, 37n, 38n, 39n, 40n],
-    [41n, 42n, 43n, 44n, 45n, 46n, 47n, 48n, 49n, 50n],
   ];
   const encPubKeys = [
     [101n, 102n],
     [201n, 202n],
     [0n, 302n],
-    [0n, 402n],
-    [0n, 502n],
   ];
   const batchStartHash = 123n;
   const { endHash: batchEndHash } = processMessageHashChain(msgs, encPubKeys, batchStartHash);
@@ -114,8 +110,8 @@ test('validates the ProcessMessages public boundary and message hash chain', () 
     maxVoteOptions: 5n,
   });
   assert.equal(result.derived.inputHash.toString(), input.inputHash);
-  assert.equal(result.derived.messageHashChain.length, 6);
-  assert.equal(result.derived.messageHashChain[2], result.derived.messageHashChain[5]);
+  assert.equal(result.derived.messageHashChain.length, 4);
+  assert.equal(result.derived.messageHashChain[2], result.derived.messageHashChain[3]);
 });
 
 test('emits stable canonical ProcessMessages public output', () => {
@@ -143,7 +139,7 @@ test('builds Cairo executable arguments for ProcessMessages boundary', () => {
   const cairoInput = buildCairoProcessMessagesInput(input, evaluated);
   const args = serializeCairoProcessMessagesExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 384);
+  assert.equal(args.length, 264);
   assert.equal(args[0], '0x10000000f00000005');
   assert.equal(args[1], '0x0');
   assert.equal(cairoInput.public_output.length, 24);
@@ -165,10 +161,10 @@ test('evaluates a Starknet-native ProcessMessages boundary v2 fixture', { skip: 
   assert.equal(evaluated.publicOutput.labels[1], 'version');
   assert.equal(evaluated.publicOutput.felts[1], 2n);
   assert.equal(evaluated.publicOutput.labels[3], 'hash_scheme');
-  assert.equal(evaluated.derived.messageHashChain.length, 6);
+  assert.equal(evaluated.derived.messageHashChain.length, 4);
   assert.notEqual(evaluated.publicFields.batchEndHash.toString(), legacy.publicFields.batchEndHash.toString());
   assert.ok(evaluated.publicOutput.felts.every((felt) => felt >= 0n && felt < STARK_FIELD));
-  assert.equal(args.length, 81);
+  assert.equal(args.length, 57);
   assert.equal(cairoInput.public_output.length, 16);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });

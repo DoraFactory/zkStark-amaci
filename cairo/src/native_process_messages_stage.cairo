@@ -78,14 +78,6 @@ fn verify_stage_links(
     decrypt_2_fields: DecryptFields,
     signature_2_fields: SignatureFields,
     core_2_fields: CoreFields,
-    ecdh_3_fields: EcdhFields,
-    decrypt_3_fields: DecryptFields,
-    signature_3_fields: SignatureFields,
-    core_3_fields: CoreFields,
-    ecdh_4_fields: EcdhFields,
-    decrypt_4_fields: DecryptFields,
-    signature_4_fields: SignatureFields,
-    core_4_fields: CoreFields,
 ) {
     assert(boundary_fields.coord_pub_key_hash == coord_fields.coord_pub_key_hash, 'S_COORD');
 
@@ -116,34 +108,13 @@ fn verify_stage_links(
         signature_2_fields,
         core_2_fields,
     );
-    verify_message_links(
-        3,
-        boundary_fields,
-        coord_fields,
-        ecdh_3_fields,
-        decrypt_3_fields,
-        signature_3_fields,
-        core_3_fields,
-    );
-    verify_message_links(
-        4,
-        boundary_fields,
-        coord_fields,
-        ecdh_4_fields,
-        decrypt_4_fields,
-        signature_4_fields,
-        core_4_fields,
-    );
-
     assert(core_0_fields.previous_message_hash == boundary_fields.batch_start_hash, 'S_MSG_START');
     assert(core_0_fields.next_message_hash == core_1_fields.previous_message_hash, 'S_MSG_01');
     assert(core_1_fields.next_message_hash == core_2_fields.previous_message_hash, 'S_MSG_12');
-    assert(core_2_fields.next_message_hash == core_3_fields.previous_message_hash, 'S_MSG_23');
-    assert(core_3_fields.next_message_hash == core_4_fields.previous_message_hash, 'S_MSG_34');
-    assert(core_4_fields.next_message_hash == boundary_fields.batch_end_hash, 'S_MSG_END');
+    assert(core_2_fields.next_message_hash == boundary_fields.batch_end_hash, 'S_MSG_END');
 
     assert(
-        core_4_fields.current_state_commitment_hash == boundary_fields.current_state_commitment,
+        core_2_fields.current_state_commitment_hash == boundary_fields.current_state_commitment,
         'S_CUR_COM',
     );
     assert(
@@ -151,16 +122,10 @@ fn verify_stage_links(
         'S_NEW_COM',
     );
     assert(
-        core_4_fields.current_state_root_hash == boundary_witness.current_state_root, 'S_CUR_ROOT',
+        core_2_fields.current_state_root_hash == boundary_witness.current_state_root, 'S_CUR_ROOT',
     );
     assert(core_0_fields.new_state_root_hash == boundary_witness.new_state_root, 'S_NEW_ROOT');
 
-    assert(
-        core_4_fields.new_state_root_hash == core_3_fields.current_state_root_hash, 'S_STATE_43',
-    );
-    assert(
-        core_3_fields.new_state_root_hash == core_2_fields.current_state_root_hash, 'S_STATE_32',
-    );
     assert(
         core_2_fields.new_state_root_hash == core_1_fields.current_state_root_hash, 'S_STATE_21',
     );
@@ -176,12 +141,6 @@ fn verify_stage_links(
     );
     assert(
         core_0_fields.active_state_root_hash == core_2_fields.active_state_root_hash, 'S_ACTIVE_2',
-    );
-    assert(
-        core_0_fields.active_state_root_hash == core_3_fields.active_state_root_hash, 'S_ACTIVE_3',
-    );
-    assert(
-        core_0_fields.active_state_root_hash == core_4_fields.active_state_root_hash, 'S_ACTIVE_4',
     );
 }
 
@@ -215,22 +174,6 @@ pub fn process_messages_stage_native_main(
     signature_2_witness: SignatureWitness,
     core_2_fields: CoreFields,
     core_2_witness: CoreWitness,
-    ecdh_3_fields: EcdhFields,
-    ecdh_3_witness: EcdhWitness,
-    decrypt_3_fields: DecryptFields,
-    decrypt_3_witness: DecryptWitness,
-    signature_3_fields: SignatureFields,
-    signature_3_witness: SignatureWitness,
-    core_3_fields: CoreFields,
-    core_3_witness: CoreWitness,
-    ecdh_4_fields: EcdhFields,
-    ecdh_4_witness: EcdhWitness,
-    decrypt_4_fields: DecryptFields,
-    decrypt_4_witness: DecryptWitness,
-    signature_4_fields: SignatureFields,
-    signature_4_witness: SignatureWitness,
-    core_4_fields: CoreFields,
-    core_4_witness: CoreWitness,
 ) -> BoundaryOutput {
     let _coord_output = process_message_coord_key_native_main(coord_fields, coord_witness);
 
@@ -261,24 +204,6 @@ pub fn process_messages_stage_native_main(
     );
     let _core_2_output = process_message_step_core_native_main(core_2_fields, core_2_witness);
 
-    let _ecdh_3_output = process_message_ecdh_native_main(ecdh_3_fields, ecdh_3_witness);
-    let _decrypt_3_output = process_message_decrypt_native_main(
-        decrypt_3_fields, decrypt_3_witness,
-    );
-    let _signature_3_output = process_message_signature_native_main(
-        signature_3_fields, signature_3_witness,
-    );
-    let _core_3_output = process_message_step_core_native_main(core_3_fields, core_3_witness);
-
-    let _ecdh_4_output = process_message_ecdh_native_main(ecdh_4_fields, ecdh_4_witness);
-    let _decrypt_4_output = process_message_decrypt_native_main(
-        decrypt_4_fields, decrypt_4_witness,
-    );
-    let _signature_4_output = process_message_signature_native_main(
-        signature_4_fields, signature_4_witness,
-    );
-    let _core_4_output = process_message_step_core_native_main(core_4_fields, core_4_witness);
-
     verify_stage_links(
         boundary_fields,
         boundary_witness,
@@ -295,14 +220,6 @@ pub fn process_messages_stage_native_main(
         decrypt_2_fields,
         signature_2_fields,
         core_2_fields,
-        ecdh_3_fields,
-        decrypt_3_fields,
-        signature_3_fields,
-        core_3_fields,
-        ecdh_4_fields,
-        decrypt_4_fields,
-        signature_4_fields,
-        core_4_fields,
     );
 
     process_messages_native_boundary_main(boundary_fields, boundary_witness)

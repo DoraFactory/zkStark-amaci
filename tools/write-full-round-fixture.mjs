@@ -21,7 +21,7 @@ This writes one coherent native round fixture:
   chain.json
 
 The process-messages file is intentionally reused for all per-message native
-component circuits with --message-index 0..4.
+component circuits with --message-index 0..2.
 `;
 }
 

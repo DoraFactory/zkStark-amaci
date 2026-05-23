@@ -96,7 +96,7 @@ function writeProcessMessagesManifest(root) {
     cores: [],
   };
 
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     manifest.ecdh.push(writePreparedRun(
       root,
       `ecdh-${index}`,
@@ -160,7 +160,7 @@ function writeProcessDeactivateManifest(root) {
     cores: [],
   };
 
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     manifest.commandEcdh.push(writePreparedRun(
       root,
       `command-ecdh-${index}`,
@@ -223,7 +223,7 @@ test('validates native ProcessMessages split proof links and detects tampering',
   const report = createNativeSplitLinkReport(manifestPath);
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.name).join('\n'));
   assert.equal(report.kind, 'processMessages');
-  assert.equal(report.counts.proofRuns, 22);
+  assert.equal(report.counts.proofRuns, 14);
   assert.equal(report.counts.failedChecks, 0);
 
   tamperRunField(manifest.ecdh[2], 'shared_key_hash');
@@ -237,11 +237,11 @@ test('validates native ProcessDeactivate split proof links and detects tampering
   const report = createNativeSplitLinkReport(manifestPath);
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.name).join('\n'));
   assert.equal(report.kind, 'processDeactivate');
-  assert.equal(report.counts.proofRuns, 32);
+  assert.equal(report.counts.proofRuns, 20);
   assert.equal(report.counts.failedChecks, 0);
 
-  tamperRunField(manifest.currentDecrypt[3], 'c1_hash');
+  tamperRunField(manifest.currentDecrypt[2], 'c1_hash');
   const tampered = createNativeSplitLinkReport(manifestPath);
   assert.equal(tampered.ok, false);
-  assert.ok(tampered.checks.some((check) => !check.ok && check.name === 'currentDecrypt[3] c1 links to core'));
+  assert.ok(tampered.checks.some((check) => !check.ok && check.name === 'currentDecrypt[2] c1 links to core'));
 });

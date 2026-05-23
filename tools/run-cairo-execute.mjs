@@ -31,18 +31,6 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     fixtureCircuit: 'process-messages',
   },
-  'process-messages-stage-head2-native': {
-    prepareCircuit: 'process-messages-stage-head2-native',
-    executable: 'process_messages_stage_segment_native',
-    synthetic: true,
-    fixtureCircuit: 'process-messages',
-  },
-  'process-messages-stage-tail3-native': {
-    prepareCircuit: 'process-messages-stage-tail3-native',
-    executable: 'process_messages_stage_segment_native',
-    synthetic: true,
-    fixtureCircuit: 'process-messages',
-  },
   'process-message-coord-key-native': {
     prepareCircuit: 'process-message-coord-key-native',
     executable: 'process_message_coord_key_native',
@@ -184,8 +172,9 @@ function parseArgs(argv) {
   if (!Number.isSafeInteger(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error('--timeout-ms must be a positive safe integer');
   }
-  if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex >= 5) {
-    throw new Error('--message-index must be an integer in [0, 4]');
+  const maxMessageIndex = 2;
+  if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex > maxMessageIndex) {
+    throw new Error(`--message-index must be an integer in [0, ${maxMessageIndex}]`);
   }
   return args;
 }

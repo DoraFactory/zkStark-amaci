@@ -13,9 +13,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.deactivateTreeDepth !== 4 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI ProcessDeactivateMessages(2, 5) is supported in this migration step');
+    throw new Error('only AMACI ProcessDeactivateMessages(2, 3) is supported in this migration step');
   }
 }
 

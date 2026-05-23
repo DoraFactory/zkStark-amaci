@@ -19,9 +19,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.deactivateTreeDepth !== 4 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI-STARK v2 ProcessDeactivateNativeBoundary(2, 4, 5) is supported');
+    throw new Error('only AMACI-STARK v2 ProcessDeactivateNativeBoundary(2, 4, 3) is supported');
   }
 }
 

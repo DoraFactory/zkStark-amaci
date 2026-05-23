@@ -13,8 +13,6 @@ Native circuits:
   add-new-key-native
   process-messages-boundary-native
   process-messages-stage-native
-  process-messages-stage-head2-native
-  process-messages-stage-tail3-native
   process-message-coord-key-native
   process-message-ecdh-native
   process-message-decrypt-native
@@ -34,7 +32,8 @@ Notes:
   - tally-native requires an input JSON.
   - The other native circuits can generate the current small synthetic fixture
     when --input is omitted.
-  - Per-message circuits require --message-index 0..4.
+  - ProcessMessages per-message circuits require --message-index 0..2.
+  - ProcessDeactivate per-message circuits require --message-index 0..2.
 
 Flow per circuit:
   1. Prepare canonical Cairo arguments.
@@ -57,8 +56,6 @@ prepare_circuit_name() {
     add-new-key-native) echo "add-new-key-native" ;;
     process-messages-boundary-native) echo "process-messages-boundary-native" ;;
     process-messages-stage-native) echo "process-messages-stage-native" ;;
-    process-messages-stage-head2-native) echo "process-messages-stage-head2-native" ;;
-    process-messages-stage-tail3-native) echo "process-messages-stage-tail3-native" ;;
     process-message-coord-key-native) echo "process-message-coord-key-native" ;;
     process-message-ecdh-native) echo "process-message-ecdh-native" ;;
     process-message-decrypt-native) echo "process-message-decrypt-native" ;;
@@ -82,7 +79,6 @@ executable_name() {
     add-new-key-native) echo "add_new_key_native" ;;
     process-messages-boundary-native) echo "process_messages_native_boundary" ;;
     process-messages-stage-native) echo "process_messages_stage_native" ;;
-    process-messages-stage-head2-native|process-messages-stage-tail3-native) echo "process_messages_stage_segment_native" ;;
     process-message-coord-key-native) echo "process_message_coord_key_native" ;;
     process-message-ecdh-native) echo "process_message_ecdh_native" ;;
     process-message-decrypt-native) echo "process_message_decrypt_native" ;;
@@ -100,7 +96,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-messages-stage-head2-native|process-messages-stage-tail3-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -115,7 +111,7 @@ requires_message_index() {
 fixture_circuit_name() {
   case "$1" in
     add-new-key-native) echo "add-new-key" ;;
-    process-messages-boundary-native|process-messages-stage-native|process-messages-stage-head2-native|process-messages-stage-tail3-native|process-message-*) echo "process-messages" ;;
+    process-messages-boundary-native|process-messages-stage-native|process-message-*) echo "process-messages" ;;
     process-deactivate-boundary-native|process-deactivate-*) echo "process-deactivate" ;;
     *) echo "" ;;
   esac
@@ -200,8 +196,9 @@ run_one() {
       echo "$circuit requires --message-index" >&2
       exit 1
     fi
-    if ! [[ "$message_index" =~ ^[0-4]$ ]]; then
-      echo "--message-index must be an integer in [0, 4]" >&2
+    local max_message_index=2
+    if ! [[ "$message_index" =~ ^[0-9]+$ ]] || (( message_index > max_message_index )); then
+      echo "--message-index must be an integer in [0, $max_message_index]" >&2
       exit 1
     fi
   fi

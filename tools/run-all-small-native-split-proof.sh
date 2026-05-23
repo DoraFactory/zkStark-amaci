@@ -11,8 +11,8 @@ Usage:
 Runs the Starknet-native proof-feasibility path with split message circuits:
   1. tally-native
   2. add-new-key-native
-  3. process-messages native split boundary + 5 steps
-  4. process-deactivate native split boundary + 5 steps
+  3. process-messages native split boundary + 3 steps
+  4. process-deactivate native split boundary + 3 steps
 EOF
 }
 

@@ -217,14 +217,6 @@ test('builds an Atlantic metadata process-messages submit command', () => {
   assert.equal(stageResult.blockers.length, 0);
   assert.match(stageResult.submit.command, /submit_process_messages_atlantic_metadata_fact/);
 
-  const stageSegmentResult = buildAtlanticMockRoundCall({
-    summary: metadataBootloadedSummary(metadata),
-    metadata,
-    wrapperAddress: '0xabc',
-    operation: 'process-messages-stage-tail3-native',
-  });
-  assert.equal(stageSegmentResult.blockers.length, 0);
-  assert.match(stageSegmentResult.submit.command, /submit_process_messages_atlantic_metadata_fact/);
 });
 
 test('builds an Atlantic metadata process-deactivate submit command with state override', () => {

@@ -6,6 +6,5 @@ mod native_process_message_components;
 mod native_process_message_step_core;
 mod native_process_messages;
 mod native_process_messages_stage;
-mod native_process_messages_stage_segment;
 mod native_tally_votes;
 mod stone_native_tally_votes;

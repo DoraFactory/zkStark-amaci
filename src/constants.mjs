@@ -19,13 +19,13 @@ export const SMALL_TALLY_PARAMS = Object.freeze({
 export const SMALL_PROCESS_MESSAGES_PARAMS = Object.freeze({
   stateTreeDepth: 2,
   voteOptionTreeDepth: 1,
-  messageBatchSize: 5,
+  messageBatchSize: 3,
 });
 
 export const SMALL_PROCESS_DEACTIVATE_PARAMS = Object.freeze({
   stateTreeDepth: 2,
   deactivateTreeDepth: 4,
-  messageBatchSize: 5,
+  messageBatchSize: 3,
 });
 
 export const PUBLIC_OUTPUT_MAGIC = 0x4d414349535441524bn; // MACISTARK

@@ -877,9 +877,7 @@ fn assert_valid_message_index(message_index: felt252) {
     assert(
         message_index == 0
             || message_index == 1
-            || message_index == 2
-            || message_index == 3
-            || message_index == 4,
+            || message_index == 2,
         'BAD_MSG_INDEX',
     );
 }
@@ -971,7 +969,7 @@ fn build_native_process_message_coord_key_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         coord_key_binding_hash: fields.coord_key_binding_hash,
@@ -996,7 +994,7 @@ fn build_native_process_message_ecdh_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         enc_pub_key_hash: fields.enc_pub_key_hash,
@@ -1023,7 +1021,7 @@ fn build_native_process_message_decrypt_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         c1_hash: fields.c1_hash,
@@ -1051,7 +1049,7 @@ fn build_native_process_message_signature_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         pub_key_hash: fields.pub_key_hash,
         r8_hash: fields.r8_hash,
@@ -1189,7 +1187,7 @@ fn verify_native_process_message_step_core(
     };
     assert(native_new_state_root == fields.new_state_root_hash, 'N_NEW_ROOT');
 
-    if fields.message_index == 4 {
+    if fields.message_index == 2 {
         let current_state_commitment = native_felt_commitment(
             native_current_state_root, witness.current_state_salt,
         );
@@ -1211,7 +1209,7 @@ fn build_native_process_message_step_core_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         packed_vals_hash: fields.packed_vals_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,

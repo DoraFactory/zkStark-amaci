@@ -104,10 +104,10 @@ function classifyProcessDeactivate(input) {
     processOneCount: arrayLength(input.processOneWitnesses),
   };
   const supported =
-    shape.messageCount === 5 &&
+    shape.messageCount === 3 &&
     shape.messageWidth === 10 &&
-    shape.encPubKeyCount === 5 &&
-    shape.processOneCount === 5 &&
+    shape.encPubKeyCount === 3 &&
+    shape.processOneCount === 3 &&
     input.newDeactivateRoot !== undefined;
   return {
     circuit: 'process-deactivate',
@@ -116,7 +116,7 @@ function classifyProcessDeactivate(input) {
     shape,
     unsupportedReason: supported
       ? undefined
-      : 'current Cairo target only supports ProcessDeactivateMessages(2,5) with prepared ProcessOne witnesses',
+      : 'current Cairo target only supports ProcessDeactivateMessages(2,3) with prepared ProcessOne witnesses',
   };
 }
 

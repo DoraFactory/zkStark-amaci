@@ -19,9 +19,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.voteOptionTreeDepth !== 1 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI ProcessMessages(2, 1, 5) is supported in this migration step');
+    throw new Error('only AMACI ProcessMessages(2, 1, 3) is supported');
   }
 }
 
@@ -104,13 +104,8 @@ export function processMessageHash(message, encPubKey, prevHash) {
 }
 
 export function processMessageHashChain(messages, encPubKeys, batchStartHash) {
-  expectMatrixShape(messages, SMALL_PROCESS_MESSAGES_PARAMS.messageBatchSize, MSG_LENGTH, 'msgs');
-  expectMatrixShape(
-    encPubKeys,
-    SMALL_PROCESS_MESSAGES_PARAMS.messageBatchSize,
-    ENC_PUB_KEY_LENGTH,
-    'encPubKeys',
-  );
+  expectMatrixShape(messages, messages.length, MSG_LENGTH, 'msgs');
+  expectMatrixShape(encPubKeys, messages.length, ENC_PUB_KEY_LENGTH, 'encPubKeys');
 
   const chain = [parseBigInt(batchStartHash, 'batchStartHash')];
   for (let i = 0; i < messages.length; i += 1) {

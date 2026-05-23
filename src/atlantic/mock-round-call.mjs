@@ -535,9 +535,7 @@ function operationFromInput(operation = 'tally') {
     normalized === 'process-messages' ||
     normalized === 'processmessages' ||
     normalized === 'process-messages-boundary-native' ||
-    normalized === 'process-messages-stage-native' ||
-    normalized === 'process-messages-stage-head2-native' ||
-    normalized === 'process-messages-stage-tail3-native'
+    normalized === 'process-messages-stage-native'
   ) {
     return 'processMessages';
   }

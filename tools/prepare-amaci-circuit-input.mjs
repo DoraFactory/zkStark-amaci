@@ -22,14 +22,11 @@ import {
 import { evaluateProcessMessagesStateful } from '../src/msg/process-messages.mjs';
 import {
   evaluateNativeProcessMessagesBoundary,
-  evaluateNativeProcessMessagesBoundarySegment,
 } from '../src/msg/native-process-messages.mjs';
 import {
   buildNativeCairoProcessMessagesBoundaryInput,
-  buildNativeCairoProcessMessagesStageSegmentInput,
   buildNativeCairoProcessMessagesStageInput,
   serializeNativeCairoProcessMessagesBoundaryExecutableArgs,
-  serializeNativeCairoProcessMessagesStageSegmentExecutableArgs,
   serializeNativeCairoProcessMessagesStageExecutableArgs,
 } from '../src/msg/native-cairo-input.mjs';
 import { evaluateAddNewKey } from '../src/add-new-key/add-new-key.mjs';
@@ -80,28 +77,6 @@ const PREPARERS = {
     evaluate: evaluateNativeProcessMessagesBoundary,
     build: buildNativeCairoProcessMessagesStageInput,
     serialize: serializeNativeCairoProcessMessagesStageExecutableArgs,
-  },
-  'process-messages-stage-head2-native': {
-    executable: 'process_messages_stage_segment_native',
-    evaluate: (input) =>
-      evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 0, endIndex: 2 }),
-    build: (input, evaluated) =>
-      buildNativeCairoProcessMessagesStageSegmentInput(input, evaluated, {
-        startIndex: 0,
-        endIndex: 2,
-      }),
-    serialize: serializeNativeCairoProcessMessagesStageSegmentExecutableArgs,
-  },
-  'process-messages-stage-tail3-native': {
-    executable: 'process_messages_stage_segment_native',
-    evaluate: (input) =>
-      evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 2, endIndex: 5 }),
-    build: (input, evaluated) =>
-      buildNativeCairoProcessMessagesStageSegmentInput(input, evaluated, {
-        startIndex: 2,
-        endIndex: 5,
-      }),
-    serialize: serializeNativeCairoProcessMessagesStageSegmentExecutableArgs,
   },
   'process-message-coord-key-native': {
     executable: 'process_message_coord_key_native',
@@ -256,8 +231,13 @@ function parseArgs(argv) {
   }
   const preparer = PREPARERS[args.circuit];
   if (preparer.requiresMessageIndex) {
-    if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex >= 5) {
-      throw new Error('--message-index must be an integer in [0, 4]');
+    const maxMessageIndex = 2;
+    if (
+      !Number.isInteger(args.messageIndex) ||
+      args.messageIndex < 0 ||
+      args.messageIndex > maxMessageIndex
+    ) {
+      throw new Error(`--message-index must be an integer in [0, ${maxMessageIndex}]`);
     }
   }
   return args;

@@ -13,6 +13,7 @@ import {
   PROCESS_DEACTIVATE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_COORD_PRIV_KEY_HASH_DOMAIN,
   PUBLIC_OUTPUT_MAGIC,
+  SMALL_PROCESS_DEACTIVATE_PARAMS,
   STARKNET_POSEIDON_HASH_SCHEME,
 } from '../constants.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
@@ -503,7 +504,7 @@ function deactivateMessagePreimage(message, encPubKey, prevHash) {
 function buildDeactivateMessageHashClaims(rawInput) {
   const claims = [];
   let prevHash = BigInt(rawInput.batchStartHash);
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < SMALL_PROCESS_DEACTIVATE_PARAMS.messageBatchSize; i += 1) {
     const preimage = deactivateMessagePreimage(rawInput.msgs[i], rawInput.encPubKeys[i], prevHash);
     const messageHash = processDeactivateMessageHash(rawInput.msgs[i], rawInput.encPubKeys[i], prevHash);
     claims.push(hash13Claim(preimage, messageHash, `deactivateMessageHash${i}`));
@@ -528,13 +529,9 @@ function buildCairoProcessDeactivateMessagesBoundaryWitness(rawInput, evaluated)
     msg_0: splitVector10(rawInput.msgs[0], 'msgs[0]'),
     msg_1: splitVector10(rawInput.msgs[1], 'msgs[1]'),
     msg_2: splitVector10(rawInput.msgs[2], 'msgs[2]'),
-    msg_3: splitVector10(rawInput.msgs[3], 'msgs[3]'),
-    msg_4: splitVector10(rawInput.msgs[4], 'msgs[4]'),
     enc_pub_key_0: splitVector2(rawInput.encPubKeys[0], 'encPubKeys[0]'),
     enc_pub_key_1: splitVector2(rawInput.encPubKeys[1], 'encPubKeys[1]'),
     enc_pub_key_2: splitVector2(rawInput.encPubKeys[2], 'encPubKeys[2]'),
-    enc_pub_key_3: splitVector2(rawInput.encPubKeys[3], 'encPubKeys[3]'),
-    enc_pub_key_4: splitVector2(rawInput.encPubKeys[4], 'encPubKeys[4]'),
     hashes: {
       coord_pub_key_hash: hash2Claim(
         rawInput.coordPubKey[0],
@@ -565,8 +562,6 @@ function buildCairoProcessDeactivateMessagesBoundaryWitness(rawInput, evaluated)
       message_hash_0: messageHashClaims[0],
       message_hash_1: messageHashClaims[1],
       message_hash_2: messageHashClaims[2],
-      message_hash_3: messageHashClaims[3],
-      message_hash_4: messageHashClaims[4],
     },
   };
 }
@@ -613,8 +608,6 @@ function buildProcessDeactivateMessagesStateTransitionWitness(result) {
     process_one_0: buildProcessDeactivateOneWitness(result.transitions[0]),
     process_one_1: buildProcessDeactivateOneWitness(result.transitions[1]),
     process_one_2: buildProcessDeactivateOneWitness(result.transitions[2]),
-    process_one_3: buildProcessDeactivateOneWitness(result.transitions[3]),
-    process_one_4: buildProcessDeactivateOneWitness(result.transitions[4]),
   };
 }
 
@@ -699,8 +692,6 @@ export function buildCairoProcessDeactivateMessagesStatefulInput(rawInput, evalu
         command_0: buildCairoProcessDeactivateMessageCommandWitness(rawInput, result.state, 0),
         command_1: buildCairoProcessDeactivateMessageCommandWitness(rawInput, result.state, 1),
         command_2: buildCairoProcessDeactivateMessageCommandWitness(rawInput, result.state, 2),
-        command_3: buildCairoProcessDeactivateMessageCommandWitness(rawInput, result.state, 3),
-        command_4: buildCairoProcessDeactivateMessageCommandWitness(rawInput, result.state, 4),
         new_deactivate_commitment: hash2Claim(
           result.derived.newActiveStateRoot,
           result.derived.newDeactivateRoot,
@@ -715,8 +706,9 @@ export function buildCairoProcessDeactivateMessagesStatefulInput(rawInput, evalu
 }
 
 function assertMessageIndex(messageIndex) {
-  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= 5) {
-    throw new Error('messageIndex must be an integer in [0, 4]');
+  const maxMessageIndex = SMALL_PROCESS_DEACTIVATE_PARAMS.messageBatchSize - 1;
+  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex > maxMessageIndex) {
+    throw new Error(`messageIndex must be an integer in [0, ${maxMessageIndex}]`);
   }
 }
 
@@ -2156,21 +2148,15 @@ function pushProcessDeactivateMessagesBoundaryWitness(args, witness) {
   pushVector10(args, witness.msg_0);
   pushVector10(args, witness.msg_1);
   pushVector10(args, witness.msg_2);
-  pushVector10(args, witness.msg_3);
-  pushVector10(args, witness.msg_4);
   pushVector2(args, witness.enc_pub_key_0);
   pushVector2(args, witness.enc_pub_key_1);
   pushVector2(args, witness.enc_pub_key_2);
-  pushVector2(args, witness.enc_pub_key_3);
-  pushVector2(args, witness.enc_pub_key_4);
   pushHash2Claim(args, witness.hashes.coord_pub_key_hash);
   pushSha256U256x8Claim(args, witness.hashes.input_hash);
   pushHash2Claim(args, witness.hashes.current_deactivate_commitment);
   pushHash13Claim(args, witness.hashes.message_hash_0);
   pushHash13Claim(args, witness.hashes.message_hash_1);
   pushHash13Claim(args, witness.hashes.message_hash_2);
-  pushHash13Claim(args, witness.hashes.message_hash_3);
-  pushHash13Claim(args, witness.hashes.message_hash_4);
 }
 
 function pushProcessDeactivateMessagesStateTransitionWitness(args, witness) {
@@ -2183,8 +2169,6 @@ function pushProcessDeactivateMessagesStateTransitionWitness(args, witness) {
   pushProcessDeactivateOneWitness(args, witness.process_one_0);
   pushProcessDeactivateOneWitness(args, witness.process_one_1);
   pushProcessDeactivateOneWitness(args, witness.process_one_2);
-  pushProcessDeactivateOneWitness(args, witness.process_one_3);
-  pushProcessDeactivateOneWitness(args, witness.process_one_4);
 }
 
 function pushProcessDeactivateMessagesStatefulWitness(args, witness) {
@@ -2194,8 +2178,6 @@ function pushProcessDeactivateMessagesStatefulWitness(args, witness) {
   pushProcessDeactivateMessageCommandWitness(args, witness.command_0);
   pushProcessDeactivateMessageCommandWitness(args, witness.command_1);
   pushProcessDeactivateMessageCommandWitness(args, witness.command_2);
-  pushProcessDeactivateMessageCommandWitness(args, witness.command_3);
-  pushProcessDeactivateMessageCommandWitness(args, witness.command_4);
   pushHash2Claim(args, witness.new_deactivate_commitment);
 }
 

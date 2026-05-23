@@ -25,9 +25,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.voteOptionTreeDepth !== 1 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI-STARK v2 ProcessMessagesNativeBoundary(2, 1, 5) is supported');
+    throw new Error('only AMACI-STARK v2 ProcessMessagesNativeBoundary(2, 1, 3) is supported');
   }
 }
 
@@ -140,7 +140,7 @@ export function evaluateNativeProcessMessagesBoundary(rawInput, params = SMALL_P
   const packedVals = toStarkFelt(packProcessMessagesVals(unpacked), 'packedVals');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');
   const nativeState = Array.isArray(rawInput.processOneWitnesses)
-    ? nativeProcessMessagesStateRoots(evaluateProcessMessagesStateful(rawInput).state)
+    ? nativeProcessMessagesStateRoots(evaluateProcessMessagesStateful(rawInput).state, rawInput)
     : undefined;
   const currentStateRoot = nativeState?.currentStateRoot ?? toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
   const currentStateSalt = toStarkFelt(rawInput.currentStateSalt, 'currentStateSalt');
@@ -234,7 +234,7 @@ function validateSegment(segment) {
     startIndex >= endIndex ||
     endIndex > SMALL_PROCESS_MESSAGES_PARAMS.messageBatchSize
   ) {
-    throw new Error('ProcessMessages segment must satisfy 0 <= startIndex < endIndex <= 5');
+    throw new Error('ProcessMessages segment must satisfy 0 <= startIndex < endIndex <= 3');
   }
   const length = endIndex - startIndex;
   if (length !== 2 && length !== 3) {
@@ -252,7 +252,7 @@ export function evaluateNativeProcessMessagesBoundarySegment(
   const { startIndex, endIndex, length } = validateSegment(segment);
   const full = evaluateNativeProcessMessagesBoundary(rawInput, params);
   const stateful = evaluateProcessMessagesStateful(rawInput);
-  const transitionContexts = nativeProcessMessageTransitionContexts(stateful.state);
+  const transitionContexts = nativeProcessMessageTransitionContexts(stateful.state, rawInput);
 
   const msgs = [];
   const encPubKeys = [];

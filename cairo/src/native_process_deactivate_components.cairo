@@ -24,6 +24,7 @@ const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
     0x414d4143495f44454143545f534841524544;
 const NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN: felt252 =
     0x414d4143495f44454143545f4445435f42494e44;
+const PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE: felt252 = 3;
 const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 
 #[derive(Copy, Drop, Serde)]
@@ -338,9 +339,7 @@ fn assert_valid_deactivate_message_index(message_index: felt252) {
     assert(
         message_index == 0
             || message_index == 1
-            || message_index == 2
-            || message_index == 3
-            || message_index == 4,
+            || message_index == 2,
         'BAD_DEACT_MSG_INDEX',
     );
 }
@@ -458,7 +457,7 @@ fn build_native_process_deactivate_coord_key_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         coord_key_binding_hash: fields.coord_key_binding_hash,
@@ -484,7 +483,7 @@ fn build_native_process_deactivate_ecdh_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         ecdh_kind: fields.ecdh_kind,
         coord_priv_key_hash: fields.coord_priv_key_hash,
@@ -512,7 +511,7 @@ fn build_native_process_deactivate_signature_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         pub_key_hash: fields.pub_key_hash,
         r8_hash: fields.r8_hash,
@@ -541,7 +540,7 @@ fn build_native_process_deactivate_decrypt_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         decrypt_kind: fields.decrypt_kind,
         coord_priv_key_hash: fields.coord_priv_key_hash,

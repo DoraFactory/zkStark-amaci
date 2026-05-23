@@ -11,10 +11,10 @@ Usage:
 Runs the small ProcessMessages native split relation through Stone:
   1. one process-messages-boundary-native proof
   2. one process-message-coord-key-native proof
-  3. five process-message-ecdh-native proofs
-  4. five process-message-decrypt-native proofs
-  5. five process-message-signature-native proofs
-  6. five process-message-step-core-native proofs
+  3. three process-message-ecdh-native proofs
+  4. three process-message-decrypt-native proofs
+  5. three process-message-signature-native proofs
+  6. three process-message-step-core-native proofs
 
 If --input is omitted, the current small synthetic ProcessMessages fixture is
 generated under the output directory.
@@ -73,7 +73,7 @@ run_stone_one() {
 run_stone_one process-messages-boundary-native "$OUT_DIR/boundary"
 run_stone_one process-message-coord-key-native "$OUT_DIR/coord-key"
 
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   run_stone_one process-message-ecdh-native "$OUT_DIR/ecdh-$message_index" "$message_index"
   run_stone_one process-message-decrypt-native "$OUT_DIR/decrypt-$message_index" "$message_index"
   run_stone_one process-message-signature-native "$OUT_DIR/signature-$message_index" "$message_index"
@@ -85,36 +85,36 @@ printf '{\n' > "$MANIFEST"
 printf '  "boundary": "%s",\n' "$OUT_DIR/boundary/stone-proof/proof-run.json" >> "$MANIFEST"
 printf '  "coordKey": "%s",\n' "$OUT_DIR/coord-key/stone-proof/proof-run.json" >> "$MANIFEST"
 printf '  "ecdh": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/ecdh-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "decrypt": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/decrypt-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "signatures": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/signature-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "cores": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/core-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"

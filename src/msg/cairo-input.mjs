@@ -13,6 +13,7 @@ import {
   PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID,
   PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID,
   PUBLIC_OUTPUT_MAGIC,
+  SMALL_PROCESS_MESSAGES_PARAMS,
   STARKNET_POSEIDON_HASH_SCHEME,
 } from '../constants.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
@@ -356,7 +357,7 @@ function messagePreimage(message, encPubKey, prevHash) {
 function buildMessageHashClaims(rawInput) {
   const claims = [];
   let prevHash = BigInt(rawInput.batchStartHash);
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < rawInput.msgs.length; i += 1) {
     const preimage = messagePreimage(rawInput.msgs[i], rawInput.encPubKeys[i], prevHash);
     const messageHash = processMessageHash(rawInput.msgs[i], rawInput.encPubKeys[i], prevHash);
     claims.push(hash13Claim(preimage, messageHash, `messageHash${i}`));
@@ -383,13 +384,9 @@ function buildCairoProcessMessagesBoundaryWitness(rawInput, evaluated) {
     msg_0: splitVector10(rawInput.msgs[0], 'msgs[0]'),
     msg_1: splitVector10(rawInput.msgs[1], 'msgs[1]'),
     msg_2: splitVector10(rawInput.msgs[2], 'msgs[2]'),
-    msg_3: splitVector10(rawInput.msgs[3], 'msgs[3]'),
-    msg_4: splitVector10(rawInput.msgs[4], 'msgs[4]'),
     enc_pub_key_0: splitVector2(rawInput.encPubKeys[0], 'encPubKeys[0]'),
     enc_pub_key_1: splitVector2(rawInput.encPubKeys[1], 'encPubKeys[1]'),
     enc_pub_key_2: splitVector2(rawInput.encPubKeys[2], 'encPubKeys[2]'),
-    enc_pub_key_3: splitVector2(rawInput.encPubKeys[3], 'encPubKeys[3]'),
-    enc_pub_key_4: splitVector2(rawInput.encPubKeys[4], 'encPubKeys[4]'),
     hashes: {
       coord_pub_key_hash: hash2Claim(
         rawInput.coordPubKey[0],
@@ -432,8 +429,6 @@ function buildCairoProcessMessagesBoundaryWitness(rawInput, evaluated) {
       message_hash_0: messageHashClaims[0],
       message_hash_1: messageHashClaims[1],
       message_hash_2: messageHashClaims[2],
-      message_hash_3: messageHashClaims[3],
-      message_hash_4: messageHashClaims[4],
     },
   };
 }
@@ -643,8 +638,9 @@ export function buildCairoProcessOneWithEcdhSignatureInput(rawInput, ecdhInput, 
 }
 
 function assertMessageIndex(messageIndex) {
-  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= 5) {
-    throw new Error('messageIndex must be an integer in [0, 4]');
+  const maxIndex = SMALL_PROCESS_MESSAGES_PARAMS.messageBatchSize - 1;
+  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex > maxIndex) {
+    throw new Error(`messageIndex must be an integer in [0, ${maxIndex}]`);
   }
 }
 
@@ -1382,7 +1378,7 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
   const transition = result.state.transitions[messageIndex];
   const linkFields = processMessageStepLinkFields(rawInput, messageIndex, result);
   const nativeMsgChain = nativeMessageHashChain(rawInput.msgs, rawInput.encPubKeys, rawInput.batchStartHash);
-  const nativeContext = nativeProcessMessageTransitionContexts(result.state)[messageIndex];
+  const nativeContext = nativeProcessMessageTransitionContexts(result.state, rawInput)[messageIndex];
   legacy.program_input.witness.process_one.state_leaf_path_0 = splitVector4(
     nativeContext.stateLeafPathElements[0],
     'nativeStateLeafPathElements[0]',
@@ -1549,13 +1545,9 @@ export function buildCairoProcessMessagesStateTransitionInput(rawInput, evaluate
     state_decrypt_0: buildProcessOneStateDecryptWitness(result.transitions[0], 0),
     state_decrypt_1: buildProcessOneStateDecryptWitness(result.transitions[1], 1),
     state_decrypt_2: buildProcessOneStateDecryptWitness(result.transitions[2], 2),
-    state_decrypt_3: buildProcessOneStateDecryptWitness(result.transitions[3], 3),
-    state_decrypt_4: buildProcessOneStateDecryptWitness(result.transitions[4], 4),
     process_one_0: buildProcessOneStateTransitionWitnessFromEvaluation(result.transitions[0]),
     process_one_1: buildProcessOneStateTransitionWitnessFromEvaluation(result.transitions[1]),
     process_one_2: buildProcessOneStateTransitionWitnessFromEvaluation(result.transitions[2]),
-    process_one_3: buildProcessOneStateTransitionWitnessFromEvaluation(result.transitions[3]),
-    process_one_4: buildProcessOneStateTransitionWitnessFromEvaluation(result.transitions[4]),
   };
 
   return {
@@ -1631,7 +1623,7 @@ function buildStatefulEcdhWitness(rawInput, result, boundaryInput, stateTransiti
     coord_pub_key: coordPubKeyCairoInput.program_input.witness,
   };
 
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < result.params.messageBatchSize; i += 1) {
     const ecdhCairoInput = buildCairoEcdhSharedKeyInput(ecdhInputForMessage(rawInput, i));
     if (BigInt(rawInput.encPubKeys[i][0]) !== 0n) {
       const [expectedX, expectedY] = ecdhCairoInput.expected;
@@ -1678,7 +1670,7 @@ export function buildCairoProcessMessagesStatefulWithEcdhInput(rawInput, evaluat
 
 function buildStatefulEcdhSignatureWitness(rawInput, result, boundaryInput, stateTransitionInput) {
   const witness = buildStatefulEcdhWitness(rawInput, result, boundaryInput, stateTransitionInput);
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < result.params.messageBatchSize; i += 1) {
     const signatureCairoInput = buildProcessOneSignatureInputForTransition(
       result.state.transitions[i],
       i,
@@ -1962,13 +1954,9 @@ function pushProcessMessagesWitness(args, witness) {
   pushVector10(args, witness.msg_0);
   pushVector10(args, witness.msg_1);
   pushVector10(args, witness.msg_2);
-  pushVector10(args, witness.msg_3);
-  pushVector10(args, witness.msg_4);
   pushVector2(args, witness.enc_pub_key_0);
   pushVector2(args, witness.enc_pub_key_1);
   pushVector2(args, witness.enc_pub_key_2);
-  pushVector2(args, witness.enc_pub_key_3);
-  pushVector2(args, witness.enc_pub_key_4);
   pushHash2Claim(args, witness.hashes.coord_pub_key_hash);
   pushSha256U256x8Claim(args, witness.hashes.input_hash);
   pushHash2Claim(args, witness.hashes.current_state_commitment);
@@ -1977,8 +1965,6 @@ function pushProcessMessagesWitness(args, witness) {
   pushHash13Claim(args, witness.hashes.message_hash_0);
   pushHash13Claim(args, witness.hashes.message_hash_1);
   pushHash13Claim(args, witness.hashes.message_hash_2);
-  pushHash13Claim(args, witness.hashes.message_hash_3);
-  pushHash13Claim(args, witness.hashes.message_hash_4);
 }
 
 function pushProcessOneStateTransitionWitness(args, witness) {
@@ -2167,13 +2153,9 @@ function pushProcessMessagesStateTransitionWitness(args, witness) {
   pushElGamalDecryptWitness(args, witness.state_decrypt_0);
   pushElGamalDecryptWitness(args, witness.state_decrypt_1);
   pushElGamalDecryptWitness(args, witness.state_decrypt_2);
-  pushElGamalDecryptWitness(args, witness.state_decrypt_3);
-  pushElGamalDecryptWitness(args, witness.state_decrypt_4);
   pushProcessOneStateTransitionWitness(args, witness.process_one_0);
   pushProcessOneStateTransitionWitness(args, witness.process_one_1);
   pushProcessOneStateTransitionWitness(args, witness.process_one_2);
-  pushProcessOneStateTransitionWitness(args, witness.process_one_3);
-  pushProcessOneStateTransitionWitness(args, witness.process_one_4);
 }
 
 function pushProcessMessagesStatefulWitness(args, witness) {
@@ -2189,8 +2171,6 @@ function pushProcessMessagesStatefulWithEcdhWitness(args, witness) {
   pushBabyjubScalarMulWitness(args, witness.ecdh_0);
   pushBabyjubScalarMulWitness(args, witness.ecdh_1);
   pushBabyjubScalarMulWitness(args, witness.ecdh_2);
-  pushBabyjubScalarMulWitness(args, witness.ecdh_3);
-  pushBabyjubScalarMulWitness(args, witness.ecdh_4);
 }
 
 function pushProcessMessagesStatefulWithEcdhSignatureWitness(args, witness) {
@@ -2198,8 +2178,6 @@ function pushProcessMessagesStatefulWithEcdhSignatureWitness(args, witness) {
   pushBabyjubPoseidonSignatureWitness(args, witness.signature_0);
   pushBabyjubPoseidonSignatureWitness(args, witness.signature_1);
   pushBabyjubPoseidonSignatureWitness(args, witness.signature_2);
-  pushBabyjubPoseidonSignatureWitness(args, witness.signature_3);
-  pushBabyjubPoseidonSignatureWitness(args, witness.signature_4);
 }
 
 export function serializeCairoProcessMessagesExecutableArgs(cairoInput) {

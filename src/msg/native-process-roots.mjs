@@ -134,8 +134,8 @@ export function nativeProcessMessageTransitionRoots(transition) {
   };
 }
 
-export function nativeProcessMessagesStateRoots(stateResult) {
-  const transitionRoots = nativeProcessMessageTransitionContexts(stateResult);
+export function nativeProcessMessagesStateRoots(stateResult, contextInput) {
+  const transitionRoots = nativeProcessMessageTransitionContexts(stateResult, contextInput);
   return {
     transitionRoots,
     currentStateRoot: transitionRoots.at(-1).currentStateRoot,
@@ -212,6 +212,66 @@ function updateStateMaps(nodeMap, stateIndex, level0Children, level1Children, le
   nodeMap.set(mapKey(2, 0), nativeHash5(level1Children, 'stateMap.root'));
 }
 
+function initializeFullNativeStateMaps(stateNodeMap, voteNodeMaps, contextInput) {
+  if (
+    !contextInput ||
+    !Array.isArray(contextInput.initialStateLeaves) ||
+    !Array.isArray(contextInput.initialVoteLeavesByState)
+  ) {
+    return false;
+  }
+
+  const stateCapacity = TREE_ARITY * TREE_ARITY;
+  if (
+    contextInput.initialStateLeaves.length !== stateCapacity ||
+    contextInput.initialVoteLeavesByState.length !== stateCapacity
+  ) {
+    throw new Error(`initial native state context must contain ${stateCapacity} state and vote leaves`);
+  }
+
+  const stateLeafHashes = [];
+  for (let stateIndex = 0; stateIndex < stateCapacity; stateIndex += 1) {
+    const voteRow = contextInput.initialVoteLeavesByState[stateIndex];
+    if (!Array.isArray(voteRow) || voteRow.length !== TREE_ARITY) {
+      throw new Error(`initialVoteLeavesByState[${stateIndex}] must contain ${TREE_ARITY} values`);
+    }
+    const voteMap = new Map();
+    for (let voteIndex = 0; voteIndex < TREE_ARITY; voteIndex += 1) {
+      voteMap.set(
+        voteIndex,
+        toStarkFelt(voteRow[voteIndex], `initialVoteLeavesByState[${stateIndex}][${voteIndex}]`),
+      );
+    }
+    voteNodeMaps.set(stateIndex.toString(), voteMap);
+
+    const stateLeaf = contextInput.initialStateLeaves[stateIndex];
+    if (!Array.isArray(stateLeaf) || stateLeaf.length !== 10) {
+      throw new Error(`initialStateLeaves[${stateIndex}] must contain 10 values`);
+    }
+    const nativeStateLeaf = stateLeaf.map((value, index) =>
+      toStarkFelt(value, `initialStateLeaves[${stateIndex}][${index}]`),
+    );
+    if (parseBigInt(stateLeaf[3], `initialStateLeaves[${stateIndex}][3]`) !== 0n) {
+      nativeStateLeaf[3] = nativeHash5(voteRow, `initialStateVoteRoot${stateIndex}`);
+    }
+    const stateLeafHash = nativeHash10(nativeStateLeaf, `initialStateLeaf${stateIndex}`);
+    stateLeafHashes.push(stateLeafHash);
+    stateNodeMap.set(mapKey(0, stateIndex), stateLeafHash);
+  }
+
+  const stateSubroots = [];
+  for (let group = 0; group < TREE_ARITY; group += 1) {
+    const subroot = nativeHash5(
+      stateLeafHashes.slice(group * TREE_ARITY, (group + 1) * TREE_ARITY),
+      `initialStateSubroot${group}`,
+    );
+    stateSubroots.push(subroot);
+    stateNodeMap.set(mapKey(1, group), subroot);
+  }
+  stateNodeMap.set(mapKey(2, 0), nativeHash5(stateSubroots, 'initialStateRoot'));
+  return true;
+}
+
 function votePathFromMap(voteNodeMaps, stateIndex, leaf, pathElements, voteOptionIndex, label) {
   const index = Number(parseBigInt(voteOptionIndex, `${label}.voteOptionIndex`));
   const key = parseBigInt(stateIndex, `${label}.stateIndex`).toString();
@@ -245,36 +305,39 @@ function votePathFromMap(voteNodeMaps, stateIndex, leaf, pathElements, voteOptio
   };
 }
 
-export function nativeProcessMessageTransitionContexts(stateResult) {
+export function nativeProcessMessageTransitionContexts(stateResult, contextInput) {
   const stateNodeMap = new Map();
   const voteNodeMaps = new Map();
   const contexts = Array.from({ length: stateResult.transitions.length });
   const initialTouchedStates = new Map();
+  const hasFullNativeState = initializeFullNativeStateMaps(stateNodeMap, voteNodeMaps, contextInput);
 
-  for (let index = stateResult.transitions.length - 1; index >= 0; index -= 1) {
-    const transition = stateResult.transitions[index];
-    const stateIndex = transition.derived.stateIndex.toString();
-    if (!initialTouchedStates.has(stateIndex)) {
-      const roots = nativeProcessMessageTransitionRoots(transition);
-      initialTouchedStates.set(stateIndex, {
-        transition,
-        stateIndex: transition.derived.stateIndex,
-        leafHash: roots.currentStateLeafHash,
-      });
-      stateNodeMap.set(mapKey(0, Number(transition.derived.stateIndex)), roots.currentStateLeafHash);
+  if (!hasFullNativeState) {
+    for (let index = stateResult.transitions.length - 1; index >= 0; index -= 1) {
+      const transition = stateResult.transitions[index];
+      const stateIndex = transition.derived.stateIndex.toString();
+      if (!initialTouchedStates.has(stateIndex)) {
+        const roots = nativeProcessMessageTransitionRoots(transition);
+        initialTouchedStates.set(stateIndex, {
+          transition,
+          stateIndex: transition.derived.stateIndex,
+          leafHash: roots.currentStateLeafHash,
+        });
+        stateNodeMap.set(mapKey(0, Number(transition.derived.stateIndex)), roots.currentStateLeafHash);
+      }
     }
-  }
 
-  for (const [label, entry] of initialTouchedStates.entries()) {
-    const seeded = statePathFromMaps(
-      stateNodeMap,
-      entry.leafHash,
-      entry.transition.input.stateLeafPathElements,
-      entry.stateIndex,
-      `initialState${label}`,
-    );
-    const { level1 } = splitIndex(entry.stateIndex);
-    stateNodeMap.set(mapKey(1, level1), seeded.level1Node);
+    for (const [label, entry] of initialTouchedStates.entries()) {
+      const seeded = statePathFromMaps(
+        stateNodeMap,
+        entry.leafHash,
+        entry.transition.input.stateLeafPathElements,
+        entry.stateIndex,
+        `initialState${label}`,
+      );
+      const { level1 } = splitIndex(entry.stateIndex);
+      stateNodeMap.set(mapKey(1, level1), seeded.level1Node);
+    }
   }
 
   for (let index = stateResult.transitions.length - 1; index >= 0; index -= 1) {
@@ -344,6 +407,7 @@ export function nativeProcessMessageTransitionContexts(stateResult) {
       currentStateRoot: currentState.root,
       newStateRoot: newState.root,
       stateLeafPathElements: currentState.path,
+      newStateLeafPathElements: newState.path,
       activeStateRoot: toStarkFelt(input.activeStateRoot, `transition${index}.activeStateRoot`),
     };
   }

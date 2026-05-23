@@ -88,15 +88,11 @@ function buildFixture() {
     [1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n],
     [0n, 99n, 98n, 97n, 96n, 95n, 94n, 93n, 92n, 91n],
     [11n, 12n, 13n, 14n, 15n, 16n, 17n, 18n, 19n, 20n],
-    [0n, 88n, 87n, 86n, 85n, 84n, 83n, 82n, 81n, 80n],
-    [21n, 22n, 23n, 24n, 25n, 26n, 27n, 28n, 29n, 30n],
   ];
   const encPubKeys = [
     [31n, 32n],
     [33n, 34n],
     [35n, 36n],
-    [37n, 38n],
-    [39n, 40n],
   ];
   const { endHash } = processDeactivateMessageHashChain(msgs, encPubKeys, batchStartHash);
   const coordPubKeyHash = hashLeftRight(coordPubKey[0], coordPubKey[1]);
@@ -183,7 +179,7 @@ function buildStatefulFixture() {
   const stateLeafHashes = Array.from({ length: 25 }, () => emptyStateLeafHash);
   const stateLeaves = [];
 
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const secretKey = Buffer.from([21 + i, 34 + i, 55 + i, 89 + i, 144 + i]);
     const statePubKey = derivePublicKey(secretKey).map(BigInt);
     const currentCiphertext = identityDecryptCiphertext(coordPrivKey, BigInt(20 + i));
@@ -214,7 +210,7 @@ function buildStatefulFixture() {
 
   let activeRoot = currentActiveStateRoot;
   let deactivateRoot = currentDeactivateRoot;
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const stateIndex = i;
     const deactivateIndex = Number(deactivateIndex0) + i;
     const { secretKey, stateLeaf } = stateLeaves[i];
@@ -352,10 +348,9 @@ test('validates AMACI ProcessDeactivateMessages public boundary', () => {
   const input = buildFixture();
   const result = evaluateProcessDeactivateMessages(input);
 
-  assert.equal(result.derived.messageHashChain.length, 6);
+  assert.equal(result.derived.messageHashChain.length, 4);
   assert.equal(result.derived.messageHashChain[1], processDeactivateMessageHash(input.msgs[0], input.encPubKeys[0], input.batchStartHash));
   assert.equal(result.derived.messageHashChain[2], result.derived.messageHashChain[1]);
-  assert.equal(result.derived.messageHashChain[4], result.derived.messageHashChain[3]);
   assert.equal(result.derived.inputHash.toString(), input.inputHash);
   assert.equal(result.publicOutput.decimalFelts.length, 24);
 });
@@ -366,7 +361,7 @@ test('builds Cairo executable arguments for ProcessDeactivateMessages boundary',
   const cairoInput = buildCairoProcessDeactivateMessagesBoundaryInput(input, evaluated);
   const args = serializeCairoProcessDeactivateMessagesBoundaryExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 364);
+  assert.equal(args.length, 244);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.equal(
     joinU128Pair(
@@ -391,23 +386,23 @@ test(
     assert.equal(evaluated.publicOutput.labels[1], 'version');
     assert.equal(evaluated.publicOutput.felts[1], 2n);
     assert.equal(evaluated.publicOutput.labels[3], 'hash_scheme');
-    assert.equal(evaluated.derived.messageHashChain.length, 6);
+    assert.equal(evaluated.derived.messageHashChain.length, 4);
     assert.notEqual(
       evaluated.publicFields.newDeactivateCommitment.toString(),
       legacy.publicFields.newDeactivateCommitment.toString(),
     );
     assert.ok(evaluated.publicOutput.felts.every((felt) => felt >= 0n && felt < STARK_FIELD));
-    assert.equal(args.length, 74);
+    assert.equal(args.length, 50);
     assert.equal(cairoInput.public_output.length, 16);
     assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   },
 );
 
-test('chains five AMACI ProcessDeactivate ProcessOne witnesses', () => {
+test('chains three AMACI ProcessDeactivate ProcessOne witnesses', () => {
   const input = getStatefulFixture();
   const result = evaluateProcessDeactivateMessagesStateTransition(input);
 
-  assert.equal(result.transitions.length, 5);
+  assert.equal(result.transitions.length, 3);
   assert.equal(result.derived.newActiveStateRoot.toString(), input.newActiveStateRoot);
   assert.equal(result.derived.newDeactivateRoot.toString(), input.newDeactivateRoot);
 });
@@ -427,7 +422,7 @@ test('builds Cairo executable arguments for ProcessDeactivateMessages state tran
   const cairoInput = buildCairoProcessDeactivateMessagesStateTransitionInput(input, evaluated);
   const args = serializeCairoProcessDeactivateMessagesStateTransitionExecutableArgs(cairoInput);
 
-  assert.ok(args.length > 89000);
+  assert.ok(args.length > 53000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.equal(
     joinU128Pair(
@@ -444,7 +439,7 @@ test('builds Cairo executable arguments for stateful ProcessDeactivateMessages',
   const cairoInput = buildCairoProcessDeactivateMessagesStatefulInput(input, evaluated);
   const args = serializeCairoProcessDeactivateMessagesStatefulExecutableArgs(cairoInput);
 
-  assert.ok(args.length > 91000);
+  assert.ok(args.length > 68000);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.deepEqual(cairoInput.public_output, evaluated.publicOutput.decimalFelts);
 });

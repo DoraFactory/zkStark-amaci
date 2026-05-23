@@ -46,9 +46,8 @@ import {
 } from '../src/msg/process-messages.mjs';
 import {
   evaluateNativeProcessMessagesBoundary,
-  evaluateNativeProcessMessagesBoundarySegment,
 } from '../src/msg/native-process-messages.mjs';
-import { buildNativeCairoProcessMessagesStageSegmentInput } from '../src/msg/native-cairo-input.mjs';
+import { buildNativeCairoProcessMessagesStageInput } from '../src/msg/native-cairo-input.mjs';
 import { nativeProcessMessageTransitionContexts } from '../src/msg/native-process-roots.mjs';
 import {
   evaluateProcessOneStateTransition,
@@ -148,8 +147,6 @@ function buildFixture({ sharedKeys, signatureSecretKeys } = {}) {
     { isValid: true, stateIndex: 1, voteOptionIndex: 0, newVoteWeight: 31n },
     { isValid: true, stateIndex: 7, voteOptionIndex: 3, newVoteWeight: 37n },
     { isValid: false, stateIndex: 8, voteOptionIndex: 2, newVoteWeight: 41n },
-    { isValid: true, stateIndex: 12, voteOptionIndex: 4, newVoteWeight: 43n },
-    { isValid: true, stateIndex: 20, voteOptionIndex: 1, newVoteWeight: 47n },
   ];
   const emptyStateLeaf = Array.from({ length: 10 }, () => 0n);
   const voteLeavesByState = Array.from({ length: 25 }, (_, stateIndex) => [
@@ -160,7 +157,7 @@ function buildFixture({ sharedKeys, signatureSecretKeys } = {}) {
     BigInt(stateIndex + 5),
   ]);
   const stateLeaves = Array.from({ length: 25 }, () => emptyStateLeaf.slice());
-  const touchedStateIndexes = [1, 7, 12, 20, 24];
+  const touchedStateIndexes = [1, 7, 24];
   const pubKeysByState = new Map();
   for (let i = 0; i < commands.length; i += 1) {
     if (commands[i].isValid && signatureSecretKeys?.[i]) {
@@ -285,8 +282,6 @@ function buildStatefulFixture({ state = buildFixture(), coordPrivKey, encPubKeys
     [101n, 102n],
     [201n, 202n],
     [301n, 302n],
-    [401n, 402n],
-    [501n, 502n],
   ];
   const batchStartHash = 123n;
   const { endHash: batchEndHash } = processMessageHashChain(msgs, messageEncPubKeys, batchStartHash);
@@ -330,7 +325,7 @@ function buildStatefulFixture({ state = buildFixture(), coordPrivKey, encPubKeys
 
 function buildStatefulEcdhFixture() {
   const coordPrivKey = 5n;
-  const encPubKeys = [2n, 3n, 4n, 6n, 7n].map((scalar) =>
+  const encPubKeys = [2n, 3n, 4n].map((scalar) =>
     babyjubScalarMul(BABYJUB_BASE8, scalar),
   );
   const sharedKeys = encPubKeys.map((pubKey) => babyjubScalarMul(pubKey, coordPrivKey));
@@ -340,7 +335,7 @@ function buildStatefulEcdhFixture() {
 
 function buildStatefulEcdhSignatureFixture() {
   const coordPrivKey = 5n;
-  const encPubKeys = [2n, 3n, 4n, 6n, 7n].map((scalar) =>
+  const encPubKeys = [2n, 3n, 4n].map((scalar) =>
     babyjubScalarMul(BABYJUB_BASE8, scalar),
   );
   const sharedKeys = encPubKeys.map((pubKey) => babyjubScalarMul(pubKey, coordPrivKey));
@@ -348,8 +343,6 @@ function buildStatefulEcdhSignatureFixture() {
     Buffer.from([1, 2, 3, 4, 5]),
     Buffer.from([2, 3, 4, 5, 6]),
     undefined,
-    Buffer.from([3, 4, 5, 6, 7]),
-    Buffer.from([4, 5, 6, 7, 8]),
   ];
   const state = buildFixture({ sharedKeys, signatureSecretKeys });
   return buildStatefulFixture({ state, coordPrivKey, encPubKeys });
@@ -379,11 +372,11 @@ function recomputeProcessMessagesBoundary(input) {
   ).toString();
 }
 
-test('chains five ProcessOne witnesses into a ProcessMessages state transition', () => {
+test('chains three ProcessOne witnesses into a ProcessMessages state transition', () => {
   const input = buildFixture();
   const result = evaluateProcessMessagesStateTransitions(input);
 
-  assert.equal(result.transitions.length, 5);
+  assert.equal(result.transitions.length, 3);
   assert.equal(result.derived.currentStateRoot.toString(), input.currentStateRoot);
   assert.equal(result.derived.newStateRoot.toString(), input.newStateRoot);
   assert.equal(result.transitions[2].derived.stateIndex, 24n);
@@ -406,7 +399,7 @@ test('builds Cairo executable arguments for ProcessMessages state transition', (
   const cairoInput = buildCairoProcessMessagesStateTransitionInput(input, evaluated);
   const args = serializeCairoProcessMessagesStateTransitionExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 18553);
+  assert.equal(args.length, 11135);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
   assert.equal(
     joinU128Pair(
@@ -423,7 +416,7 @@ test('builds Cairo executable arguments for stateful ProcessMessages skeleton', 
   const cairoInput = buildCairoProcessMessagesStatefulInput(input, evaluated);
   const args = serializeCairoProcessMessagesStatefulExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 18937);
+  assert.equal(args.length, 11399);
   assert.equal(evaluated.publicOutput.felts.length, 24);
   assert.equal(evaluated.derived.stateTransitionNewStateRoot.toString(), input.newStateRoot);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
@@ -435,7 +428,7 @@ test('builds Cairo executable arguments for stateful ProcessMessages with ECDH b
   const cairoInput = buildCairoProcessMessagesStatefulWithEcdhInput(input, evaluated);
   const args = serializeCairoProcessMessagesStatefulWithEcdhExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 40257);
+  assert.equal(args.length, 25613);
   assert.equal(evaluated.publicOutput.felts.length, 24);
   assert.equal(evaluated.derived.stateTransitionNewStateRoot.toString(), input.newStateRoot);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
@@ -447,7 +440,7 @@ test('builds Cairo executable arguments for stateful ProcessMessages with ECDH a
   const cairoInput = buildCairoProcessMessagesStatefulWithEcdhSignatureInput(input, evaluated);
   const args = serializeCairoProcessMessagesStatefulWithEcdhSignatureExecutableArgs(cairoInput);
 
-  assert.equal(args.length, 75937);
+  assert.equal(args.length, 47021);
   assert.equal(evaluated.publicOutput.felts.length, 24);
   assert.equal(evaluated.derived.stateTransitionNewStateRoot.toString(), input.newStateRoot);
   assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
@@ -456,14 +449,14 @@ test('builds Cairo executable arguments for stateful ProcessMessages with ECDH a
 test('builds Cairo executable arguments for linked ProcessMessages step proof', () => {
   const input = buildStatefulEcdhSignatureFixture();
   const evaluated = evaluateProcessMessagesStateful(input);
-  const cairoInput = buildCairoProcessMessageStepWithEcdhSignatureInput(input, 3, evaluated);
+  const cairoInput = buildCairoProcessMessageStepWithEcdhSignatureInput(input, 2, evaluated);
   const args = serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(cairoInput);
-  const transition = evaluated.state.transitions[3];
+  const transition = evaluated.state.transitions[2];
 
   assert.equal(cairoInput.public_output.length, 27);
-  assert.equal(cairoInput.publicFields.messageIndex, 3n);
-  assert.equal(cairoInput.publicFields.previousMessageHash, evaluated.derived.messageHashChain[3]);
-  assert.equal(cairoInput.publicFields.nextMessageHash, evaluated.derived.messageHashChain[4]);
+  assert.equal(cairoInput.publicFields.messageIndex, 2n);
+  assert.equal(cairoInput.publicFields.previousMessageHash, evaluated.derived.messageHashChain[2]);
+  assert.equal(cairoInput.publicFields.nextMessageHash, evaluated.derived.messageHashChain[3]);
   assert.equal(cairoInput.publicFields.currentStateRoot, transition.input.currentStateRoot);
   assert.equal(cairoInput.publicFields.newStateRoot, transition.derived.newStateRoot);
   assert.equal(cairoInput.publicFields.currentStateCommitment, evaluated.publicFields.currentStateCommitment);
@@ -476,9 +469,9 @@ test('builds Cairo executable arguments for deeply split ProcessMessages proofs'
   const input = buildStatefulEcdhSignatureFixture();
   const evaluated = evaluateProcessMessagesStateful(input);
   const coordKey = buildCairoProcessMessageCoordKeyInput(input, evaluated);
-  const ecdh = buildCairoProcessMessageEcdhInput(input, 3, evaluated);
-  const signature = buildCairoProcessMessageSignatureInput(input, 3, evaluated);
-  const core = buildCairoProcessMessageStepCoreInput(input, 3, evaluated);
+  const ecdh = buildCairoProcessMessageEcdhInput(input, 2, evaluated);
+  const signature = buildCairoProcessMessageSignatureInput(input, 2, evaluated);
+  const core = buildCairoProcessMessageStepCoreInput(input, 2, evaluated);
   const coordArgs = serializeCairoProcessMessageCoordKeyExecutableArgs(coordKey);
   const ecdhArgs = serializeCairoProcessMessageEcdhExecutableArgs(ecdh);
   const signatureArgs = serializeCairoProcessMessageSignatureExecutableArgs(signature);
@@ -488,9 +481,9 @@ test('builds Cairo executable arguments for deeply split ProcessMessages proofs'
   assert.equal(ecdh.public_output.length, 13);
   assert.equal(signature.public_output.length, 17);
   assert.equal(core.public_output.length, 43);
-  assert.equal(ecdh.publicFields.messageIndex, 3n);
-  assert.equal(signature.publicFields.messageIndex, 3n);
-  assert.equal(core.publicFields.messageIndex, 3n);
+  assert.equal(ecdh.publicFields.messageIndex, 2n);
+  assert.equal(signature.publicFields.messageIndex, 2n);
+  assert.equal(core.publicFields.messageIndex, 2n);
   assert.equal(coordKey.publicFields.coordPrivKeyHash, ecdh.publicFields.coordPrivKeyHash);
   assert.equal(coordKey.publicFields.coordPrivKeyHash, core.publicFields.coordPrivKeyHash);
   assert.equal(ecdh.publicFields.encPubKeyHash, core.publicFields.encPubKeyHash);
@@ -502,7 +495,7 @@ test('builds Cairo executable arguments for deeply split ProcessMessages proofs'
   assert.equal(signature.publicFields.isSignatureValid, core.publicFields.isSignatureValid);
   assert.ok(coordArgs.length < ecdhArgs.length);
   assert.ok(coreArgs.length < serializeCairoProcessMessageStepWithEcdhSignatureExecutableArgs(
-    buildCairoProcessMessageStepWithEcdhSignatureInput(input, 3, evaluated),
+    buildCairoProcessMessageStepWithEcdhSignatureInput(input, 2, evaluated),
   ).length);
   assert.ok([...coordArgs, ...ecdhArgs, ...signatureArgs, ...coreArgs].every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
@@ -511,19 +504,19 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   const input = buildStatefulEcdhSignatureFixture();
   const evaluated = evaluateProcessMessagesStateful(input);
   const coordKey = buildNativeCairoProcessMessageCoordKeyInput(input, evaluated);
-  const ecdh = buildNativeCairoProcessMessageEcdhInput(input, 3, evaluated);
-  const decrypt = buildNativeCairoProcessMessageDecryptInput(input, 3, evaluated);
-  const signature = buildNativeCairoProcessMessageSignatureInput(input, 3, evaluated);
-  const core = buildNativeCairoProcessMessageStepCoreInput(input, 3, evaluated);
+  const ecdh = buildNativeCairoProcessMessageEcdhInput(input, 2, evaluated);
+  const decrypt = buildNativeCairoProcessMessageDecryptInput(input, 2, evaluated);
+  const signature = buildNativeCairoProcessMessageSignatureInput(input, 2, evaluated);
+  const core = buildNativeCairoProcessMessageStepCoreInput(input, 2, evaluated);
   const coordArgs = serializeNativeCairoProcessMessageCoordKeyExecutableArgs(coordKey);
   const ecdhArgs = serializeNativeCairoProcessMessageEcdhExecutableArgs(ecdh);
   const decryptArgs = serializeNativeCairoProcessMessageDecryptExecutableArgs(decrypt);
   const signatureArgs = serializeNativeCairoProcessMessageSignatureExecutableArgs(signature);
   const coreArgs = serializeNativeCairoProcessMessageStepCoreExecutableArgs(core);
-  const legacyCore = buildCairoProcessMessageStepCoreInput(input, 3, evaluated);
+  const legacyCore = buildCairoProcessMessageStepCoreInput(input, 2, evaluated);
   const nativeBoundary = evaluateNativeProcessMessagesBoundary(input);
-  const transition = evaluated.state.transitions[3];
-  const nativeRoots = nativeProcessMessageTransitionContexts(evaluated.state)[3];
+  const transition = evaluated.state.transitions[2];
+  const nativeRoots = nativeProcessMessageTransitionContexts(evaluated.state)[2];
 
   assert.equal(coordKey.public_output.length, 10);
   assert.equal(ecdh.public_output.length, 12);
@@ -534,10 +527,10 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.equal(core.program_input.witness.coord_priv_key_hash, undefined);
   assert.equal(core.program_input.witness.message_hash, undefined);
   assert.equal(core.program_input.witness.state_decrypt, undefined);
-  assert.equal(ecdh.publicFields.message_index, 3n);
-  assert.equal(decrypt.publicFields.message_index, 3n);
-  assert.equal(signature.publicFields.message_index, 3n);
-  assert.equal(core.publicFields.message_index, 3n);
+  assert.equal(ecdh.publicFields.message_index, 2n);
+  assert.equal(decrypt.publicFields.message_index, 2n);
+  assert.equal(signature.publicFields.message_index, 2n);
+  assert.equal(core.publicFields.message_index, 2n);
   assert.equal(coordKey.publicFields.coord_priv_key_hash, ecdh.publicFields.coord_priv_key_hash);
   assert.equal(coordKey.publicFields.coord_priv_key_hash, decrypt.publicFields.coord_priv_key_hash);
   assert.equal(coordKey.publicFields.coord_priv_key_hash, core.publicFields.coord_priv_key_hash);
@@ -557,8 +550,8 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.ok(core.publicFields.command_plaintext_binding_hash > 0n);
   assert.equal(signature.publicFields.is_signature_valid, core.publicFields.is_signature_valid);
   assert.equal(coordKey.publicFields.coord_pub_key_hash, nativeBoundary.publicFields.coordPubKeyHash);
-  assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[3]);
-  assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[4]);
+  assert.equal(core.publicFields.previous_message_hash, nativeBoundary.derived.messageHashChain[2]);
+  assert.equal(core.publicFields.next_message_hash, nativeBoundary.derived.messageHashChain[3]);
   assert.equal(core.publicFields.current_state_root_hash, nativeRoots.currentStateRoot);
   assert.equal(core.publicFields.new_state_root_hash, nativeRoots.newStateRoot);
   assert.equal(core.publicFields.active_state_root_hash, nativeRoots.activeStateRoot);
@@ -568,10 +561,10 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   assert.notEqual(core.publicFields.previous_message_hash.toString(), legacyCore.publicFields.previousMessageHash.toString());
   assert.notEqual(core.publicFields.next_message_hash.toString(), legacyCore.publicFields.nextMessageHash.toString());
   assert.ok(ecdhArgs.length < serializeCairoProcessMessageEcdhExecutableArgs(
-    buildCairoProcessMessageEcdhInput(input, 3, evaluated),
+    buildCairoProcessMessageEcdhInput(input, 2, evaluated),
   ).length);
   assert.ok(coreArgs.length < serializeCairoProcessMessageStepCoreExecutableArgs(
-    buildCairoProcessMessageStepCoreInput(input, 3, evaluated),
+    buildCairoProcessMessageStepCoreInput(input, 2, evaluated),
   ).length);
   assert.ok(
     [...coordArgs, ...ecdhArgs, ...decryptArgs, ...signatureArgs, ...coreArgs].every((value) =>
@@ -580,25 +573,17 @@ test('builds native public hash arguments for split ProcessMessages helper proof
   );
 });
 
-test('links native ProcessMessages stage segment commitments', () => {
+test('links native ProcessMessages stage commitments for the 3-message batch', () => {
   const input = buildStatefulEcdhSignatureFixture();
   const full = evaluateNativeProcessMessagesBoundary(input);
-  const tail3 = evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 2, endIndex: 5 });
-  const head2 = evaluateNativeProcessMessagesBoundarySegment(input, { startIndex: 0, endIndex: 2 });
-
-  assert.equal(tail3.publicFields.currentStateCommitment, full.publicFields.currentStateCommitment);
-  assert.equal(tail3.publicFields.newStateCommitment, head2.publicFields.currentStateCommitment);
-  assert.equal(head2.publicFields.newStateCommitment, full.publicFields.newStateCommitment);
-
-  const tailInput = buildNativeCairoProcessMessagesStageSegmentInput(input, tail3);
-  const headInput = buildNativeCairoProcessMessagesStageSegmentInput(input, head2);
+  const stageInput = buildNativeCairoProcessMessagesStageInput(input, full);
   assert.equal(
-    tailInput.components.messages[0].core.program_input.fields.new_state_commitment_hash,
-    tail3.publicFields.newStateCommitment.toString(),
+    stageInput.components.messages.at(-1).core.program_input.fields.current_state_commitment_hash,
+    full.publicFields.currentStateCommitment.toString(),
   );
   assert.equal(
-    headInput.components.messages[1].core.program_input.fields.current_state_commitment_hash,
-    head2.publicFields.currentStateCommitment.toString(),
+    stageInput.components.messages[0].core.program_input.fields.new_state_commitment_hash,
+    full.publicFields.newStateCommitment.toString(),
   );
 });
 

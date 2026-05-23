@@ -20,7 +20,9 @@ import {
   processMessageHashChain,
 } from '../msg/process-messages.mjs';
 import { evaluateNativeProcessMessagesBoundary } from '../msg/native-process-messages.mjs';
-import { nativeProcessMessageTransitionContexts } from '../msg/native-process-roots.mjs';
+import {
+  nativeProcessMessageTransitionContexts,
+} from '../msg/native-process-roots.mjs';
 import { processDeactivateMessageHashChain } from '../deactivate/process-deactivate-messages.mjs';
 import { requireZkKitPackage } from '../compat/zk-kit-require.mjs';
 
@@ -130,8 +132,6 @@ const DEFAULT_PROCESS_MESSAGES_COMMANDS = Object.freeze([
   { isValid: true, stateIndex: 1, voteOptionIndex: 0, newVoteWeight: 31n },
   { isValid: true, stateIndex: 7, voteOptionIndex: 3, newVoteWeight: 37n },
   { isValid: false, stateIndex: 8, voteOptionIndex: 2, newVoteWeight: 41n },
-  { isValid: true, stateIndex: 12, voteOptionIndex: 4, newVoteWeight: 43n },
-  { isValid: true, stateIndex: 20, voteOptionIndex: 1, newVoteWeight: 47n },
 ]);
 
 function normalizeProcessMessageCommands(commands) {
@@ -198,6 +198,8 @@ function buildProcessMessagesState({
   const activeStateRoot = pathFor(activeLeaves, 2, 0).root;
   let stateLeafHashes = stateLeaves.map(hash10);
   const currentStateRoot = pathFor(stateLeafHashes, 2, 0).root;
+  const initialStateLeaves = stateLeaves.map((leaf) => leaf.slice());
+  const initialVoteLeavesByState = voteLeavesByState.map((row) => row.slice());
   const processOneWitnesses = Array.from({ length: normalizedCommands.length });
 
   for (let i = normalizedCommands.length - 1; i >= 0; i -= 1) {
@@ -284,6 +286,8 @@ function buildProcessMessagesState({
     activeStateRoot,
     newStateRoot: pathFor(stateLeafHashes, 2, 0).root,
     processOneWitnesses,
+    initialStateLeaves,
+    initialVoteLeavesByState,
     finalStateLeaves: stateLeaves,
     finalVoteLeavesByState: voteLeavesByState,
   });
@@ -340,7 +344,7 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
 
 function smallProcessMessageCryptoInputs() {
   const coordPrivKey = 5n;
-  const encPubKeys = [2n, 3n, 4n, 6n, 7n].map((scalar) =>
+  const encPubKeys = [2n, 3n, 4n].map((scalar) =>
     babyjubScalarMul(BABYJUB_BASE8, scalar),
   );
   const sharedKeys = encPubKeys.map((pubKey) => babyjubScalarMul(pubKey, coordPrivKey));
@@ -348,8 +352,6 @@ function smallProcessMessageCryptoInputs() {
     Buffer.from([1, 2, 3, 4, 5]),
     Buffer.from([2, 3, 4, 5, 6]),
     Buffer.from([5, 6, 7, 8, 9]),
-    Buffer.from([3, 4, 5, 6, 7]),
-    Buffer.from([4, 5, 6, 7, 8]),
   ];
   return { coordPrivKey, encPubKeys, sharedKeys, signatureSecretKeys };
 }
@@ -370,14 +372,12 @@ export function buildSmallNativeRoundFixture() {
     { isValid: true, stateIndex: 0, voteOptionIndex: 0, newVoteWeight: 2n },
     { isValid: true, stateIndex: 1, voteOptionIndex: 1, newVoteWeight: 4n },
     { isValid: true, stateIndex: 2, voteOptionIndex: 2, newVoteWeight: 6n },
-    { isValid: true, stateIndex: 3, voteOptionIndex: 3, newVoteWeight: 8n },
-    { isValid: true, stateIndex: 4, voteOptionIndex: 4, newVoteWeight: 10n },
   ];
   const processMessagesDraft = buildSmallProcessMessagesFixture({ commands });
   const processMessagesEvaluated = evaluateNativeProcessMessagesBoundary(processMessagesDraft);
   const processMessages = processMessagesDraft;
   const stateResult = evaluateProcessMessagesStateful(processMessagesDraft).state;
-  const transitionContexts = nativeProcessMessageTransitionContexts(stateResult);
+  const transitionContexts = nativeProcessMessageTransitionContexts(stateResult, processMessagesDraft);
   const contextsByStateIndex = new Map(
     transitionContexts.map((context, index) => [
       Number(stateResult.transitions[index].derived.stateIndex),
@@ -386,22 +386,14 @@ export function buildSmallNativeRoundFixture() {
   );
   const finalStateLeaves = [];
   const finalVotes = [];
-  for (let stateIndex = 0; stateIndex < 5; stateIndex += 1) {
+  for (let stateIndex = 0; stateIndex < TREE_ARITY; stateIndex += 1) {
     const context = contextsByStateIndex.get(stateIndex);
-    if (!context) {
-      throw new Error(`missing native transition context for state index ${stateIndex}`);
-    }
-    finalStateLeaves.push(context.newStateLeaf);
-    const command = commands.find((entry) => entry.stateIndex === stateIndex);
-    const votes = [
-      BigInt(stateIndex + 1),
-      BigInt(stateIndex + 2),
-      BigInt(stateIndex + 3),
-      BigInt(stateIndex + 4),
-      BigInt(stateIndex + 5),
-    ];
-    votes[command.voteOptionIndex] = command.newVoteWeight;
-    finalVotes.push(votes);
+    finalStateLeaves.push(context?.newStateLeaf ?? Array.from({ length: 10 }, () => 0n));
+    finalVotes.push(
+      context === undefined
+        ? Array.from({ length: TREE_ARITY }, () => 0n)
+        : processMessagesDraft.finalVoteLeavesByState[stateIndex].map(BigInt),
+    );
   }
 
   const batchZeroContext = contextsByStateIndex.get(0);
@@ -410,7 +402,7 @@ export function buildSmallNativeRoundFixture() {
     stateRoot: batchZeroContext.newStateRoot.toString(),
     stateSalt: processMessages.newStateSalt,
     stateLeaf: finalStateLeaves,
-    statePathElements: [batchZeroContext.stateLeafPathElements[1]],
+    statePathElements: [batchZeroContext.newStateLeafPathElements[1]],
     votes: finalVotes,
     currentResults: Array.from({ length: 5 }, () => 0n),
     currentResultsRootSalt: '0',
@@ -515,7 +507,7 @@ export function buildSmallProcessDeactivateFixture() {
   const stateLeafHashes = Array.from({ length: 25 }, () => emptyStateLeafHash);
   const stateLeaves = [];
 
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const secretKey = Buffer.from([21 + i, 34 + i, 55 + i, 89 + i, 144 + i]);
     const statePubKey = derivePublicKeyFromSecret(secretKey);
     const currentCiphertext = identityDecryptCiphertext(coordPrivKey, BigInt(20 + i));
@@ -546,7 +538,7 @@ export function buildSmallProcessDeactivateFixture() {
 
   let activeRoot = currentActiveStateRoot;
   let deactivateRoot = currentDeactivateRoot;
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const stateIndex = i;
     const deactivateIndex = Number(deactivateIndex0) + i;
     const { secretKey, stateLeaf } = stateLeaves[i];

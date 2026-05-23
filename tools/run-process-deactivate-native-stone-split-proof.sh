@@ -11,12 +11,12 @@ Usage:
 Runs the small ProcessDeactivateMessages native split relation through Stone:
   1. one process-deactivate-boundary-native proof
   2. one process-deactivate-coord-key-native proof
-  3. five process-deactivate-ecdh-command-native proofs
-  4. five process-deactivate-signature-native proofs
-  5. five process-deactivate-decrypt-current-native proofs
-  6. five process-deactivate-decrypt-new-native proofs
-  7. five process-deactivate-ecdh-leaf-native proofs
-  8. five process-deactivate-step-core-native proofs
+  3. three process-deactivate-ecdh-command-native proofs
+  4. three process-deactivate-signature-native proofs
+  5. three process-deactivate-decrypt-current-native proofs
+  6. three process-deactivate-decrypt-new-native proofs
+  7. three process-deactivate-ecdh-leaf-native proofs
+  8. three process-deactivate-step-core-native proofs
 
 If --input is omitted, the current small synthetic ProcessDeactivateMessages
 fixture is generated under the output directory.
@@ -75,7 +75,7 @@ run_stone_one() {
 run_stone_one process-deactivate-boundary-native "$OUT_DIR/boundary"
 run_stone_one process-deactivate-coord-key-native "$OUT_DIR/coord-key"
 
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   run_stone_one process-deactivate-ecdh-command-native "$OUT_DIR/command-ecdh-$message_index" "$message_index"
   run_stone_one process-deactivate-signature-native "$OUT_DIR/signature-$message_index" "$message_index"
   run_stone_one process-deactivate-decrypt-current-native "$OUT_DIR/current-decrypt-$message_index" "$message_index"
@@ -89,54 +89,54 @@ printf '{\n' > "$MANIFEST"
 printf '  "boundary": "%s",\n' "$OUT_DIR/boundary/stone-proof/proof-run.json" >> "$MANIFEST"
 printf '  "coordKey": "%s",\n' "$OUT_DIR/coord-key/stone-proof/proof-run.json" >> "$MANIFEST"
 printf '  "commandEcdh": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/command-ecdh-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "signatures": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/signature-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "currentDecrypt": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/current-decrypt-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "newDecrypt": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/new-decrypt-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "leafEcdh": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/leaf-ecdh-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
 done
 printf '  ],\n' >> "$MANIFEST"
 printf '  "cores": [\n' >> "$MANIFEST"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/core-$message_index/stone-proof/proof-run.json" "$suffix" >> "$MANIFEST"
