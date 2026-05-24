@@ -824,7 +824,12 @@ fn native_process_message_roots(
         process_one.state_leaf_path_1,
         state_index,
     );
-    let active_state_root = felt_from_u256(process_one.active_state_root);
+    let active_state_root = native_quinary_root_depth_2(
+        felt_from_u256(process_one.active_state_leaf),
+        process_one.active_state_leaf_path_0,
+        process_one.active_state_leaf_path_1,
+        state_index,
+    );
 
     let updated_vote_weight = select_u256(
         valid, process_one.current_vote_weight, process_one.cmd_new_vote_weight,

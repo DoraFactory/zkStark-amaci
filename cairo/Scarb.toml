@@ -61,6 +61,10 @@ name = "process_deactivate_native_boundary"
 function = "zkstark_amaci_tally::native_process_deactivate::process_deactivate_native_boundary_main"
 
 [[target.executable]]
+name = "process_deactivate_stage_native"
+function = "zkstark_amaci_tally::native_process_deactivate_stage::process_deactivate_stage_native_main"
+
+[[target.executable]]
 name = "process_deactivate_coord_key_native"
 function = "zkstark_amaci_tally::native_process_deactivate_components::process_deactivate_coord_key_native_main"
 

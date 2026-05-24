@@ -19,6 +19,7 @@ import {
   buildNativeCairoProcessDeactivateDecryptInput,
   buildNativeCairoProcessDeactivateEcdhInput,
   buildNativeCairoProcessDeactivateSignatureInput,
+  buildNativeCairoProcessDeactivateStageInput,
   buildNativeCairoProcessDeactivateStepCoreInput,
   serializeCairoProcessDeactivateCoordKeyExecutableArgs,
   serializeCairoProcessDeactivateDecryptExecutableArgs,
@@ -33,6 +34,7 @@ import {
   serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
   serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
   serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
+  serializeNativeCairoProcessDeactivateStageExecutableArgs,
   serializeNativeCairoProcessDeactivateStepCoreExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import {
@@ -605,6 +607,39 @@ test('builds native public hash arguments for split ProcessDeactivateMessages he
     ...newDecryptArgs,
     ...coreArgs,
   ].every((value) => /^0x[0-9a-f]+$/.test(value)));
+});
+
+test('builds native ProcessDeactivate stage arguments for one aggregate batch fact', () => {
+  const input = getStatefulFixture();
+  const boundary = evaluateNativeProcessDeactivateMessagesBoundary(input);
+  const stage = buildNativeCairoProcessDeactivateStageInput(input, boundary);
+  const args = serializeNativeCairoProcessDeactivateStageExecutableArgs(stage);
+  const { coordKey, messages } = stage.components;
+
+  assert.equal(stage.public_output.length, 16);
+  assert.equal(messages.length, 3);
+  assert.deepEqual(stage.public_output, stage.components.boundary.public_output);
+  assert.equal(coordKey.publicFields.coord_pub_key_hash, boundary.publicFields.coordPubKeyHash);
+  assert.equal(messages[0].core.publicFields.previous_message_hash, boundary.derived.messageHashChain[0]);
+  assert.equal(messages[2].core.publicFields.next_message_hash, boundary.derived.messageHashChain[3]);
+  assert.equal(
+    messages[0].core.publicFields.current_deactivate_commitment_hash,
+    boundary.publicFields.currentDeactivateCommitment,
+  );
+  assert.equal(
+    messages[2].core.publicFields.new_deactivate_commitment_hash,
+    boundary.publicFields.newDeactivateCommitment,
+  );
+  assert.equal(
+    messages[0].core.publicFields.new_deactivate_commitment_hash,
+    messages[1].core.publicFields.current_deactivate_commitment_hash,
+  );
+  assert.equal(
+    messages[1].core.publicFields.new_deactivate_commitment_hash,
+    messages[2].core.publicFields.current_deactivate_commitment_hash,
+  );
+  assert.ok(args.length > 0);
+  assert.ok(args.every((value) => /^0x[0-9a-f]+$/.test(value)));
 });
 
 test('rejects tampered ProcessDeactivateMessages batch end hash', () => {

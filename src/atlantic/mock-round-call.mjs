@@ -542,7 +542,8 @@ function operationFromInput(operation = 'tally') {
   if (
     normalized === 'process-deactivate' ||
     normalized === 'processdeactivate' ||
-    normalized === 'process-deactivate-boundary-native'
+    normalized === 'process-deactivate-boundary-native' ||
+    normalized === 'process-deactivate-stage-native'
   ) {
     return 'processDeactivate';
   }

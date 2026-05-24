@@ -2,8 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  buildSmallAddNewKeyFixture,
-  buildSmallNativeRoundFixture,
+  buildSmallNativeLifecycleRoundFixture,
 } from '../src/fixtures/small-amaci-fixtures.mjs';
 
 function usage() {
@@ -14,14 +13,17 @@ Options:
   --out-dir <path>  Output directory. Default: target/full-native-round-fixture
   --text            Print generated paths and chain commitments.
 
-This writes one coherent native round fixture:
+This writes one coherent native lifecycle fixture:
   add-new-key-native.json
+  process-deactivate-stage-native.json
+  process-deactivate-boundary-native.json
+  process-messages-stage-native.json
   process-messages-boundary-native.json
   tally-native.json
   chain.json
 
-The process-messages file is intentionally reused for all per-message native
-component circuits with --message-index 0..2.
+The generated flow is signup -> vote -> deactivate -> vote -> processMsg -> tally,
+with signupCount=1 and messageBatchSize=3.
 `;
 }
 
@@ -48,44 +50,45 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 const outDir = resolve(args.outDir);
-const addNewKey = buildSmallAddNewKeyFixture();
-const fixture = buildSmallNativeRoundFixture();
+const fixture = buildSmallNativeLifecycleRoundFixture();
 
 mkdirSync(outDir, { recursive: true });
 
 const paths = {
   addNewKey: resolve(outDir, 'add-new-key-native.json'),
-  processMessages: resolve(outDir, 'process-messages-boundary-native.json'),
+  processDeactivateStage: resolve(outDir, 'process-deactivate-stage-native.json'),
+  processDeactivateBoundary: resolve(outDir, 'process-deactivate-boundary-native.json'),
+  processMessagesStage: resolve(outDir, 'process-messages-stage-native.json'),
+  processMessagesBoundary: resolve(outDir, 'process-messages-boundary-native.json'),
   tally: resolve(outDir, 'tally-native.json'),
   chain: resolve(outDir, 'chain.json'),
 };
 
-writeFileSync(paths.addNewKey, `${JSON.stringify(addNewKey, null, 2)}\n`);
-writeFileSync(paths.processMessages, `${JSON.stringify(fixture.processMessages, null, 2)}\n`);
+writeFileSync(paths.addNewKey, `${JSON.stringify(fixture.addNewKey, null, 2)}\n`);
+writeFileSync(paths.processDeactivateStage, `${JSON.stringify(fixture.processDeactivate, null, 2)}\n`);
+writeFileSync(paths.processDeactivateBoundary, `${JSON.stringify(fixture.processDeactivate, null, 2)}\n`);
+writeFileSync(paths.processMessagesStage, `${JSON.stringify(fixture.processMessages, null, 2)}\n`);
+writeFileSync(paths.processMessagesBoundary, `${JSON.stringify(fixture.processMessages, null, 2)}\n`);
 writeFileSync(paths.tally, `${JSON.stringify(fixture.tally, null, 2)}\n`);
-writeFileSync(paths.chain, `${JSON.stringify({
-  ...fixture.chain,
-  addNewKeyNullifier: addNewKey.nullifier,
-  addNewKeyDeactivateRoot: addNewKey.deactivateRoot,
-  addNewKeyInputHash: addNewKey.inputHash,
-  fixtureNote:
-    'add-new-key is accepted before process-messages in the mock round; its current proof output does not bind new_state_commitment, so the wrapper receives the linked process-messages initial state commitment as calldata.',
-}, null, 2)}\n`);
+writeFileSync(paths.chain, `${JSON.stringify(fixture.chain, null, 2)}\n`);
 
 if (args.text) {
   const lines = [
     `Add new key input: ${paths.addNewKey}`,
-    `Process messages input: ${paths.processMessages}`,
+    `Process deactivate stage input: ${paths.processDeactivateStage}`,
+    `Process deactivate boundary input: ${paths.processDeactivateBoundary}`,
+    `Process messages stage input: ${paths.processMessagesStage}`,
+    `Process messages boundary input: ${paths.processMessagesBoundary}`,
     `Tally input: ${paths.tally}`,
     `Chain state: ${paths.chain}`,
-    `Add key nullifier: ${addNewKey.nullifier}`,
-    `Initial state commitment: ${fixture.chain.initialStateCommitment}`,
-    `Process messages new state commitment: ${fixture.chain.processMessagesNewStateCommitment}`,
-    `Tally state commitment: ${fixture.chain.tallyStateCommitment}`,
-    `State link ok: ${fixture.chain.processMessagesToTallyStateMatches}`,
-    `Initial deactivate commitment: ${fixture.chain.initialDeactivateCommitment}`,
-    `Initial tally commitment: ${fixture.chain.initialTallyCommitment}`,
-    `Final tally commitment: ${fixture.chain.finalTallyCommitment}`,
+    `Signup count: ${fixture.chain.params.signupCount}`,
+    `Message batch size: ${fixture.chain.params.messageBatchSize}`,
+    `Initial state commitment: ${fixture.chain.signup.initialStateCommitment}`,
+    `Deactivate -> processMsg link ok: ${fixture.chain.links.deactivateToProcessMessages}`,
+    `ProcessMsg -> tally link ok: ${fixture.chain.links.processMessagesToTallyState}`,
+    `Process messages new state commitment: ${fixture.chain.processMessages.newStateCommitment}`,
+    `Final tally commitment: ${fixture.chain.tally.newTallyCommitment}`,
+    `Final tally results: ${fixture.chain.tally.newResults.join(', ')}`,
   ];
   process.stdout.write(`${lines.join('\n')}\n`);
 }

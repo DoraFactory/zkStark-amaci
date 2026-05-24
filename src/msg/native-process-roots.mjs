@@ -140,7 +140,7 @@ export function nativeProcessMessagesStateRoots(stateResult, contextInput) {
     transitionRoots,
     currentStateRoot: transitionRoots.at(-1).currentStateRoot,
     newStateRoot: transitionRoots[0].newStateRoot,
-    activeStateRoot: toStarkFelt(stateResult.derived.activeStateRoot, 'activeStateRoot'),
+    activeStateRoot: transitionRoots.at(-1).activeStateRoot,
   };
 }
 
@@ -272,6 +272,79 @@ function initializeFullNativeStateMaps(stateNodeMap, voteNodeMaps, contextInput)
   return true;
 }
 
+function initializeFullNativeActiveMap(activeNodeMap, contextInput) {
+  if (!contextInput || !Array.isArray(contextInput.initialActiveLeaves)) {
+    return false;
+  }
+
+  const stateCapacity = TREE_ARITY * TREE_ARITY;
+  if (contextInput.initialActiveLeaves.length !== stateCapacity) {
+    throw new Error(`initial native active context must contain ${stateCapacity} leaves`);
+  }
+
+  const activeLeaves = contextInput.initialActiveLeaves.map((value, index) =>
+    toStarkFelt(value, `initialActiveLeaves[${index}]`),
+  );
+  for (let stateIndex = 0; stateIndex < stateCapacity; stateIndex += 1) {
+    activeNodeMap.set(mapKey(0, stateIndex), activeLeaves[stateIndex]);
+  }
+
+  const activeSubroots = [];
+  for (let group = 0; group < TREE_ARITY; group += 1) {
+    const subroot = nativeHash5(
+      activeLeaves.slice(group * TREE_ARITY, (group + 1) * TREE_ARITY),
+      `initialActiveSubroot${group}`,
+    );
+    activeSubroots.push(subroot);
+    activeNodeMap.set(mapKey(1, group), subroot);
+  }
+  activeNodeMap.set(mapKey(2, 0), nativeHash5(activeSubroots, 'initialActiveRoot'));
+  return true;
+}
+
+function activePathFromMap(activeNodeMap, leaf, stateIndex, label) {
+  const { level0, level1 } = splitIndex(stateIndex);
+  const level0Start = level1 * TREE_ARITY;
+  const level0Children = [];
+  const path0 = [];
+  const leafFelt = toStarkFelt(leaf, `${label}.leaf`);
+
+  for (let offset = 0; offset < TREE_ARITY; offset += 1) {
+    const absoluteIndex = level0Start + offset;
+    const value = offset === level0
+      ? leafFelt
+      : activeNodeMap.get(mapKey(0, absoluteIndex));
+    if (value === undefined) {
+      throw new Error(`${label}.active leaf ${absoluteIndex} is missing`);
+    }
+    level0Children.push(value);
+    if (offset !== level0) {
+      path0.push(value);
+    }
+  }
+  const level1Node = nativeHash5(level0Children, `${label}.level0`);
+
+  const level1Children = [];
+  const path1 = [];
+  for (let group = 0; group < TREE_ARITY; group += 1) {
+    const value = group === level1
+      ? level1Node
+      : activeNodeMap.get(mapKey(1, group));
+    if (value === undefined) {
+      throw new Error(`${label}.active group ${group} is missing`);
+    }
+    level1Children.push(value);
+    if (group !== level1) {
+      path1.push(value);
+    }
+  }
+
+  return {
+    path: [path0, path1],
+    root: nativeHash5(level1Children, `${label}.root`),
+  };
+}
+
 function votePathFromMap(voteNodeMaps, stateIndex, leaf, pathElements, voteOptionIndex, label) {
   const index = Number(parseBigInt(voteOptionIndex, `${label}.voteOptionIndex`));
   const key = parseBigInt(stateIndex, `${label}.stateIndex`).toString();
@@ -308,9 +381,11 @@ function votePathFromMap(voteNodeMaps, stateIndex, leaf, pathElements, voteOptio
 export function nativeProcessMessageTransitionContexts(stateResult, contextInput) {
   const stateNodeMap = new Map();
   const voteNodeMaps = new Map();
+  const activeNodeMap = new Map();
   const contexts = Array.from({ length: stateResult.transitions.length });
   const initialTouchedStates = new Map();
   const hasFullNativeState = initializeFullNativeStateMaps(stateNodeMap, voteNodeMaps, contextInput);
+  const hasFullNativeActive = initializeFullNativeActiveMap(activeNodeMap, contextInput);
 
   if (!hasFullNativeState) {
     for (let index = stateResult.transitions.length - 1; index >= 0; index -= 1) {
@@ -386,6 +461,22 @@ export function nativeProcessMessageTransitionContexts(stateResult, contextInput
       stateIndex,
       `transition${index}.newState`,
     );
+    const activeState = hasFullNativeActive
+      ? activePathFromMap(
+        activeNodeMap,
+        input.activeStateLeaf,
+        stateIndex,
+        `transition${index}.activeState`,
+      )
+      : {
+        path: input.activeStateLeafPathElements,
+        root: nativeQuinaryInclusionRoot(
+          input.activeStateLeaf,
+          input.activeStateLeafPathElements,
+          stateIndex,
+          `transition${index}.activeState`,
+        ),
+      };
 
     updateStateMaps(
       stateNodeMap,
@@ -408,7 +499,8 @@ export function nativeProcessMessageTransitionContexts(stateResult, contextInput
       newStateRoot: newState.root,
       stateLeafPathElements: currentState.path,
       newStateLeafPathElements: newState.path,
-      activeStateRoot: toStarkFelt(input.activeStateRoot, `transition${index}.activeStateRoot`),
+      activeStateRoot: activeState.root,
+      activeStateLeafPathElements: activeState.path,
     };
   }
 

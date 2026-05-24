@@ -39,11 +39,13 @@ import {
   buildNativeCairoProcessDeactivateDecryptInput,
   buildNativeCairoProcessDeactivateEcdhInput,
   buildNativeCairoProcessDeactivateSignatureInput,
+  buildNativeCairoProcessDeactivateStageInput,
   buildNativeCairoProcessDeactivateStepCoreInput,
   serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs,
   serializeNativeCairoProcessDeactivateDecryptExecutableArgs,
   serializeNativeCairoProcessDeactivateEcdhExecutableArgs,
   serializeNativeCairoProcessDeactivateSignatureExecutableArgs,
+  serializeNativeCairoProcessDeactivateStageExecutableArgs,
   serializeNativeCairoProcessDeactivateStepCoreExecutableArgs,
 } from '../src/deactivate/cairo-input.mjs';
 import { evaluateProcessDeactivateMessagesStateful } from '../src/deactivate/process-deactivate-messages.mjs';
@@ -121,6 +123,12 @@ const PREPARERS = {
     evaluate: evaluateNativeProcessDeactivateMessagesBoundary,
     build: buildNativeCairoProcessDeactivateBoundaryInput,
     serialize: serializeNativeCairoProcessDeactivateBoundaryExecutableArgs,
+  },
+  'process-deactivate-stage-native': {
+    executable: 'process_deactivate_stage_native',
+    evaluate: evaluateNativeProcessDeactivateMessagesBoundary,
+    build: buildNativeCairoProcessDeactivateStageInput,
+    serialize: serializeNativeCairoProcessDeactivateStageExecutableArgs,
   },
   'process-deactivate-coord-key-native': {
     executable: 'process_deactivate_coord_key_native',

@@ -41,6 +41,11 @@ import {
 import { nativeProcessDeactivateTransitionContexts } from './native-process-roots.mjs';
 import { poseidonDecryptWithoutCheck7 } from '../msg/process-one.mjs';
 import { evaluateProcessDeactivateOne } from './process-deactivate-one.mjs';
+import { evaluateNativeProcessDeactivateMessagesBoundary } from './native-process-deactivate-messages.mjs';
+import {
+  buildNativeCairoProcessDeactivateBoundaryInput,
+  serializeNativeCairoProcessDeactivateBoundaryExecutableArgs,
+} from './native-cairo-input.mjs';
 
 function splitObject(value, label) {
   const { low, high } = splitU256ToU128(value, label);
@@ -1562,7 +1567,7 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
   const transition = result.state.transitions[messageIndex];
   const input = transition.input;
   const command = result.derived.messageCommands[messageIndex];
-  const nativeContext = nativeProcessDeactivateTransitionContexts(result.state)[messageIndex];
+  const nativeContext = nativeProcessDeactivateTransitionContexts(result.state, rawInput)[messageIndex];
   legacy.program_input.witness.state_leaf_path_0 = splitVector4(
     nativeContext.stateLeafPathElements[0],
     'nativeStateLeafPathElements[0]',
@@ -1759,6 +1764,69 @@ export function buildNativeCairoProcessDeactivateStepCoreInput(rawInput, message
     full_witness: legacy.full_witness,
     public_output_labels: publicOutput.labels,
     public_output: publicOutput.decimalFelts,
+  };
+}
+
+export function buildNativeCairoProcessDeactivateStageInput(rawInput, evaluatedBoundary) {
+  const boundaryEvaluation = evaluatedBoundary ?? evaluateNativeProcessDeactivateMessagesBoundary(rawInput);
+  const boundary = buildNativeCairoProcessDeactivateBoundaryInput(rawInput, boundaryEvaluation);
+  const stateful = evaluateProcessDeactivateMessagesStateful(rawInput);
+  const coordKey = buildNativeCairoProcessDeactivateCoordKeyInput(rawInput, stateful);
+  const messages = [];
+
+  for (let messageIndex = 0; messageIndex < boundaryEvaluation.params.messageBatchSize; messageIndex += 1) {
+    messages.push({
+      commandEcdh: buildNativeCairoProcessDeactivateEcdhInput(
+        rawInput,
+        messageIndex,
+        'command',
+        stateful,
+      ),
+      leafEcdh: buildNativeCairoProcessDeactivateEcdhInput(
+        rawInput,
+        messageIndex,
+        'leaf',
+        stateful,
+      ),
+      signature: buildNativeCairoProcessDeactivateSignatureInput(rawInput, messageIndex, stateful),
+      currentDecrypt: buildNativeCairoProcessDeactivateDecryptInput(
+        rawInput,
+        messageIndex,
+        'current',
+        stateful,
+      ),
+      newDecrypt: buildNativeCairoProcessDeactivateDecryptInput(
+        rawInput,
+        messageIndex,
+        'new',
+        stateful,
+      ),
+      core: buildNativeCairoProcessDeactivateStepCoreInput(rawInput, messageIndex, stateful),
+    });
+  }
+
+  return {
+    fields: boundary.fields,
+    witness_summary: boundary.witness_summary,
+    program_input: {
+      boundary: boundary.program_input,
+      coord_key: coordKey.program_input,
+      messages: messages.map((message) => ({
+        command_ecdh: message.commandEcdh.program_input,
+        leaf_ecdh: message.leafEcdh.program_input,
+        signature: message.signature.program_input,
+        current_decrypt: message.currentDecrypt.program_input,
+        new_decrypt: message.newDecrypt.program_input,
+        core: message.core.program_input,
+      })),
+    },
+    components: {
+      boundary,
+      coordKey,
+      messages,
+    },
+    public_output_labels: boundary.public_output_labels,
+    public_output: boundary.public_output,
   };
 }
 
@@ -2414,6 +2482,25 @@ export function serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(cair
   pushNativeProcessDeactivateStepCoreFields(args, cairoInput.program_input.fields);
   pushNativeProcessDeactivateStepCoreWitness(args, cairoInput.program_input.witness);
   return args.map((value) => bigintToHex(value));
+}
+
+export function serializeNativeCairoProcessDeactivateStageExecutableArgs(cairoInput) {
+  const args = [];
+  const { boundary, coordKey, messages } = cairoInput.components;
+
+  args.push(...serializeNativeCairoProcessDeactivateBoundaryExecutableArgs(boundary));
+  args.push(...serializeNativeCairoProcessDeactivateCoordKeyExecutableArgs(coordKey));
+
+  for (const message of messages) {
+    args.push(...serializeNativeCairoProcessDeactivateEcdhExecutableArgs(message.commandEcdh));
+    args.push(...serializeNativeCairoProcessDeactivateEcdhExecutableArgs(message.leafEcdh));
+    args.push(...serializeNativeCairoProcessDeactivateSignatureExecutableArgs(message.signature));
+    args.push(...serializeNativeCairoProcessDeactivateDecryptExecutableArgs(message.currentDecrypt));
+    args.push(...serializeNativeCairoProcessDeactivateDecryptExecutableArgs(message.newDecrypt));
+    args.push(...serializeNativeCairoProcessDeactivateStepCoreExecutableArgs(message.core));
+  }
+
+  return args;
 }
 
 export function serializeCairoProcessDeactivateMessagesStateTransitionExecutableArgs(cairoInput) {

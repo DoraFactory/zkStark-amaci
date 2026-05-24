@@ -1507,6 +1507,16 @@ export function buildNativeCairoProcessMessageStepCoreInput(rawInput, messageInd
     fieldLabels,
   );
   const nativeWitness = buildNativeProcessMessageStepCoreWitness(legacy.program_input.witness);
+  if (nativeContext.activeStateLeafPathElements) {
+    nativeWitness.process_one.active_state_leaf_path_0 = splitVector4(
+      nativeContext.activeStateLeafPathElements[0],
+      'nativeActiveStateLeafPathElements[0]',
+    );
+    nativeWitness.process_one.active_state_leaf_path_1 = splitVector4(
+      nativeContext.activeStateLeafPathElements[1],
+      'nativeActiveStateLeafPathElements[1]',
+    );
+  }
 
   return {
     fields,

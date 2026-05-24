@@ -19,6 +19,7 @@ Native circuits:
   process-message-signature-native
   process-message-step-core-native
   process-deactivate-boundary-native
+  process-deactivate-stage-native
   process-deactivate-coord-key-native
   process-deactivate-ecdh-command-native
   process-deactivate-ecdh-leaf-native
@@ -62,6 +63,7 @@ prepare_circuit_name() {
     process-message-signature-native) echo "process-message-signature-native" ;;
     process-message-step-core-native) echo "process-message-step-core-native" ;;
     process-deactivate-boundary-native) echo "process-deactivate-boundary-native" ;;
+    process-deactivate-stage-native) echo "process-deactivate-stage-native" ;;
     process-deactivate-coord-key-native) echo "process-deactivate-coord-key-native" ;;
     process-deactivate-ecdh-command-native) echo "process-deactivate-ecdh-command-native" ;;
     process-deactivate-ecdh-leaf-native) echo "process-deactivate-ecdh-leaf-native" ;;
@@ -85,6 +87,7 @@ executable_name() {
     process-message-signature-native) echo "process_message_signature_native" ;;
     process-message-step-core-native) echo "process_message_step_core_native" ;;
     process-deactivate-boundary-native) echo "process_deactivate_native_boundary" ;;
+    process-deactivate-stage-native) echo "process_deactivate_stage_native" ;;
     process-deactivate-coord-key-native) echo "process_deactivate_coord_key_native" ;;
     process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native) echo "process_deactivate_ecdh_native" ;;
     process-deactivate-signature-native) echo "process_deactivate_signature_native" ;;
@@ -96,7 +99,7 @@ executable_name() {
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-stage-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
     *) return 1 ;;
   esac
 }

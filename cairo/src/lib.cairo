@@ -1,6 +1,7 @@
 mod native_add_new_key;
 mod native_process_deactivate;
 mod native_process_deactivate_components;
+mod native_process_deactivate_stage;
 mod native_process_deactivate_step_core;
 mod native_process_message_components;
 mod native_process_message_step_core;

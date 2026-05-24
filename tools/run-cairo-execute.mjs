@@ -71,6 +71,12 @@ const CIRCUITS = Object.freeze({
     synthetic: true,
     fixtureCircuit: 'process-deactivate',
   },
+  'process-deactivate-stage-native': {
+    prepareCircuit: 'process-deactivate-stage-native',
+    executable: 'process_deactivate_stage_native',
+    synthetic: true,
+    fixtureCircuit: 'process-deactivate',
+  },
   'process-deactivate-coord-key-native': {
     prepareCircuit: 'process-deactivate-coord-key-native',
     executable: 'process_deactivate_coord_key_native',

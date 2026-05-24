@@ -97,6 +97,15 @@ test(
 );
 
 test(
+  'executes the native ProcessDeactivateMessages stage Cairo program with synthetic fixture args',
+  { skip: !runExecutionTests, timeout: 600000 },
+  () => {
+    const metadata = runCircuit('process-deactivate-stage-native');
+    assert.equal(metadata.executable, 'process_deactivate_stage_native');
+  },
+);
+
+test(
   'executes deeply split native ProcessDeactivateMessages Cairo programs with synthetic fixture args',
   { skip: !runExecutionTests, timeout: 600000 },
   () => {

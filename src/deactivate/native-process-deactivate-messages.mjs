@@ -113,7 +113,7 @@ export function evaluateNativeProcessDeactivateMessagesBoundary(
   expectMatrixShape(rawInput.encPubKeys, batchSize, ENC_PUB_KEY_LENGTH, 'encPubKeys');
 
   const nativeState = Array.isArray(rawInput.processOneWitnesses)
-    ? nativeProcessDeactivateStateRoots(evaluateProcessDeactivateMessagesStateful(rawInput).state)
+    ? nativeProcessDeactivateStateRoots(evaluateProcessDeactivateMessagesStateful(rawInput).state, rawInput)
     : undefined;
   const newDeactivateRoot = nativeState?.newDeactivateRoot ?? toStarkFelt(rawInput.newDeactivateRoot, 'newDeactivateRoot');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');

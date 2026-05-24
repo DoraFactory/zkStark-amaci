@@ -24,6 +24,9 @@ import {
   nativeProcessMessageTransitionContexts,
 } from '../msg/native-process-roots.mjs';
 import { processDeactivateMessageHashChain } from '../deactivate/process-deactivate-messages.mjs';
+import {
+  evaluateNativeProcessDeactivateMessagesBoundary,
+} from '../deactivate/native-process-deactivate-messages.mjs';
 import { requireZkKitPackage } from '../compat/zk-kit-require.mjs';
 
 export const SMALL_SYNTHETIC_CIRCUITS = Object.freeze([
@@ -150,21 +153,25 @@ function buildProcessMessagesState({
   sharedKeys,
   signatureSecretKeys,
   commands = DEFAULT_PROCESS_MESSAGES_COMMANDS,
+  numSignUps = 20n,
+  maxVoteOptions = 5n,
+  expectedPollId = 77n,
+  initialVoteLeavesByState: initialVoteLeavesByStateOption,
+  initialActiveLeaves: initialActiveLeavesOption,
 } = {}) {
   const isQuadraticCost = 1n;
   const coordPrivKey = 5n;
-  const numSignUps = 20n;
-  const maxVoteOptions = 5n;
-  const expectedPollId = 77n;
   const normalizedCommands = normalizeProcessMessageCommands(commands);
   const emptyStateLeaf = Array.from({ length: 10 }, () => 0n);
-  const voteLeavesByState = Array.from({ length: 25 }, (_, stateIndex) => [
-    BigInt(stateIndex + 1),
-    BigInt(stateIndex + 2),
-    BigInt(stateIndex + 3),
-    BigInt(stateIndex + 4),
-    BigInt(stateIndex + 5),
-  ]);
+  const voteLeavesByState = initialVoteLeavesByStateOption === undefined
+    ? Array.from({ length: 25 }, (_, stateIndex) => [
+      BigInt(stateIndex + 1),
+      BigInt(stateIndex + 2),
+      BigInt(stateIndex + 3),
+      BigInt(stateIndex + 4),
+      BigInt(stateIndex + 5),
+    ])
+    : initialVoteLeavesByStateOption.map((row) => row.map(BigInt));
   const stateLeaves = Array.from({ length: 25 }, () => emptyStateLeaf.slice());
   const touchedStateIndexes = [
     ...new Set(
@@ -194,7 +201,9 @@ function buildProcessMessagesState({
     );
   }
 
-  const activeLeaves = Array.from({ length: 25 }, () => 0n);
+  const activeLeaves = initialActiveLeavesOption === undefined
+    ? Array.from({ length: 25 }, () => 0n)
+    : initialActiveLeavesOption.map(BigInt);
   const activeStateRoot = pathFor(activeLeaves, 2, 0).root;
   let stateLeafHashes = stateLeaves.map(hash10);
   const currentStateRoot = pathFor(stateLeafHashes, 2, 0).root;
@@ -288,16 +297,23 @@ function buildProcessMessagesState({
     processOneWitnesses,
     initialStateLeaves,
     initialVoteLeavesByState,
+    initialActiveLeaves: activeLeaves,
     finalStateLeaves: stateLeaves,
     finalVoteLeavesByState: voteLeavesByState,
+    numSignUps,
+    maxVoteOptions,
+    expectedPollId,
   });
 }
 
 function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
+  const numSignUps = BigInt(state.numSignUps ?? 20n);
+  const maxVoteOptions = BigInt(state.maxVoteOptions ?? 5n);
+  const expectedPollId = BigInt(state.expectedPollId ?? 77n);
   const packedVals = packProcessMessagesVals({
     isQuadraticCost: 1n,
-    numSignUps: 20n,
-    maxVoteOptions: 5n,
+    numSignUps,
+    maxVoteOptions,
   });
   const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, BigInt(coordPrivKey));
   const coordPubKeyHash = hashLeftRight(coordPubKey[0], coordPubKey[1]);
@@ -306,11 +322,10 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
   const { endHash: batchEndHash } = processMessageHashChain(msgs, encPubKeys, batchStartHash);
   const currentStateSalt = 701n;
   const newStateSalt = 702n;
-  const deactivateRoot = 703n;
+  const deactivateRoot = BigInt(state.deactivateRoot ?? 703n);
   const currentStateCommitment = hashLeftRight(BigInt(state.currentStateRoot), currentStateSalt);
   const newStateCommitment = hashLeftRight(BigInt(state.newStateRoot), newStateSalt);
   const deactivateCommitment = hashLeftRight(BigInt(state.activeStateRoot), deactivateRoot);
-  const expectedPollId = 77n;
   const inputHash = processMessagesInputHash(
     packedVals,
     coordPubKeyHash,
@@ -361,9 +376,17 @@ export function buildSmallProcessMessagesFixture(options = {}) {
     smallProcessMessageCryptoInputs();
   const state = buildProcessMessagesState({
     sharedKeys,
-    signatureSecretKeys,
+    signatureSecretKeys: options.signatureSecretKeys ?? signatureSecretKeys,
     commands: options.commands,
+    numSignUps: options.numSignUps,
+    maxVoteOptions: options.maxVoteOptions,
+    expectedPollId: options.expectedPollId,
+    initialVoteLeavesByState: options.initialVoteLeavesByState,
+    initialActiveLeaves: options.initialActiveLeaves,
   });
+  if (options.deactivateRoot !== undefined) {
+    state.deactivateRoot = BigInt(options.deactivateRoot).toString();
+  }
   return buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys });
 }
 
@@ -378,12 +401,13 @@ export function buildSmallNativeRoundFixture() {
   const processMessages = processMessagesDraft;
   const stateResult = evaluateProcessMessagesStateful(processMessagesDraft).state;
   const transitionContexts = nativeProcessMessageTransitionContexts(stateResult, processMessagesDraft);
-  const contextsByStateIndex = new Map(
-    transitionContexts.map((context, index) => [
-      Number(stateResult.transitions[index].derived.stateIndex),
-      context,
-    ]),
-  );
+  const contextsByStateIndex = new Map();
+  for (let index = 0; index < transitionContexts.length; index += 1) {
+    const stateIndex = Number(stateResult.transitions[index].derived.stateIndex);
+    if (!contextsByStateIndex.has(stateIndex)) {
+      contextsByStateIndex.set(stateIndex, transitionContexts[index]);
+    }
+  }
   const finalStateLeaves = [];
   const finalVotes = [];
   for (let stateIndex = 0; stateIndex < TREE_ARITY; stateIndex += 1) {
@@ -498,16 +522,21 @@ function identityDecryptCiphertext(coordPrivKey, randomScalar) {
   return { c1, c2 };
 }
 
-export function buildSmallProcessDeactivateFixture() {
+export function buildSmallProcessDeactivateFixture(options = {}) {
   const coordPrivKey = 5n;
   const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, coordPrivKey);
   const expectedPollId = 77n;
   const deactivateIndex0 = 40n;
+  const stateIndexes = options.stateIndexes ?? [0, 1, 2];
+  if (!Array.isArray(stateIndexes) || stateIndexes.length !== 3) {
+    throw new Error('stateIndexes must contain exactly 3 entries');
+  }
   const emptyStateLeafHash = hash10([0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n]);
   const stateLeafHashes = Array.from({ length: 25 }, () => emptyStateLeafHash);
   const stateLeaves = [];
 
   for (let i = 0; i < 3; i += 1) {
+    const stateIndex = Number(stateIndexes[i]);
     const secretKey = Buffer.from([21 + i, 34 + i, 55 + i, 89 + i, 144 + i]);
     const statePubKey = derivePublicKeyFromSecret(secretKey);
     const currentCiphertext = identityDecryptCiphertext(coordPrivKey, BigInt(20 + i));
@@ -522,14 +551,16 @@ export function buildSmallProcessDeactivateFixture() {
       currentCiphertext.c2[1],
       0n,
     ];
-    stateLeaves.push({ secretKey, stateLeaf });
-    stateLeafHashes[i] = hash10(stateLeaf);
+    stateLeaves.push({ secretKey, stateIndex, stateLeaf });
+    stateLeafHashes[stateIndex] = hash10(stateLeaf);
   }
 
   const stateTree = pathFor(stateLeafHashes, 2, 0);
   const currentStateRoot = stateTree.root;
   const activeLeaves = Array.from({ length: 25 }, () => 0n);
   const deactivateLeaves = Array.from({ length: 625 }, () => 0n);
+  const initialActiveLeaves = activeLeaves.slice();
+  const initialDeactivateLeaves = deactivateLeaves.slice();
   const currentActiveStateRoot = pathFor(activeLeaves, 2, 0).root;
   const currentDeactivateRoot = pathFor(deactivateLeaves, 4, 0).root;
   const processOneWitnesses = [];
@@ -539,7 +570,7 @@ export function buildSmallProcessDeactivateFixture() {
   let activeRoot = currentActiveStateRoot;
   let deactivateRoot = currentDeactivateRoot;
   for (let i = 0; i < 3; i += 1) {
-    const stateIndex = i;
+    const stateIndex = stateLeaves[i].stateIndex;
     const deactivateIndex = Number(deactivateIndex0) + i;
     const { secretKey, stateLeaf } = stateLeaves[i];
     const statePath = pathFor(stateLeafHashes, 2, stateIndex);
@@ -640,6 +671,185 @@ export function buildSmallProcessDeactivateFixture() {
     deactivateIndex0,
     newActiveStateRoot: activeRoot,
     processOneWitnesses,
+    initialActiveLeaves,
+    initialDeactivateLeaves,
+    finalActiveLeaves: activeLeaves,
+    finalDeactivateLeaves: deactivateLeaves,
+    deactivatedStateIndexes: stateIndexes.map(BigInt),
+  });
+}
+
+function buildLinkedProcessDeactivateBoundaryFixture({
+  currentActiveStateRoot,
+  currentDeactivateRoot,
+  newActiveStateRoot,
+  newDeactivateRoot,
+  currentStateRoot,
+  expectedPollId = 77n,
+}) {
+  const coordPrivKey = 5n;
+  const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, coordPrivKey);
+  const msgs = [
+    [101n, 102n, 103n, 104n, 105n, 106n, 107n, 108n, 109n, 0n],
+    [201n, 202n, 203n, 204n, 205n, 206n, 207n, 208n, 209n, 0n],
+    [301n, 302n, 303n, 304n, 305n, 306n, 307n, 308n, 309n, 0n],
+  ];
+  const encPubKeys = [80n, 81n, 82n].map((scalar) =>
+    babyjubScalarMul(BABYJUB_BASE8, scalar),
+  );
+  const batchStartHash = 321n;
+  const { endHash } = processDeactivateMessageHashChain(msgs, encPubKeys, batchStartHash);
+  const draft = decimalize({
+    newDeactivateRoot,
+    coordPubKey,
+    batchStartHash,
+    batchEndHash: endHash,
+    currentActiveStateRoot,
+    currentDeactivateRoot,
+    newActiveStateRoot,
+    currentDeactivateCommitment: 0n,
+    newDeactivateCommitment: 0n,
+    currentStateRoot,
+    expectedPollId,
+    msgs,
+    encPubKeys,
+    coordPrivKey,
+  });
+  const evaluated = evaluateNativeProcessDeactivateMessagesBoundary(draft);
+  return decimalize({
+    ...draft,
+    batchEndHash: evaluated.publicFields.batchEndHash,
+    currentDeactivateCommitment: evaluated.publicFields.currentDeactivateCommitment,
+    newDeactivateCommitment: evaluated.publicFields.newDeactivateCommitment,
+    inputHash: evaluated.publicFields.inputHash,
+  });
+}
+
+export function buildSmallNativeLifecycleRoundFixture() {
+  const initialVoteLeavesByState = Array.from({ length: 25 }, () =>
+    Array.from({ length: TREE_ARITY }, () => 0n),
+  );
+  const processDeactivate = buildSmallProcessDeactivateFixture({
+    stateIndexes: [2, 3, 4],
+  });
+  const processDeactivateEvaluated = evaluateNativeProcessDeactivateMessagesBoundary(processDeactivate);
+  const signatureSecretKey = Buffer.from([31, 41, 59, 26, 53]);
+  const commands = [
+    { isValid: true, stateIndex: 1, voteOptionIndex: 2, newVoteWeight: 5n },
+    { isValid: true, stateIndex: 1, voteOptionIndex: 1, newVoteWeight: 3n },
+    { isValid: true, stateIndex: 1, voteOptionIndex: 0, newVoteWeight: 2n },
+  ];
+  const processMessagesDraft = buildSmallProcessMessagesFixture({
+    commands,
+    numSignUps: 1n,
+    initialVoteLeavesByState,
+    initialActiveLeaves: processDeactivate.finalActiveLeaves,
+    deactivateRoot: processDeactivateEvaluated.publicFields.newDeactivateRoot,
+    signatureSecretKeys: [signatureSecretKey, signatureSecretKey, signatureSecretKey],
+  });
+  const processMessagesEvaluated = evaluateNativeProcessMessagesBoundary(processMessagesDraft);
+  const processMessages = processMessagesDraft;
+  const stateResult = evaluateProcessMessagesStateful(processMessagesDraft).state;
+  const transitionContexts = nativeProcessMessageTransitionContexts(stateResult, processMessagesDraft);
+  const contextsByStateIndex = new Map();
+  for (let index = 0; index < transitionContexts.length; index += 1) {
+    const stateIndex = Number(stateResult.transitions[index].derived.stateIndex);
+    if (!contextsByStateIndex.has(stateIndex)) {
+      contextsByStateIndex.set(stateIndex, transitionContexts[index]);
+    }
+  }
+  const finalStateLeaves = [];
+  const finalVotes = [];
+  for (let stateIndex = 0; stateIndex < TREE_ARITY; stateIndex += 1) {
+    const context = contextsByStateIndex.get(stateIndex);
+    finalStateLeaves.push(context?.newStateLeaf ?? Array.from({ length: 10 }, () => 0n));
+    finalVotes.push(
+      context === undefined
+        ? Array.from({ length: TREE_ARITY }, () => 0n)
+        : processMessagesDraft.finalVoteLeavesByState[stateIndex].map(BigInt),
+    );
+  }
+
+  const batchZeroContext = contextsByStateIndex.get(1);
+  const tallyDraft = {
+    packedVals: (1n << 32n).toString(),
+    stateRoot: batchZeroContext.newStateRoot.toString(),
+    stateSalt: processMessages.newStateSalt,
+    stateLeaf: finalStateLeaves,
+    statePathElements: [batchZeroContext.newStateLeafPathElements[1]],
+    votes: finalVotes,
+    currentResults: Array.from({ length: TREE_ARITY }, () => 0n),
+    currentResultsRootSalt: '0',
+    newResultsRootSalt: '901',
+  };
+  const tallyEvaluated = evaluateNativeTallyVotes(tallyDraft);
+  const tally = {
+    ...tallyDraft,
+    stateCommitment: tallyEvaluated.publicFields.stateCommitment,
+    currentTallyCommitment: tallyEvaluated.publicFields.currentTallyCommitment,
+    newTallyCommitment: tallyEvaluated.publicFields.newTallyCommitment,
+    inputHash: tallyEvaluated.publicFields.inputHash,
+  };
+
+  return decimalize({
+    addNewKey: buildSmallAddNewKeyFixture(),
+    processDeactivate,
+    processMessages,
+    tally,
+    chain: {
+      schema: 'zkstark-amaci.full-native-lifecycle-fixture.v1',
+      params: {
+        stateTreeDepth: 2,
+        intStateTreeDepth: 1,
+        voteOptionTreeDepth: 1,
+        messageBatchSize: 3,
+        signupCount: 1,
+      },
+      flow: ['signup', 'vote', 'deactivate', 'vote', 'processMsg', 'tally'],
+      signup: {
+        count: 1,
+        activeStateIndex: 1,
+        initialStateCommitment: processMessagesEvaluated.publicFields.currentStateCommitment,
+      },
+      votes: {
+        messagesPerProcessBatch: 3,
+        processMessageOrder: 'messages are processed from index 2 down to index 0; index 0 is the latest command in this fixture',
+        lifecyclePlacement: {
+          beforeDeactivateMessageIndexes: [2],
+          afterDeactivateMessageIndexes: [1, 0],
+          note:
+            'The fixture has one processMsg batch with 3 vote commands total. It places the oldest command before deactivate and the two later commands after deactivate to exercise the requested lifecycle order.',
+        },
+        commands,
+        finalVoteLeavesForStateIndex1: processMessagesDraft.finalVoteLeavesByState[1],
+      },
+      deactivate: {
+        currentDeactivateCommitment: processDeactivateEvaluated.publicFields.currentDeactivateCommitment,
+        newDeactivateCommitment: processDeactivateEvaluated.publicFields.newDeactivateCommitment,
+        deactivatedStateIndexes: processDeactivate.deactivatedStateIndexes,
+        note:
+          'This lifecycle fixture uses a stateful deactivate stage input with processOneWitnesses. Its native new deactivate commitment is used as the processMsg deactivate commitment.',
+      },
+      processMessages: {
+        currentStateCommitment: processMessagesEvaluated.publicFields.currentStateCommitment,
+        newStateCommitment: processMessagesEvaluated.publicFields.newStateCommitment,
+        deactivateCommitment: processMessagesEvaluated.publicFields.deactivateCommitment,
+      },
+      tally: {
+        stateCommitment: tallyEvaluated.publicFields.stateCommitment,
+        currentTallyCommitment: tallyEvaluated.publicFields.currentTallyCommitment,
+        newTallyCommitment: tallyEvaluated.publicFields.newTallyCommitment,
+        newResults: tallyEvaluated.derived.newResults,
+      },
+      links: {
+        deactivateToProcessMessages:
+          processDeactivateEvaluated.publicFields.newDeactivateCommitment
+            === processMessagesEvaluated.publicFields.deactivateCommitment,
+        processMessagesToTallyState:
+          processMessagesEvaluated.publicFields.newStateCommitment
+            === tallyEvaluated.publicFields.stateCommitment,
+      },
+    },
   });
 }
 
