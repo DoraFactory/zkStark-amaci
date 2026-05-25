@@ -1,5 +1,10 @@
 use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
+use crate::native_stark_crypto::{
+    STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN, assert_stark_point_equals,
+    stark_elgamal_decrypt_point_is_odd, stark_generator_mul, stark_scalar_mul,
+    stark_verify_command_signature,
+};
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
@@ -52,6 +57,7 @@ pub struct NativeProcessMessageDecryptWitness {
     pub coord_priv_key: u256,
     pub c1: U256x2,
     pub c2: U256x2,
+    pub decrypted_point: U256x2,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -301,9 +307,7 @@ fn assert_valid_message_index(message_index: felt252) {
     assert(
         message_index == 0
             || message_index == 1
-            || message_index == 2
-            || message_index == 3
-            || message_index == 4,
+            || message_index == 2,
         'BAD_MSG_INDEX',
     );
 }
@@ -311,6 +315,15 @@ fn assert_valid_message_index(message_index: felt252) {
 fn verify_native_process_message_coord_key(
     fields: NativeProcessMessageCoordKeyPublicFields, witness: NativeProcessMessageCoordKeyWitness,
 ) {
+    let (coord_pub_key_x, coord_pub_key_y) = stark_generator_mul(witness.coord_priv_key);
+    assert_stark_point_equals(
+        coord_pub_key_x,
+        coord_pub_key_y,
+        witness.coord_pub_key.v0,
+        witness.coord_pub_key.v1,
+        'N_COORD_X',
+        'N_COORD_Y',
+    );
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(
         native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
@@ -327,6 +340,17 @@ fn verify_native_process_message_ecdh(
     fields: NativeProcessMessageEcdhPublicFields, witness: NativeProcessMessageEcdhWitness,
 ) {
     assert_valid_message_index(fields.message_index);
+    let (shared_key_x, shared_key_y) = stark_scalar_mul(
+        witness.enc_pub_key.v0, witness.enc_pub_key.v1, witness.coord_priv_key,
+    );
+    assert_stark_point_equals(
+        shared_key_x,
+        shared_key_y,
+        witness.shared_key.v0,
+        witness.shared_key.v1,
+        'N_SHARED_X',
+        'N_SHARED_Y',
+    );
     assert(
         native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
         'N_COORD_PRIV',
@@ -346,6 +370,11 @@ fn verify_native_process_message_decrypt(
 ) {
     assert_valid_message_index(fields.message_index);
     assert(fields.decrypt_is_odd == 0 || fields.decrypt_is_odd == 1, 'BAD_DEC_BOOL');
+    let decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
+        witness.coord_priv_key, witness.c1.v0, witness.c1.v1, witness.c2.v0, witness.c2.v1,
+        witness.decrypted_point.v0, witness.decrypted_point.v1,
+    );
+    assert(decrypt_is_odd == fields.decrypt_is_odd, 'N_DEC_ODD');
     assert(
         native_coord_priv_key_hash(witness.coord_priv_key) == fields.coord_priv_key_hash,
         'N_COORD_PRIV',
@@ -368,6 +397,19 @@ fn verify_native_process_message_signature(
 ) {
     assert_valid_message_index(fields.message_index);
     assert(fields.is_signature_valid == 0 || fields.is_signature_valid == 1, 'BAD_SIG_BOOL');
+    let signature_valid = stark_verify_command_signature(
+        STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN,
+        witness.pub_key.v0,
+        witness.pub_key.v1,
+        witness.r8.v0,
+        witness.r8.v1,
+        witness.s,
+        witness.packed_command.v0,
+        witness.packed_command.v1,
+        witness.packed_command.v2,
+        witness.cmd_salt,
+    );
+    assert(signature_valid == fields.is_signature_valid, 'N_SIG_VALID');
     assert(native_hash_u256x2(witness.pub_key) == fields.pub_key_hash, 'N_PUB_KEY');
     assert(native_hash_u256x2(witness.r8) == fields.r8_hash, 'N_R8');
     assert(native_hash_u256x3(witness.packed_command) == fields.packed_command_hash, 'N_CMD');
@@ -395,7 +437,7 @@ fn build_native_process_message_coord_key_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         coord_key_binding_hash: fields.coord_key_binding_hash,
@@ -420,7 +462,7 @@ fn build_native_process_message_ecdh_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         enc_pub_key_hash: fields.enc_pub_key_hash,
@@ -447,7 +489,7 @@ fn build_native_process_message_decrypt_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         c1_hash: fields.c1_hash,
@@ -475,7 +517,7 @@ fn build_native_process_message_signature_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         pub_key_hash: fields.pub_key_hash,
         r8_hash: fields.r8_hash,

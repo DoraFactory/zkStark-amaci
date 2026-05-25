@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
-import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
+import { bigintToHex, parseBigInt } from '../encoding.mjs';
 import { calculatePlainFactHash, isIntegrityHashingAvailable } from '../integrity/hashes.mjs';
 
 const require = createRequire(import.meta.url);

@@ -21,7 +21,7 @@ test('classifies the small AMACI tally fixture as runnable', { skip: !existsSync
 
   assert.equal(classification.circuit, 'tally');
   assert.equal(classification.supported, true);
-  assert.equal(classification.supportedProgram, 'tally_votes');
+  assert.equal(classification.supportedProgram, 'tally_votes_native');
   assert.deepEqual(classification.shape, {
     stateLeafCount: 5,
     stateLeafWidth: 10,
@@ -39,7 +39,7 @@ test('discovers and validates runnable AMACI tally fixtures', { skip: !existsSyn
   assert.ok(report.counts.tally >= 1);
   assert.ok(report.supportedCount >= 1);
   assert.equal(fixture.supported, true);
-  assert.equal(fixture.validation.publicOutputFelts, 16);
+  assert.equal(fixture.validation.publicOutputFelts, 12);
   assert.ok(/^[0-9]+$/.test(fixture.validation.inputHash));
 });
 

@@ -1,5 +1,5 @@
 import { SMALL_TALLY_PARAMS, TREE_ARITY } from '../constants.mjs';
-import { parseBigInt } from '../compat/encoding.mjs';
+import { parseBigInt } from '../encoding.mjs';
 import { canonicalNativeTallyPublicOutput } from '../public-output.mjs';
 import {
   calculateBootloadedFactHash,

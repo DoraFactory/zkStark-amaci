@@ -1,8 +1,17 @@
 import { SMALL_PROCESS_DEACTIVATE_PARAMS, TREE_ARITY } from '../constants.mjs';
-import { deepMapBigInt, parseBigInt } from '../compat/encoding.mjs';
-import { babyjubAdd, babyjubScalarMul, bn254Sub, buildBabyjubPoseidonSignatureWitness } from '../compat/babyjub.mjs';
-import { hash10, hash5, hashLeftRight } from '../compat/poseidon.mjs';
-import { quinaryInclusionRoot } from '../compat/quinary-tree.mjs';
+import { deepMapBigInt, parseBigInt } from '../encoding.mjs';
+import {
+  STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
+  starkElGamalDecryptPoint,
+  starkScalarMul,
+  starkVerifyCommandSignature,
+} from '../stark-native-crypto.mjs';
+import {
+  nativeHash5,
+  nativeHash10,
+  nativeHashPoint,
+  nativeQuinaryInclusionRoot,
+} from '../native-hash.mjs';
 
 const STATE_LEAF_LENGTH = 10;
 const MAX_STATE_INDEX = TREE_ARITY ** SMALL_PROCESS_DEACTIVATE_PARAMS.stateTreeDepth - 1;
@@ -43,17 +52,7 @@ function boolToBigInt(value) {
 export function elGamalDecryptPoint(c1, c2, coordPrivKey) {
   expectVectorShape(c1, 2, 'c1');
   expectVectorShape(c2, 2, 'c2');
-  const parsedC1 = deepMapBigInt(c1);
-  const parsedC2 = deepMapBigInt(c2);
-  const c1x = babyjubScalarMul(parsedC1, coordPrivKey);
-  const c1xInverse = [bn254Sub(0n, c1x[0]), c1x[1]];
-  const decryptedPoint = babyjubAdd(c1xInverse, parsedC2);
-  return {
-    c1x,
-    c1xInverse,
-    decryptedPoint,
-    isOdd: decryptedPoint[0] & 1n,
-  };
+  return starkElGamalDecryptPoint(deepMapBigInt(c1), deepMapBigInt(c2), coordPrivKey);
 }
 
 export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DEACTIVATE_PARAMS) {
@@ -94,6 +93,7 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
     cmdPollId: parseBigInt(rawInput.cmdPollId, 'cmdPollId'),
     cmdSigR8: deepMapBigInt(rawInput.cmdSigR8),
     cmdSigS: parseBigInt(rawInput.cmdSigS, 'cmdSigS'),
+    cmdSalt: parseBigInt(rawInput.cmdSalt ?? 0n, 'cmdSalt'),
     packedCmd: deepMapBigInt(rawInput.packedCmd),
     expectedPollId: parseBigInt(rawInput.expectedPollId, 'expectedPollId'),
     deactivateIndex: parseBigInt(rawInput.deactivateIndex, 'deactivateIndex'),
@@ -108,19 +108,20 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
         : parseBigInt(rawInput.newDeactivateRoot, 'newDeactivateRoot'),
   };
 
-  const signatureWitness = buildBabyjubPoseidonSignatureWitness({
-    pubKey: input.stateLeaf.slice(0, 2),
-    r8: input.cmdSigR8,
-    s: input.cmdSigS,
-    preimage: input.packedCmd,
-  });
+  const signatureValid = starkVerifyCommandSignature(
+    input.stateLeaf.slice(0, 2),
+    { r: input.cmdSigR8[0], rPoint: input.cmdSigR8, s: input.cmdSigS },
+    input.packedCmd,
+    input.cmdSalt,
+    STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
+  );
   const currentStateDecrypt = elGamalDecryptPoint(
     input.stateLeaf.slice(5, 7),
     input.stateLeaf.slice(7, 9),
     input.coordPrivKey,
   );
   const validPollId = input.cmdPollId === input.expectedPollId;
-  const valid = signatureWitness.valid === 1n && currentStateDecrypt.isOdd === 0n && validPollId;
+  const valid = signatureValid === 1n && currentStateDecrypt.isOdd === 0n && validPollId;
   const newStateDecrypt = elGamalDecryptPoint(input.c1, input.c2, input.coordPrivKey);
   expectEqual(boolToBigInt(valid), 1n - newStateDecrypt.isOdd, 'valid/decryptIsActive');
 
@@ -128,48 +129,53 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
     input.cmdStateIndex >= 0n && input.cmdStateIndex <= BigInt(MAX_STATE_INDEX)
       ? input.cmdStateIndex
       : BigInt(MAX_STATE_INDEX);
-  const stateLeafHash = hash10(input.stateLeaf);
-  const currentStateRoot = quinaryInclusionRoot(
+  const stateLeafHash = nativeHash10(input.stateLeaf, 'stateLeaf');
+  const currentStateRoot = nativeQuinaryInclusionRoot(
     stateLeafHash,
     input.stateLeafPathElements,
     stateIndex,
+    'currentStateRoot',
   );
   expectEqual(currentStateRoot, input.currentStateRoot, 'currentStateRoot');
 
   if (input.newActiveState === 0n) {
     throw new Error('newActiveState must be non-zero');
   }
-  const currentActiveStateRoot = quinaryInclusionRoot(
+  const currentActiveStateRoot = nativeQuinaryInclusionRoot(
     input.currentActiveState,
     input.activeStateLeafPathElements,
     stateIndex,
+    'currentActiveStateRoot',
   );
   expectEqual(currentActiveStateRoot, input.currentActiveStateRoot, 'currentActiveStateRoot');
   const newActiveStateLeaf = valid ? input.newActiveState : input.currentActiveState;
-  const newActiveStateRoot = quinaryInclusionRoot(
+  const newActiveStateRoot = nativeQuinaryInclusionRoot(
     newActiveStateLeaf,
     input.activeStateLeafPathElements,
     stateIndex,
+    'newActiveStateRoot',
   );
   if (input.newActiveStateRoot !== undefined) {
     expectEqual(newActiveStateRoot, input.newActiveStateRoot, 'newActiveStateRoot');
   }
 
-  const currentDeactivateRoot = quinaryInclusionRoot(
+  const currentDeactivateRoot = nativeQuinaryInclusionRoot(
     0n,
     input.deactivateLeafPathElements,
     input.deactivateIndex,
+    'currentDeactivateRoot',
   );
   expectEqual(currentDeactivateRoot, input.currentDeactivateRoot, 'currentDeactivateRoot');
 
-  const sharedKey = babyjubScalarMul(input.stateLeaf.slice(0, 2), input.coordPrivKey);
-  const sharedKeyHash = hashLeftRight(sharedKey[0], sharedKey[1]);
-  const deactivateLeaf = hash5([...input.c1, ...input.c2, sharedKeyHash]);
+  const sharedKey = starkScalarMul(input.stateLeaf.slice(0, 2), input.coordPrivKey);
+  const sharedKeyHash = nativeHashPoint(sharedKey, 'deactivateSharedKey');
+  const deactivateLeaf = nativeHash5([...input.c1, ...input.c2, sharedKeyHash], 'deactivateLeaf');
   const newDeactivateLeaf = input.isEmptyMsg === 1n ? 0n : deactivateLeaf;
-  const newDeactivateRoot = quinaryInclusionRoot(
+  const newDeactivateRoot = nativeQuinaryInclusionRoot(
     newDeactivateLeaf,
     input.deactivateLeafPathElements,
     input.deactivateIndex,
+    'newDeactivateRoot',
   );
   if (input.newDeactivateRoot !== undefined) {
     expectEqual(newDeactivateRoot, input.newDeactivateRoot, 'newDeactivateRoot');
@@ -179,8 +185,7 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
     params,
     input,
     derived: {
-      signatureWitness,
-      signatureValid: signatureWitness.valid,
+      signatureValid,
       currentStateDecrypt,
       newStateDecrypt,
       validPollId: boolToBigInt(validPollId),

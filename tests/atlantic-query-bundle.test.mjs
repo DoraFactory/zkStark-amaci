@@ -39,7 +39,7 @@ test('exports Atlantic-compatible program and input files from a Stone AIR run',
   assert.equal(result.manifest.fields.cairoVm, 'rust');
   assert.equal(result.manifest.fields.result, 'PROOF_VERIFICATION_ON_L2');
   assert.equal(result.manifest.fields.sharpProver, 'stone');
-  assert.equal(result.manifest.fields.layout, 'recursive_with_poseidon');
+  assert.equal(result.manifest.fields.layout, 'auto');
   assert.equal(result.manifest.fields.externalId, 'amaci-test');
   assert.equal(result.manifest.files.inputFile.feltCount, 3);
   assert.equal(result.manifest.files.inputFile.arrayWrapped, true);
@@ -77,4 +77,33 @@ test('warns when the Cairo1 input file is not one array argument', () => {
   assert.equal(result.manifest.files.inputFile.feltCount, 3);
   assert.equal(result.manifest.files.inputFile.arrayWrapped, false);
   assert.match(result.manifest.warnings[0], /not bracketed/);
+});
+
+test('can reuse a shared Sierra program file for a different Stone AIR input', () => {
+  const sourceDir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-atlantic-shared-src-'));
+  const localProgram = join(sourceDir, 'local-program.sierra.json');
+  const sharedProgram = join(sourceDir, 'shared-program.sierra.json');
+  const input = join(sourceDir, 'input.txt');
+  const stoneAirRun = join(sourceDir, 'stone-air-run.json');
+  writeJson(localProgram, { sierra_program: ['0x1'], entry_points_by_type: {} });
+  writeJson(sharedProgram, { sierra_program: ['0x2'], entry_points_by_type: {} });
+  writeFileSync(input, '[1 2 3]\n');
+  writeJson(stoneAirRun, {
+    circuit: 'process-messages-stage-native',
+    stoneExecutable: 'process_messages_stage_native_stone',
+    runnerSierraJson: localProgram,
+    cairo1ArgsTxt: input,
+    layout: 'recursive_with_poseidon',
+  });
+
+  const outDir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-atlantic-shared-out-'));
+  const result = createAtlanticQueryBundle(stoneAirRun, outDir, {
+    programFile: sharedProgram,
+  });
+
+  assert.deepEqual(JSON.parse(readFileSync(result.files.programFile, 'utf8')), {
+    sierra_program: ['0x2'],
+    entry_points_by_type: {},
+  });
+  assert.equal(result.manifest.files.inputFile.feltCount, 3);
 });

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
+import { bigintToHex, parseBigInt } from '../encoding.mjs';
 import { asciiToFelt } from './hashes.mjs';
 import { loadSplitCalldataPackage } from './split-calldata.mjs';
 

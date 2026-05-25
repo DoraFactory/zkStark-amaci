@@ -3,7 +3,8 @@ import { dirname, resolve } from 'node:path';
 
 export const NATIVE_SPLIT_LINK_SCHEMA = 'zkstark-amaci.native-split-link-report.v1';
 
-const BATCH_SIZE = 5;
+const PROCESS_MESSAGES_BATCH_SIZE = 3;
+const PROCESS_DEACTIVATE_BATCH_SIZE = 3;
 
 function readJson(path, label) {
   try {
@@ -214,10 +215,10 @@ function buildProcessMessagesReport(manifestPath, manifest) {
   const checks = [];
   const boundary = loadManifestRun(manifestPath, manifest.boundary, 'boundary');
   const coordKey = loadManifestRun(manifestPath, manifest.coordKey, 'coordKey');
-  const ecdh = loadManifestRunArray(manifestPath, manifest, 'ecdh', BATCH_SIZE, checks);
-  const decrypt = loadManifestRunArray(manifestPath, manifest, 'decrypt', BATCH_SIZE, checks);
-  const signatures = loadManifestRunArray(manifestPath, manifest, 'signatures', BATCH_SIZE, checks);
-  const cores = loadManifestRunArray(manifestPath, manifest, 'cores', BATCH_SIZE, checks);
+  const ecdh = loadManifestRunArray(manifestPath, manifest, 'ecdh', PROCESS_MESSAGES_BATCH_SIZE, checks);
+  const decrypt = loadManifestRunArray(manifestPath, manifest, 'decrypt', PROCESS_MESSAGES_BATCH_SIZE, checks);
+  const signatures = loadManifestRunArray(manifestPath, manifest, 'signatures', PROCESS_MESSAGES_BATCH_SIZE, checks);
+  const cores = loadManifestRunArray(manifestPath, manifest, 'cores', PROCESS_MESSAGES_BATCH_SIZE, checks);
   const runs = [boundary, coordKey, ...ecdh, ...decrypt, ...signatures, ...cores];
 
   expectCircuit(checks, boundary, 'process-messages-boundary-native');
@@ -237,7 +238,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
   );
   expectFieldPresent(checks, 'coord-key binding is present', coordKey, 'coord_key_binding_hash');
 
-  for (let index = 0; index < BATCH_SIZE; index += 1) {
+  for (let index = 0; index < PROCESS_MESSAGES_BATCH_SIZE; index += 1) {
     const ecdhRun = ecdh[index];
     const decryptRun = decrypt[index];
     const signatureRun = signatures[index];
@@ -355,7 +356,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
     );
   }
 
-  if (cores.length === BATCH_SIZE) {
+  if (cores.length === PROCESS_MESSAGES_BATCH_SIZE) {
     expectFieldEq(
       checks,
       'message hash chain starts at boundary batch start',
@@ -364,8 +365,8 @@ function buildProcessMessagesReport(manifestPath, manifest) {
       boundary,
       ['batchStartHash', 'batch_start_hash'],
     );
-    for (let index = 0; index < BATCH_SIZE; index += 1) {
-      if (index === BATCH_SIZE - 1) {
+    for (let index = 0; index < PROCESS_MESSAGES_BATCH_SIZE; index += 1) {
+      if (index === PROCESS_MESSAGES_BATCH_SIZE - 1) {
         expectFieldEq(
           checks,
           'message hash chain ends at boundary batch end',
@@ -389,7 +390,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
     expectFieldEq(
       checks,
       'state chain starts at boundary current commitment',
-      cores[4],
+      cores[PROCESS_MESSAGES_BATCH_SIZE - 1],
       'current_state_commitment_hash',
       boundary,
       ['currentStateCommitment', 'current_state_commitment'],
@@ -402,7 +403,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
       boundary,
       ['newStateCommitment', 'new_state_commitment'],
     );
-    for (let index = BATCH_SIZE - 1; index > 0; index -= 1) {
+    for (let index = PROCESS_MESSAGES_BATCH_SIZE - 1; index > 0; index -= 1) {
       expectFieldEq(
         checks,
         `state root chain links core[${index}] to core[${index - 1}]`,
@@ -412,7 +413,7 @@ function buildProcessMessagesReport(manifestPath, manifest) {
         'current_state_root_hash',
       );
     }
-    for (let index = 1; index < BATCH_SIZE; index += 1) {
+    for (let index = 1; index < PROCESS_MESSAGES_BATCH_SIZE; index += 1) {
       expectFieldEq(
         checks,
         `active state root is stable across core[0] and core[${index}]`,
@@ -434,12 +435,12 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
   const checks = [];
   const boundary = loadManifestRun(manifestPath, manifest.boundary, 'boundary');
   const coordKey = loadManifestRun(manifestPath, manifest.coordKey, 'coordKey');
-  const commandEcdh = loadManifestRunArray(manifestPath, manifest, 'commandEcdh', BATCH_SIZE, checks);
-  const signatures = loadManifestRunArray(manifestPath, manifest, 'signatures', BATCH_SIZE, checks);
-  const currentDecrypt = loadManifestRunArray(manifestPath, manifest, 'currentDecrypt', BATCH_SIZE, checks);
-  const newDecrypt = loadManifestRunArray(manifestPath, manifest, 'newDecrypt', BATCH_SIZE, checks);
-  const leafEcdh = loadManifestRunArray(manifestPath, manifest, 'leafEcdh', BATCH_SIZE, checks);
-  const cores = loadManifestRunArray(manifestPath, manifest, 'cores', BATCH_SIZE, checks);
+  const commandEcdh = loadManifestRunArray(manifestPath, manifest, 'commandEcdh', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
+  const signatures = loadManifestRunArray(manifestPath, manifest, 'signatures', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
+  const currentDecrypt = loadManifestRunArray(manifestPath, manifest, 'currentDecrypt', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
+  const newDecrypt = loadManifestRunArray(manifestPath, manifest, 'newDecrypt', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
+  const leafEcdh = loadManifestRunArray(manifestPath, manifest, 'leafEcdh', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
+  const cores = loadManifestRunArray(manifestPath, manifest, 'cores', PROCESS_DEACTIVATE_BATCH_SIZE, checks);
   const runs = [boundary, coordKey, ...commandEcdh, ...signatures, ...currentDecrypt, ...newDecrypt, ...leafEcdh, ...cores];
 
   expectCircuit(checks, boundary, 'process-deactivate-boundary-native');
@@ -461,7 +462,7 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
   );
   expectFieldPresent(checks, 'coord-key binding is present', coordKey, 'coord_key_binding_hash');
 
-  for (let index = 0; index < BATCH_SIZE; index += 1) {
+  for (let index = 0; index < PROCESS_DEACTIVATE_BATCH_SIZE; index += 1) {
     const commandRun = commandEcdh[index];
     const signatureRun = signatures[index];
     const currentDecryptRun = currentDecrypt[index];
@@ -622,7 +623,7 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     );
   }
 
-  if (cores.length === BATCH_SIZE) {
+  if (cores.length === PROCESS_DEACTIVATE_BATCH_SIZE) {
     expectFieldEq(
       checks,
       'message hash chain starts at boundary batch start',
@@ -631,8 +632,8 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
       boundary,
       ['batchStartHash', 'batch_start_hash'],
     );
-    for (let index = 0; index < BATCH_SIZE; index += 1) {
-      if (index === BATCH_SIZE - 1) {
+    for (let index = 0; index < PROCESS_DEACTIVATE_BATCH_SIZE; index += 1) {
+      if (index === PROCESS_DEACTIVATE_BATCH_SIZE - 1) {
         expectFieldEq(
           checks,
           'message hash chain ends at boundary batch end',
@@ -664,7 +665,7 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     expectFieldEq(
       checks,
       'deactivate chain ends at boundary new commitment',
-      cores[4],
+      cores[PROCESS_DEACTIVATE_BATCH_SIZE - 1],
       'new_deactivate_commitment_hash',
       boundary,
       ['newDeactivateCommitment', 'new_deactivate_commitment'],
@@ -672,12 +673,12 @@ function buildProcessDeactivateReport(manifestPath, manifest) {
     expectFieldEq(
       checks,
       'deactivate chain ends at boundary new deactivate root',
-      cores[4],
+      cores[PROCESS_DEACTIVATE_BATCH_SIZE - 1],
       'new_deactivate_root_hash',
       boundary,
       ['newDeactivateRoot', 'new_deactivate_root'],
     );
-    for (let index = 0; index < BATCH_SIZE - 1; index += 1) {
+    for (let index = 0; index < PROCESS_DEACTIVATE_BATCH_SIZE - 1; index += 1) {
       expectFieldEq(
         checks,
         `active root chain links core[${index}] to core[${index + 1}]`,

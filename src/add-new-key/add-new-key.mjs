@@ -1,9 +1,18 @@
-import { SMALL_PROCESS_MESSAGES_PARAMS } from '../constants.mjs';
-import { addNewKeyInputHash, deepMapBigInt, parseBigInt } from '../compat/encoding.mjs';
-import { BABYJUB_BASE8, babyjubAdd, babyjubScalarMul } from '../compat/babyjub.mjs';
-import { hash5, hashLeftRight } from '../compat/poseidon.mjs';
-import { quinaryInclusionRoot } from '../compat/quinary-tree.mjs';
-import { canonicalAddNewKeyPublicOutput } from '../public-output.mjs';
+import {
+  ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+  ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
+  ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+  ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN,
+  SMALL_PROCESS_MESSAGES_PARAMS,
+} from '../constants.mjs';
+import { deepMapBigInt, parseBigInt } from '../encoding.mjs';
+import { starkPointAdd, starkPublicKeyPoint, starkScalarMul } from '../stark-native-crypto.mjs';
+import {
+  nativeHash5,
+  nativeHashFelts,
+  nativeHashPoint,
+  nativeQuinaryInclusionRoot,
+} from '../native-hash.mjs';
 
 const DEACTIVATE_TREE_DEPTH_OFFSET = 2;
 
@@ -60,52 +69,76 @@ export function evaluateAddNewKey(rawInput, params = { stateTreeDepth: SMALL_PRO
     inputHash: parseBigInt(rawInput.inputHash, 'inputHash'),
   };
 
-  const nullifier = hashLeftRight(input.oldPrivateKey, input.pollId);
+  const nullifier = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN, input.oldPrivateKey, input.pollId],
+    'nullifier',
+  );
   expectEqual(nullifier, input.nullifier, 'nullifier');
 
-  const sharedKey = babyjubScalarMul(input.coordPubKey, input.oldPrivateKey);
-  const sharedKeyHash = hashLeftRight(sharedKey[0], sharedKey[1]);
-  const deactivateLeaf = hash5([...input.c1, ...input.c2, sharedKeyHash]);
+  const sharedKey = starkScalarMul(input.coordPubKey, input.oldPrivateKey);
+  const sharedKeyHash = nativeHashPoint(sharedKey, 'sharedKey');
+  const c1Hash = nativeHashPoint(input.c1, 'c1');
+  const c2Hash = nativeHashPoint(input.c2, 'c2');
+  const deactivateLeaf = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN, c1Hash, c2Hash, sharedKeyHash],
+    'deactivateLeaf',
+  );
   expectEqual(deactivateLeaf, input.deactivateLeaf, 'deactivateLeaf');
 
-  const deactivateRoot = quinaryInclusionRoot(
+  const deactivateRoot = nativeQuinaryInclusionRoot(
     input.deactivateLeaf,
     input.deactivateLeafPathElements,
     input.deactivateIndex,
+    'deactivateRoot',
   );
   expectEqual(deactivateRoot, input.deactivateRoot, 'deactivateRoot');
 
-  const randomBase8 = babyjubScalarMul(BABYJUB_BASE8, input.randomVal);
-  const d1 = babyjubAdd(randomBase8, input.c1);
+  const randomBase = starkPublicKeyPoint(input.randomVal);
+  const d1 = starkPointAdd(randomBase, input.c1);
   expectEqual(d1[0], input.d1[0], 'd1[0]');
   expectEqual(d1[1], input.d1[1], 'd1[1]');
 
-  const randomCoordPubKey = babyjubScalarMul(input.coordPubKey, input.randomVal);
-  const d2 = babyjubAdd(randomCoordPubKey, input.c2);
+  const randomCoordPubKey = starkScalarMul(input.coordPubKey, input.randomVal);
+  const d2 = starkPointAdd(randomCoordPubKey, input.c2);
   expectEqual(d2[0], input.d2[0], 'd2[0]');
   expectEqual(d2[1], input.d2[1], 'd2[1]');
 
-  const coordPubKeyHash = hashLeftRight(input.coordPubKey[0], input.coordPubKey[1]);
-  const newPubKeyHash = hashLeftRight(input.newPubKey[0], input.newPubKey[1]);
-  const inputHash = addNewKeyInputHash(
+  const d1Hash = nativeHashPoint(input.d1, 'd1');
+  const d2Hash = nativeHashPoint(input.d2, 'd2');
+  const coordPubKeyHash = nativeHashPoint(input.coordPubKey, 'coordPubKey');
+  const newPubKeyHash = nativeHashPoint(input.newPubKey, 'newPubKey');
+  const rerandomizeBindingHash = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN, coordPubKeyHash, c1Hash, c2Hash, d1Hash, d2Hash],
+    'rerandomizeBinding',
+  );
+  const inputHash = nativeHashFelts([
+    ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
     input.deactivateRoot,
     coordPubKeyHash,
     input.nullifier,
-    input.d1[0],
-    input.d1[1],
-    input.d2[0],
-    input.d2[1],
+    c1Hash,
+    c2Hash,
+    sharedKeyHash,
+    deactivateLeaf,
+    d1Hash,
+    d2Hash,
+    rerandomizeBindingHash,
     newPubKeyHash,
     input.pollId,
-  );
+  ], 'inputHash');
   expectEqual(inputHash, input.inputHash, 'inputHash');
 
   const publicFields = {
-    deactivateRoot: input.deactivateRoot,
+    deactivateRootHash: input.deactivateRoot,
     coordPubKeyHash,
     nullifier: input.nullifier,
-    d1: input.d1,
-    d2: input.d2,
+    c1Hash,
+    c2Hash,
+    sharedKeyHash,
+    deactivateLeafHash: deactivateLeaf,
+    d1Hash,
+    d2Hash,
+    rerandomizeBindingHash,
     newPubKeyHash,
     pollId: input.pollId,
     inputHash: input.inputHash,
@@ -115,16 +148,20 @@ export function evaluateAddNewKey(rawInput, params = { stateTreeDepth: SMALL_PRO
     params: { stateTreeDepth: params.stateTreeDepth, deactivateTreeDepth },
     input,
     publicFields,
-    publicOutput: canonicalAddNewKeyPublicOutput(publicFields, params),
     derived: {
       nullifier,
       sharedKey,
       sharedKeyHash,
       deactivateLeaf,
       deactivateRoot,
-      randomBase8,
+      randomBase,
       randomCoordPubKey,
       coordPubKeyHash,
+      c1Hash,
+      c2Hash,
+      d1Hash,
+      d2Hash,
+      rerandomizeBindingHash,
       newPubKeyHash,
       inputHash,
     },

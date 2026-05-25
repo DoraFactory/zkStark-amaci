@@ -106,7 +106,7 @@ export function createAtlanticQueryBundle(stoneAirRunPath, outDir, options = {})
   ensureFile(absoluteStoneAirRunPath, 'Stone AIR run metadata');
 
   const stoneAirRun = readJson(absoluteStoneAirRunPath);
-  const programSource = resolve(stoneAirRun.runnerSierraJson ?? '');
+  const programSource = resolve(options.programFile ?? stoneAirRun.runnerSierraJson ?? '');
   const inputSource = resolve(stoneAirRun.cairo1ArgsTxt ?? '');
   ensureFile(programSource, 'Atlantic programFile source');
   ensureFile(inputSource, 'Atlantic inputFile source');
@@ -137,7 +137,7 @@ export function createAtlanticQueryBundle(stoneAirRunPath, outDir, options = {})
     externalId: options.externalId ?? '',
     dedupId: options.dedupId ?? null,
     sharpProver: options.sharpProver ?? 'stone',
-    layout: options.layout ?? stoneAirRun.layout ?? 'recursive_with_poseidon',
+    layout: options.layout ?? 'auto',
     cairoVm: options.cairoVm ?? 'rust',
     cairoVersion: options.cairoVersion ?? 'cairo1',
     result: options.result ?? 'PROOF_VERIFICATION_ON_L2',

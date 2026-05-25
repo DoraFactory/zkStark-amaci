@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectStoneCairo1Fact } from '../src/integrity/stone-fact.mjs';
 import { calculatePlainFactHash, poseidonManyFelts } from '../src/integrity/hashes.mjs';
-import { bigintToHex } from '../src/compat/encoding.mjs';
+import { bigintToHex } from '../src/encoding.mjs';
 
 test('extracts cairo1 program and output fact hashes from Stone proof public input', () => {
   const dir = mkdtempSync(join(tmpdir(), 'zkstark-amaci-stone-fact-'));

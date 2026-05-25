@@ -1,5 +1,10 @@
 use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
+use crate::native_stark_crypto::{
+    STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN, STARK_NATIVE_COMMAND_STREAM_DOMAIN,
+    assert_stark_point_equals, assert_stark_poseidon_decrypt7,
+    stark_elgamal_decrypt_point_is_odd, stark_scalar_mul, stark_verify_command_signature,
+};
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
@@ -29,7 +34,7 @@ const TWO_POW_64: u256 = 0x10000000000000000;
 const U128_TWO_POW_32: u128 = 0x100000000;
 const U128_TWO_POW_64: u128 = 0x10000000000000000;
 const U128_TWO_POW_96: u128 = 0x1000000000000000000000000;
-const CIRCOM_UINT32_TO_96_HIGH_FACTOR: u256 = 18446744073709552000;
+const VOTE_WEIGHT_HIGH_FACTOR: u256 = 18446744073709552000;
 const MAX_VOTE_OPTIONS: u256 = 5;
 const MAX_SIGNUPS: u256 = 25;
 const MAX_STATE_INDEX: u256 = 24;
@@ -99,6 +104,7 @@ pub struct ProcessOneStateTransitionWitness {
     pub current_state_root: u256,
     pub active_state_root: u256,
     pub state_leaf: U256x10,
+    pub state_decrypted_point: U256x2,
     pub state_leaf_path_0: U256x4,
     pub state_leaf_path_1: U256x4,
     pub active_state_leaf: u256,
@@ -610,7 +616,7 @@ fn validate_packed_command(witness: ProcessOneStateTransitionWitness) {
     let unpacked = unpack_command_data(witness.packed_command.v0);
     let unpacked_vote_weight = unpacked.v3
         + unpacked.v2 * TWO_POW_32
-        + unpacked.v1 * CIRCOM_UINT32_TO_96_HIGH_FACTOR;
+        + unpacked.v1 * VOTE_WEIGHT_HIGH_FACTOR;
     assert_u256_eq(witness.cmd_poll_id, unpacked.v0);
     assert_u256_eq(witness.cmd_new_vote_weight, unpacked_vote_weight);
     assert_u256_eq(witness.cmd_vote_option_index, unpacked.v4);
@@ -824,7 +830,12 @@ fn native_process_message_roots(
         process_one.state_leaf_path_1,
         state_index,
     );
-    let active_state_root = felt_from_u256(process_one.active_state_root);
+    let active_state_root = native_quinary_root_depth_2(
+        felt_from_u256(process_one.active_state_leaf),
+        process_one.active_state_leaf_path_0,
+        process_one.active_state_leaf_path_1,
+        state_index,
+    );
 
     let updated_vote_weight = select_u256(
         valid, process_one.current_vote_weight, process_one.cmd_new_vote_weight,
@@ -877,9 +888,7 @@ fn assert_valid_message_index(message_index: felt252) {
     assert(
         message_index == 0
             || message_index == 1
-            || message_index == 2
-            || message_index == 3
-            || message_index == 4,
+            || message_index == 2,
         'BAD_MSG_INDEX',
     );
 }
@@ -971,7 +980,7 @@ fn build_native_process_message_coord_key_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         coord_key_binding_hash: fields.coord_key_binding_hash,
@@ -996,7 +1005,7 @@ fn build_native_process_message_ecdh_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         enc_pub_key_hash: fields.enc_pub_key_hash,
@@ -1023,7 +1032,7 @@ fn build_native_process_message_decrypt_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         c1_hash: fields.c1_hash,
@@ -1051,7 +1060,7 @@ fn build_native_process_message_signature_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         pub_key_hash: fields.pub_key_hash,
         r8_hash: fields.r8_hash,
@@ -1090,6 +1099,17 @@ fn verify_native_process_message_step_core(
         'N_COORD_PRIV',
     );
     assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
+    let (shared_key_x, shared_key_y) = stark_scalar_mul(
+        witness.enc_pub_key.v0, witness.enc_pub_key.v1, witness.coord_priv_key,
+    );
+    assert_stark_point_equals(
+        shared_key_x,
+        shared_key_y,
+        witness.process_one.shared_key.v0,
+        witness.process_one.shared_key.v1,
+        'N_SHARED_X',
+        'N_SHARED_Y',
+    );
     assert(native_hash_u256x2(witness.process_one.shared_key) == fields.shared_key_hash, 'N_SHARED');
     assert(
         native_shared_key_binding_hash(
@@ -1098,6 +1118,16 @@ fn verify_native_process_message_step_core(
         'N_SHARED_BIND',
     );
     assert(fields.state_decrypt_is_odd == 0 || fields.state_decrypt_is_odd == 1, 'BAD_DEC_BOOL');
+    let state_decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
+        witness.coord_priv_key,
+        witness.process_one.state_leaf.v5,
+        witness.process_one.state_leaf.v6,
+        witness.process_one.state_leaf.v7,
+        witness.process_one.state_leaf.v8,
+        witness.process_one.state_decrypted_point.v0,
+        witness.process_one.state_decrypted_point.v1,
+    );
+    assert(state_decrypt_is_odd == fields.state_decrypt_is_odd, 'N_STATE_DEC_ODD');
     assert(
         native_hash_u256x2(
             U256x2 { v0: witness.process_one.state_leaf.v5, v1: witness.process_one.state_leaf.v6 },
@@ -1131,6 +1161,19 @@ fn verify_native_process_message_step_core(
         'N_CMD',
     );
     assert(native_hash_u256(witness.process_one.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    let signature_valid = stark_verify_command_signature(
+        STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN,
+        witness.process_one.state_leaf.v0,
+        witness.process_one.state_leaf.v1,
+        witness.process_one.cmd_sig_r8.v0,
+        witness.process_one.cmd_sig_r8.v1,
+        witness.process_one.cmd_sig_s,
+        witness.process_one.packed_command.v0,
+        witness.process_one.packed_command.v1,
+        witness.process_one.packed_command.v2,
+        witness.process_one.cmd_salt,
+    );
+    assert(signature_valid == fields.is_signature_valid, 'N_SIG_VALID');
     assert(
         native_command_auth_hash(
             fields.signature_pub_key_hash,
@@ -1153,6 +1196,29 @@ fn verify_native_process_message_step_core(
             fields.command_auth_hash,
         ) == fields.command_plaintext_binding_hash,
         'N_CMD_PLAIN',
+    );
+    assert_stark_poseidon_decrypt7(
+        STARK_NATIVE_COMMAND_STREAM_DOMAIN,
+        witness.process_one.shared_key.v0,
+        witness.process_one.shared_key.v1,
+        0,
+        witness.msg.v0,
+        witness.msg.v1,
+        witness.msg.v2,
+        witness.msg.v3,
+        witness.msg.v4,
+        witness.msg.v5,
+        witness.msg.v6,
+        witness.msg.v7,
+        witness.msg.v8,
+        witness.msg.v9,
+        witness.process_one.decrypted_command.v0,
+        witness.process_one.decrypted_command.v1,
+        witness.process_one.decrypted_command.v2,
+        witness.process_one.decrypted_command.v3,
+        witness.process_one.decrypted_command.v4,
+        witness.process_one.decrypted_command.v5,
+        witness.process_one.decrypted_command.v6,
     );
     assert(witness.process_one.is_signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(
@@ -1189,7 +1255,7 @@ fn verify_native_process_message_step_core(
     };
     assert(native_new_state_root == fields.new_state_root_hash, 'N_NEW_ROOT');
 
-    if fields.message_index == 4 {
+    if fields.message_index == 2 {
         let current_state_commitment = native_felt_commitment(
             native_current_state_root, witness.current_state_salt,
         );
@@ -1211,7 +1277,7 @@ fn build_native_process_message_step_core_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: 5,
+        message_batch_size: 3,
         message_index: fields.message_index,
         packed_vals_hash: fields.packed_vals_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,

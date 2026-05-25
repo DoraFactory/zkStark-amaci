@@ -9,6 +9,7 @@ function usage() {
 Options:
   --stone-air-run <path>      Stone AIR metadata from npm run stone:air:*
   --out-dir <dir>             Output directory for Atlantic-compatible files.
+  --program-file <path>       Optional Sierra JSON override. Useful when several inputs intentionally share one program hash.
   --declared-job-size <size>  XS, S, M, or L. Default: S.
   --external-id <value>       Optional external tracking id.
   --dedup-id <value>          Optional Atlantic dedup id.
@@ -35,6 +36,7 @@ function parseArgs(argv) {
     stoneAirRun: undefined,
     outDir: undefined,
     declaredJobSize: undefined,
+    programFile: undefined,
     externalId: undefined,
     dedupId: undefined,
     layout: undefined,
@@ -58,6 +60,8 @@ function parseArgs(argv) {
       args.outDir = argv[++i];
     } else if (arg === '--declared-job-size') {
       args.declaredJobSize = argv[++i];
+    } else if (arg === '--program-file') {
+      args.programFile = argv[++i];
     } else if (arg === '--external-id') {
       args.externalId = argv[++i];
     } else if (arg === '--dedup-id') {
@@ -129,4 +133,3 @@ if (args.text) {
 } else {
   process.stdout.write(`${JSON.stringify(result.manifest, null, 2)}\n`);
 }
-

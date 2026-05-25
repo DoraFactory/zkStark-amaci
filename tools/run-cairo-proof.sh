@@ -6,70 +6,41 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  tools/run-cairo-proof.sh <tally-input.json> [out-dir]
-  tools/run-cairo-proof.sh --circuit <name> [--input <input.json>] [--out-dir <dir>] [--message-index <n>]
-  tools/run-cairo-proof.sh --all --tally-input <tally-input.json> [--out-dir <dir>]
+  tools/run-cairo-proof.sh --circuit <native-name> [--input <input.json>] [--out-dir <dir>] [--message-index <n>]
 
-Circuits:
-  tally
+Native circuits:
   tally-native
-  add-new-key
   add-new-key-native
-  process-messages
-  process-messages-boundary
   process-messages-boundary-native
-  process-message-step
-  process-message-coord-key
+  process-messages-stage-native
   process-message-coord-key-native
-  process-message-ecdh
   process-message-ecdh-native
   process-message-decrypt-native
-  process-message-signature
   process-message-signature-native
-  process-message-step-core
   process-message-step-core-native
-  process-deactivate-boundary
   process-deactivate-boundary-native
-  process-deactivate-step
-  process-deactivate-coord-key
+  process-deactivate-stage-native
   process-deactivate-coord-key-native
-  process-deactivate-ecdh-command
-  process-deactivate-ecdh-leaf
   process-deactivate-ecdh-command-native
   process-deactivate-ecdh-leaf-native
-  process-deactivate-signature
   process-deactivate-signature-native
-  process-deactivate-decrypt-current
-  process-deactivate-decrypt-new
   process-deactivate-decrypt-current-native
   process-deactivate-decrypt-new-native
-  process-deactivate-step-core
   process-deactivate-step-core-native
-  process-deactivate
 
 Notes:
-  - The legacy positional form runs only the tally proof.
-  - tally and tally-native require an input JSON.
-  - add-new-key, process-messages, process-messages-boundary,
-    process-messages-boundary-native,
-    process-message-step, process-message-*, and process-deactivate generate the current small
-    synthetic fixture when --input is omitted.
-  - process-message-step, process-message-ecdh, process-message-decrypt-native,
-    process-message-signature,
-    process-message-step-core, process-deactivate-step,
-    process-deactivate-ecdh-*, process-deactivate-signature*,
-    process-deactivate-decrypt-*, and process-deactivate-step-core require --message-index
-    0..4 and prove one linked message step.
-  - --all runs tally plus the three small synthetic circuit proofs.
+  - Only Starknet-native AMACI circuits are supported.
+  - tally-native requires an input JSON.
+  - The other native circuits can generate the current small synthetic fixture
+    when --input is omitted.
+  - ProcessMessages per-message circuits require --message-index 0..2.
+  - ProcessDeactivate per-message circuits require --message-index 0..2.
 
 Flow per circuit:
   1. Prepare canonical Cairo arguments.
   2. Run scarb prove --execute for the selected executable.
   3. Run scarb verify for the generated execution id.
   4. Write proof metadata under the output directory.
-
-This uses the local Scarb/Stwo proof flow. Integrity/Stone proof serialization
-and Starknet FactRegistry submission are separate integration steps.
 EOF
 }
 
@@ -82,90 +53,70 @@ require_tool() {
 
 prepare_circuit_name() {
   case "$1" in
-    tally) echo "tally" ;;
     tally-native) echo "tally-native" ;;
-    add-new-key) echo "add-new-key" ;;
     add-new-key-native) echo "add-new-key-native" ;;
-    process-messages) echo "process-messages-stateful-ecdh-signature" ;;
-    process-messages-boundary) echo "process-messages-boundary" ;;
     process-messages-boundary-native) echo "process-messages-boundary-native" ;;
-    process-message-step) echo "process-message-step-ecdh-signature" ;;
-    process-message-coord-key) echo "process-message-coord-key" ;;
+    process-messages-stage-native) echo "process-messages-stage-native" ;;
     process-message-coord-key-native) echo "process-message-coord-key-native" ;;
-    process-message-ecdh) echo "process-message-ecdh" ;;
     process-message-ecdh-native) echo "process-message-ecdh-native" ;;
     process-message-decrypt-native) echo "process-message-decrypt-native" ;;
-    process-message-signature) echo "process-message-signature" ;;
     process-message-signature-native) echo "process-message-signature-native" ;;
-    process-message-step-core) echo "process-message-step-core" ;;
     process-message-step-core-native) echo "process-message-step-core-native" ;;
-    process-deactivate-boundary) echo "process-deactivate-boundary" ;;
     process-deactivate-boundary-native) echo "process-deactivate-boundary-native" ;;
-    process-deactivate-step) echo "process-deactivate-step" ;;
-    process-deactivate-coord-key) echo "process-deactivate-coord-key" ;;
+    process-deactivate-stage-native) echo "process-deactivate-stage-native" ;;
     process-deactivate-coord-key-native) echo "process-deactivate-coord-key-native" ;;
-    process-deactivate-ecdh-command) echo "process-deactivate-ecdh-command" ;;
-    process-deactivate-ecdh-leaf) echo "process-deactivate-ecdh-leaf" ;;
     process-deactivate-ecdh-command-native) echo "process-deactivate-ecdh-command-native" ;;
     process-deactivate-ecdh-leaf-native) echo "process-deactivate-ecdh-leaf-native" ;;
-    process-deactivate-signature) echo "process-deactivate-signature" ;;
     process-deactivate-signature-native) echo "process-deactivate-signature-native" ;;
-    process-deactivate-decrypt-current) echo "process-deactivate-decrypt-current" ;;
-    process-deactivate-decrypt-new) echo "process-deactivate-decrypt-new" ;;
     process-deactivate-decrypt-current-native) echo "process-deactivate-decrypt-current-native" ;;
     process-deactivate-decrypt-new-native) echo "process-deactivate-decrypt-new-native" ;;
-    process-deactivate-step-core) echo "process-deactivate-step-core" ;;
     process-deactivate-step-core-native) echo "process-deactivate-step-core-native" ;;
-    process-deactivate) echo "process-deactivate-stateful" ;;
-    *) echo "unsupported circuit: $1" >&2; exit 1 ;;
+    *) echo "unsupported native circuit: $1" >&2; exit 1 ;;
   esac
 }
 
 executable_name() {
   case "$1" in
-    tally) echo "tally_votes" ;;
     tally-native) echo "tally_votes_native" ;;
-    add-new-key) echo "add_new_key" ;;
     add-new-key-native) echo "add_new_key_native" ;;
-    process-messages) echo "process_messages_stateful_with_ecdh_signature" ;;
-    process-messages-boundary) echo "process_messages_boundary" ;;
     process-messages-boundary-native) echo "process_messages_native_boundary" ;;
-    process-message-step) echo "process_message_step_with_ecdh_signature" ;;
-    process-message-coord-key) echo "process_message_coord_key" ;;
+    process-messages-stage-native) echo "process_messages_stage_native" ;;
     process-message-coord-key-native) echo "process_message_coord_key_native" ;;
-    process-message-ecdh) echo "process_message_ecdh" ;;
     process-message-ecdh-native) echo "process_message_ecdh_native" ;;
     process-message-decrypt-native) echo "process_message_decrypt_native" ;;
-    process-message-signature) echo "process_message_signature" ;;
     process-message-signature-native) echo "process_message_signature_native" ;;
-    process-message-step-core) echo "process_message_step_core" ;;
     process-message-step-core-native) echo "process_message_step_core_native" ;;
-    process-deactivate-boundary) echo "process_deactivate_messages_boundary" ;;
     process-deactivate-boundary-native) echo "process_deactivate_native_boundary" ;;
-    process-deactivate-step) echo "process_deactivate_message_step" ;;
-    process-deactivate-coord-key) echo "process_deactivate_coord_key" ;;
+    process-deactivate-stage-native) echo "process_deactivate_stage_native" ;;
     process-deactivate-coord-key-native) echo "process_deactivate_coord_key_native" ;;
-    process-deactivate-ecdh-command) echo "process_deactivate_ecdh" ;;
-    process-deactivate-ecdh-leaf) echo "process_deactivate_ecdh" ;;
-    process-deactivate-ecdh-command-native) echo "process_deactivate_ecdh_native" ;;
-    process-deactivate-ecdh-leaf-native) echo "process_deactivate_ecdh_native" ;;
-    process-deactivate-signature) echo "process_deactivate_signature" ;;
+    process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native) echo "process_deactivate_ecdh_native" ;;
     process-deactivate-signature-native) echo "process_deactivate_signature_native" ;;
-    process-deactivate-decrypt-current) echo "process_deactivate_decrypt" ;;
-    process-deactivate-decrypt-new) echo "process_deactivate_decrypt" ;;
-    process-deactivate-decrypt-current-native) echo "process_deactivate_decrypt_native" ;;
-    process-deactivate-decrypt-new-native) echo "process_deactivate_decrypt_native" ;;
-    process-deactivate-step-core) echo "process_deactivate_step_core" ;;
+    process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native) echo "process_deactivate_decrypt_native" ;;
     process-deactivate-step-core-native) echo "process_deactivate_step_core_native" ;;
-    process-deactivate) echo "process_deactivate_messages_stateful" ;;
-    *) echo "unsupported circuit: $1" >&2; exit 1 ;;
+    *) echo "unsupported native circuit: $1" >&2; exit 1 ;;
   esac
 }
 
 can_generate_fixture() {
   case "$1" in
-    add-new-key|add-new-key-native|process-messages|process-messages-boundary|process-messages-boundary-native|process-message-step|process-message-coord-key|process-message-coord-key-native|process-message-ecdh|process-message-ecdh-native|process-message-decrypt-native|process-message-signature|process-message-signature-native|process-message-step-core|process-message-step-core-native|process-deactivate-boundary|process-deactivate-boundary-native|process-deactivate-step|process-deactivate-coord-key|process-deactivate-coord-key-native|process-deactivate-ecdh-command|process-deactivate-ecdh-leaf|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature|process-deactivate-signature-native|process-deactivate-decrypt-current|process-deactivate-decrypt-new|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core|process-deactivate-step-core-native|process-deactivate) return 0 ;;
+    add-new-key-native|process-messages-boundary-native|process-messages-stage-native|process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-boundary-native|process-deactivate-stage-native|process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+requires_message_index() {
+  case "$1" in
+    process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native|process-message-step-core-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native|process-deactivate-step-core-native) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+fixture_circuit_name() {
+  case "$1" in
+    add-new-key-native) echo "add-new-key" ;;
+    process-messages-boundary-native|process-messages-stage-native|process-message-*) echo "process-messages" ;;
+    process-deactivate-boundary-native|process-deactivate-*) echo "process-deactivate" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -230,15 +181,9 @@ run_one() {
   local generated_input=false
   if [[ -z "$input_path" ]]; then
     if can_generate_fixture "$circuit"; then
+      local fixture_circuit
+      fixture_circuit="$(fixture_circuit_name "$circuit")"
       input_path="$out_dir/$circuit-small-input.json"
-      local fixture_circuit="$circuit"
-      if [[ "$circuit" == "add-new-key-native" ]]; then
-        fixture_circuit="add-new-key"
-      elif [[ "$circuit" == "process-messages-boundary" || "$circuit" == "process-messages-boundary-native" || "$circuit" == "process-message-step" || "$circuit" == process-message-* ]]; then
-        fixture_circuit="process-messages"
-      elif [[ "$circuit" == "process-deactivate-boundary" || "$circuit" == "process-deactivate-boundary-native" || "$circuit" == "process-deactivate-step" || "$circuit" == process-deactivate-* ]]; then
-        fixture_circuit="process-deactivate"
-      fi
       node "$ROOT_DIR/tools/write-small-fixture.mjs" --circuit "$fixture_circuit" --out "$input_path"
       generated_input=true
     else
@@ -249,23 +194,24 @@ run_one() {
 
   input_path="$(cd "$(dirname "$input_path")" && pwd)/$(basename "$input_path")"
 
+  if requires_message_index "$circuit"; then
+    if [[ -z "$message_index" ]]; then
+      echo "$circuit requires --message-index" >&2
+      exit 1
+    fi
+    local max_message_index=2
+    if ! [[ "$message_index" =~ ^[0-9]+$ ]] || (( message_index > max_message_index )); then
+      echo "--message-index must be an integer in [0, $max_message_index]" >&2
+      exit 1
+    fi
+  fi
+
   local prepared_json="$out_dir/$circuit-prepared.json"
   local cairo_input_json="$out_dir/$circuit-cairo-input.json"
   local cairo_args_json="$out_dir/$circuit-cairo-args.json"
   local prove_log="$out_dir/$circuit-prove.log"
   local verify_log="$out_dir/$circuit-verify.log"
   local metadata_json="$out_dir/proof-run.json"
-
-  if [[ "$circuit" == "process-message-step" || "$circuit" == "process-message-ecdh" || "$circuit" == "process-message-ecdh-native" || "$circuit" == "process-message-decrypt-native" || "$circuit" == "process-message-signature" || "$circuit" == "process-message-signature-native" || "$circuit" == "process-message-step-core" || "$circuit" == "process-message-step-core-native" || "$circuit" == "process-deactivate-step" || "$circuit" == "process-deactivate-ecdh-command" || "$circuit" == "process-deactivate-ecdh-leaf" || "$circuit" == "process-deactivate-ecdh-command-native" || "$circuit" == "process-deactivate-ecdh-leaf-native" || "$circuit" == "process-deactivate-signature" || "$circuit" == "process-deactivate-signature-native" || "$circuit" == "process-deactivate-decrypt-current" || "$circuit" == "process-deactivate-decrypt-new" || "$circuit" == "process-deactivate-decrypt-current-native" || "$circuit" == "process-deactivate-decrypt-new-native" || "$circuit" == "process-deactivate-step-core" || "$circuit" == "process-deactivate-step-core-native" ]]; then
-    if [[ -z "$message_index" ]]; then
-      echo "$circuit requires --message-index" >&2
-      exit 1
-    fi
-    if ! [[ "$message_index" =~ ^[0-4]$ ]]; then
-      echo "--message-index must be an integer in [0, 4]" >&2
-      exit 1
-    fi
-  fi
 
   echo "==> Preparing $circuit"
   local prepare_args=(
@@ -288,6 +234,7 @@ run_one() {
       --execute \
       --executable-name "$executable" \
       --arguments-file "$cairo_args_json" \
+      --layout all_cairo \
       --print-program-output \
       2>&1 | tee "$prove_log"
 
@@ -330,38 +277,19 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-if [[ $# -ge 1 && "${1:0:1}" != "-" ]]; then
-  if [[ $# -lt 1 || $# -gt 2 ]]; then
-    usage >&2
-    exit 1
-  fi
-  run_one "tally" "$1" "${2:-$ROOT_DIR/target/cairo-proof/tally}"
-  exit 0
-fi
-
-MODE="single"
 CIRCUIT=""
 INPUT_PATH=""
-TALLY_INPUT=""
 OUT_DIR=""
 MESSAGE_INDEX=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --all)
-      MODE="all"
-      shift
-      ;;
     --circuit)
       CIRCUIT="${2:-}"
       shift 2
       ;;
     --input)
       INPUT_PATH="${2:-}"
-      shift 2
-      ;;
-    --tally-input)
-      TALLY_INPUT="${2:-}"
       shift 2
       ;;
     --out-dir)
@@ -380,33 +308,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$MODE" == "all" ]]; then
-  if [[ -z "$TALLY_INPUT" ]]; then
-    echo "--all requires --tally-input" >&2
-    usage >&2
-    exit 1
-  fi
-  OUT_DIR="${OUT_DIR:-$ROOT_DIR/target/cairo-proof/all}"
-  mkdir -p "$OUT_DIR"
-  OUT_DIR="$(cd "$OUT_DIR" && pwd)"
-
-  run_one "tally" "$TALLY_INPUT" "$OUT_DIR/tally"
-  run_one "add-new-key" "" "$OUT_DIR/add-new-key"
-  run_one "process-messages" "" "$OUT_DIR/process-messages"
-  run_one "process-deactivate" "" "$OUT_DIR/process-deactivate"
-
-  printf '{\n' > "$OUT_DIR/all-proofs.json"
-  printf '  "tally": "%s",\n' "$OUT_DIR/tally/proof-run.json" >> "$OUT_DIR/all-proofs.json"
-  printf '  "addNewKey": "%s",\n' "$OUT_DIR/add-new-key/proof-run.json" >> "$OUT_DIR/all-proofs.json"
-  printf '  "processMessages": "%s",\n' "$OUT_DIR/process-messages/proof-run.json" >> "$OUT_DIR/all-proofs.json"
-  printf '  "processDeactivate": "%s"\n' "$OUT_DIR/process-deactivate/proof-run.json" >> "$OUT_DIR/all-proofs.json"
-  printf '}\n' >> "$OUT_DIR/all-proofs.json"
-  echo "All proof metadata written to: $OUT_DIR/all-proofs.json"
-  exit 0
-fi
-
 if [[ -z "$CIRCUIT" ]]; then
-  echo "--circuit is required unless using --all or legacy tally form" >&2
+  echo "--circuit is required" >&2
   usage >&2
   exit 1
 fi

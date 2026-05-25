@@ -7,11 +7,14 @@ import {
   STARKNET_POSEIDON_HASH_SCHEME,
   TREE_ARITY,
 } from '../constants.mjs';
-import { decimalize } from '../compat/encoding.mjs';
+import { decimalize } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessMessagesStateful } from './process-messages.mjs';
-import { nativeProcessMessagesStateRoots } from './native-process-roots.mjs';
+import {
+  nativeProcessMessageTransitionContexts,
+  nativeProcessMessagesStateRoots,
+} from './native-process-roots.mjs';
 import { packProcessMessagesVals, unpackProcessMessagesPackedVals } from './process-messages.mjs';
 
 const MSG_LENGTH = 10;
@@ -22,9 +25,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.voteOptionTreeDepth !== 1 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI-STARK v2 ProcessMessagesNativeBoundary(2, 1, 5) is supported');
+    throw new Error('only AMACI-STARK v2 ProcessMessagesNativeBoundary(2, 1, 3) is supported');
   }
 }
 
@@ -137,7 +140,7 @@ export function evaluateNativeProcessMessagesBoundary(rawInput, params = SMALL_P
   const packedVals = toStarkFelt(packProcessMessagesVals(unpacked), 'packedVals');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');
   const nativeState = Array.isArray(rawInput.processOneWitnesses)
-    ? nativeProcessMessagesStateRoots(evaluateProcessMessagesStateful(rawInput).state)
+    ? nativeProcessMessagesStateRoots(evaluateProcessMessagesStateful(rawInput).state, rawInput)
     : undefined;
   const currentStateRoot = nativeState?.currentStateRoot ?? toStarkFelt(rawInput.currentStateRoot, 'currentStateRoot');
   const currentStateSalt = toStarkFelt(rawInput.currentStateSalt, 'currentStateSalt');
@@ -212,6 +215,126 @@ export function evaluateNativeProcessMessagesBoundary(rawInput, params = SMALL_P
       deactivateCommitment,
       messageHashChain,
       batchEndHash,
+      inputHash,
+    },
+  };
+}
+
+function zeroVector(length) {
+  return Array.from({ length }, () => 0n);
+}
+
+function validateSegment(segment) {
+  const startIndex = Number(segment?.startIndex);
+  const endIndex = Number(segment?.endIndex);
+  if (
+    !Number.isInteger(startIndex) ||
+    !Number.isInteger(endIndex) ||
+    startIndex < 0 ||
+    startIndex >= endIndex ||
+    endIndex > SMALL_PROCESS_MESSAGES_PARAMS.messageBatchSize
+  ) {
+    throw new Error('ProcessMessages segment must satisfy 0 <= startIndex < endIndex <= 3');
+  }
+  const length = endIndex - startIndex;
+  if (length !== 2 && length !== 3) {
+    throw new Error('ProcessMessages stage segment supports only 2-message or 3-message segments');
+  }
+  return { startIndex, endIndex, length };
+}
+
+export function evaluateNativeProcessMessagesBoundarySegment(
+  rawInput,
+  segment,
+  params = SMALL_PROCESS_MESSAGES_PARAMS,
+) {
+  assertSupportedParams(params);
+  const { startIndex, endIndex, length } = validateSegment(segment);
+  const full = evaluateNativeProcessMessagesBoundary(rawInput, params);
+  const stateful = evaluateProcessMessagesStateful(rawInput);
+  const transitionContexts = nativeProcessMessageTransitionContexts(stateful.state, rawInput);
+
+  const msgs = [];
+  const encPubKeys = [];
+  for (let index = startIndex; index < endIndex; index += 1) {
+    msgs.push(feltVector(rawInput.msgs[index], MSG_LENGTH, `msgs[${index}]`));
+    encPubKeys.push(feltVector(rawInput.encPubKeys[index], ENC_PUB_KEY_LENGTH, `encPubKeys[${index}]`));
+  }
+  while (msgs.length < params.messageBatchSize) {
+    msgs.push(zeroVector(MSG_LENGTH));
+    encPubKeys.push(zeroVector(ENC_PUB_KEY_LENGTH));
+  }
+
+  const currentContext = transitionContexts[endIndex - 1];
+  const newContext = transitionContexts[startIndex];
+  const currentStateRoot = currentContext.currentStateRoot;
+  const currentStateSalt = endIndex === params.messageBatchSize
+    ? toStarkFelt(rawInput.currentStateSalt, 'currentStateSalt')
+    : toStarkFelt(rawInput.newStateSalt, 'segmentCurrentStateSalt');
+  const newStateRoot = newContext.newStateRoot;
+  const newStateSalt = toStarkFelt(rawInput.newStateSalt, 'newStateSalt');
+  const activeStateRoot = newContext.activeStateRoot;
+  const deactivateRoot = toStarkFelt(rawInput.deactivateRoot, 'deactivateRoot');
+  const batchStartHash = full.derived.messageHashChain[startIndex];
+  const batchEndHash = full.derived.messageHashChain[endIndex];
+
+  const currentStateCommitment = hash2(currentStateRoot, currentStateSalt);
+  const newStateCommitment = hash2(newStateRoot, newStateSalt);
+  const deactivateCommitment = hash2(activeStateRoot, deactivateRoot);
+  const inputHash = hashMany([
+    PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
+    full.publicFields.packedVals,
+    full.publicFields.coordPubKeyHash,
+    batchStartHash,
+    batchEndHash,
+    currentStateCommitment,
+    newStateCommitment,
+    deactivateCommitment,
+    full.publicFields.expectedPollId,
+  ]);
+
+  const publicFields = {
+    packedVals: full.publicFields.packedVals,
+    coordPubKeyHash: full.publicFields.coordPubKeyHash,
+    batchStartHash,
+    batchEndHash,
+    currentStateCommitment,
+    newStateCommitment,
+    deactivateCommitment,
+    expectedPollId: full.publicFields.expectedPollId,
+    inputHash,
+  };
+
+  return {
+    params,
+    segment: { startIndex, endIndex, length },
+    publicFields,
+    publicOutput: canonicalNativeProcessMessagesPublicOutput(publicFields, params),
+    nativeWitness: {
+      isQuadraticCost: full.nativeWitness.isQuadraticCost,
+      numSignUps: full.nativeWitness.numSignUps,
+      maxVoteOptions: full.nativeWitness.maxVoteOptions,
+      coordPubKey: full.nativeWitness.coordPubKey,
+      currentStateRoot,
+      currentStateSalt,
+      newStateRoot,
+      newStateSalt,
+      activeStateRoot,
+      deactivateRoot,
+      expectedPollId: full.nativeWitness.expectedPollId,
+      msgs,
+      encPubKeys,
+    },
+    derived: {
+      ...full.derived,
+      segmentStartIndex: BigInt(startIndex),
+      segmentEndIndex: BigInt(endIndex),
+      segmentLength: BigInt(length),
+      segmentBatchStartHash: batchStartHash,
+      segmentBatchEndHash: batchEndHash,
+      currentStateCommitment,
+      newStateCommitment,
+      deactivateCommitment,
       inputHash,
     },
   };

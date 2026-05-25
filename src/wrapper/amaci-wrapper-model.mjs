@@ -1,9 +1,9 @@
-import { parseBigInt } from '../compat/encoding.mjs';
+import { parseBigInt } from '../encoding.mjs';
 import {
-  canonicalAddNewKeyPublicOutput,
-  canonicalProcessDeactivatePublicOutput,
-  canonicalProcessMessagesPublicOutput,
-  canonicalTallyPublicOutput,
+  canonicalNativeAddNewKeyPublicOutput,
+  canonicalNativeProcessDeactivatePublicOutput,
+  canonicalNativeProcessMessagesPublicOutput,
+  canonicalNativeTallyPublicOutput,
 } from '../public-output.mjs';
 import {
   calculateBootloadedFactHash,
@@ -12,10 +12,10 @@ import {
 } from '../integrity/hashes.mjs';
 
 const CIRCUIT_BUILDERS = Object.freeze({
-  tally: canonicalTallyPublicOutput,
-  processMessages: canonicalProcessMessagesPublicOutput,
-  addNewKey: canonicalAddNewKeyPublicOutput,
-  processDeactivate: canonicalProcessDeactivatePublicOutput,
+  tally: canonicalNativeTallyPublicOutput,
+  processMessages: canonicalNativeProcessMessagesPublicOutput,
+  addNewKey: canonicalNativeAddNewKeyPublicOutput,
+  processDeactivate: canonicalNativeProcessDeactivatePublicOutput,
 });
 
 function normalizeCircuit(circuit) {
@@ -114,6 +114,9 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
     currentTallyCommitment = 0n,
     currentStateRoot,
     seenNullifiers,
+    keysAdded = 0n,
+    messageBatchesProcessed = 0n,
+    deactivateBatchesProcessed = 0n,
     ...base
   }) {
     super(base);
@@ -121,6 +124,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
     this.deactivateCommitment = parseOptional(deactivateCommitment, 'deactivateCommitment');
     this.currentTallyCommitment = parseBigInt(currentTallyCommitment, 'currentTallyCommitment');
     this.currentStateRoot = parseOptional(currentStateRoot, 'currentStateRoot');
+    this.keysAdded = parseBigInt(keysAdded, 'keysAdded');
+    this.messageBatchesProcessed = parseBigInt(messageBatchesProcessed, 'messageBatchesProcessed');
+    this.deactivateBatchesProcessed = parseBigInt(
+      deactivateBatchesProcessed,
+      'deactivateBatchesProcessed',
+    );
     this.seenNullifiers = new Set(
       [...(seenNullifiers ?? [])].map((value) => parseBigInt(value, 'seenNullifier').toString()),
     );
@@ -164,7 +173,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
       verificationHash,
     });
     this.stateCommitment = parseBigInt(fields.newStateCommitment, 'newStateCommitment');
-    return { factHash: fact.factHash, stateCommitment: this.stateCommitment };
+    this.messageBatchesProcessed += 1n;
+    return {
+      factHash: fact.factHash,
+      stateCommitment: this.stateCommitment,
+      messageBatchesProcessed: this.messageBatchesProcessed,
+    };
   }
 
   submitAddNewKey({ fields, params, factHash, verificationHash }) {
@@ -172,9 +186,26 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
     if (this.seenNullifiers.has(nullifier)) {
       throw new Error('NULLIFIER_ALREADY_USED');
     }
+    if (
+      this.stateCommitment !== undefined &&
+      fields.currentStateCommitment !== undefined &&
+      parseBigInt(fields.currentStateCommitment, 'currentStateCommitment') !==
+        this.stateCommitment
+    ) {
+      throw new Error('CURRENT_STATE_COMMITMENT_MISMATCH');
+    }
     const fact = this.assertValidFact('addNewKey', fields, params, { factHash, verificationHash });
     this.seenNullifiers.add(nullifier);
-    return { factHash: fact.factHash, nullifier: parseBigInt(fields.nullifier, 'nullifier') };
+    if (fields.newStateCommitment !== undefined) {
+      this.stateCommitment = parseBigInt(fields.newStateCommitment, 'newStateCommitment');
+    }
+    this.keysAdded += 1n;
+    return {
+      factHash: fact.factHash,
+      nullifier: parseBigInt(fields.nullifier, 'nullifier'),
+      stateCommitment: this.stateCommitment,
+      keysAdded: this.keysAdded,
+    };
   }
 
   submitProcessDeactivate({ fields, params, factHash, verificationHash }) {
@@ -191,11 +222,24 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
     ) {
       throw new Error('CURRENT_STATE_ROOT_MISMATCH');
     }
+    if (
+      this.stateCommitment !== undefined &&
+      fields.currentStateCommitment !== undefined &&
+      parseBigInt(fields.currentStateCommitment, 'currentStateCommitment') !==
+        this.stateCommitment
+    ) {
+      throw new Error('CURRENT_STATE_COMMITMENT_MISMATCH');
+    }
     const fact = this.assertValidFact('processDeactivate', fields, params, {
       factHash,
       verificationHash,
     });
     this.deactivateCommitment = parseBigInt(fields.newDeactivateCommitment, 'newDeactivateCommitment');
-    return { factHash: fact.factHash, deactivateCommitment: this.deactivateCommitment };
+    this.deactivateBatchesProcessed += 1n;
+    return {
+      factHash: fact.factHash,
+      deactivateCommitment: this.deactivateCommitment,
+      deactivateBatchesProcessed: this.deactivateBatchesProcessed,
+    };
   }
 }

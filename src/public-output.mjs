@@ -1,643 +1,192 @@
 import {
-  ADD_NEW_KEY_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_COORD_KEY_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_DECRYPT_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_ECDH_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_SIGNATURE_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
-  PROCESS_DEACTIVATE_STEP_CORE_CIRCUIT_ID,
-  PROCESS_MESSAGE_COORD_KEY_CIRCUIT_ID,
-  PROCESS_MESSAGE_ECDH_CIRCUIT_ID,
-  PROCESS_MESSAGE_SIGNATURE_CIRCUIT_ID,
-  PROCESS_MESSAGE_STEP_CIRCUIT_ID,
-  PROCESS_MESSAGE_STEP_CORE_CIRCUIT_ID,
-  PROCESS_MESSAGES_CIRCUIT_ID,
-  PUBLIC_OUTPUT_MAGIC,
-  PUBLIC_OUTPUT_VERSION,
+  ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
   NATIVE_PUBLIC_OUTPUT_VERSION,
+  PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+  PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+  PUBLIC_OUTPUT_MAGIC,
   SMALL_PROCESS_DEACTIVATE_PARAMS,
   SMALL_PROCESS_MESSAGES_PARAMS,
   SMALL_TALLY_PARAMS,
   STARKNET_POSEIDON_HASH_SCHEME,
-  TALLY_VOTES_CIRCUIT_ID,
   TALLY_VOTES_NATIVE_CIRCUIT_ID,
 } from './constants.mjs';
-import { decimalize, splitU256ToU128 } from './compat/encoding.mjs';
+import { decimalize } from './encoding.mjs';
 
-function pushU256(output, labels, name, value) {
-  const { low, high } = splitU256ToU128(value, name);
-  labels.push(`${name}_low128`, `${name}_high128`);
-  output.push(low, high);
-}
-
-export function canonicalTallyPublicOutput(fields, params = SMALL_TALLY_PARAMS) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'int_state_tree_depth',
-    'vote_option_tree_depth',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    TALLY_VOTES_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.intStateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-  ];
-
-  pushU256(output, labels, 'packed_vals', fields.packedVals);
-  pushU256(output, labels, 'state_commitment', fields.stateCommitment);
-  pushU256(output, labels, 'current_tally_commitment', fields.currentTallyCommitment);
-  pushU256(output, labels, 'new_tally_commitment', fields.newTallyCommitment);
-  pushU256(output, labels, 'input_hash', fields.inputHash);
-
+function publicOutput(labels, felts) {
   return {
     labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
+    felts,
+    decimalFelts: felts.map(decimalize),
   };
 }
 
 export function canonicalNativeTallyPublicOutput(fields, params = SMALL_TALLY_PARAMS) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'hash_scheme',
-    'state_tree_depth',
-    'int_state_tree_depth',
-    'vote_option_tree_depth',
-    'packed_vals',
-    'state_commitment',
-    'current_tally_commitment',
-    'new_tally_commitment',
-    'input_hash',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    NATIVE_PUBLIC_OUTPUT_VERSION,
-    TALLY_VOTES_NATIVE_CIRCUIT_ID,
-    STARKNET_POSEIDON_HASH_SCHEME,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.intStateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    fields.packedVals,
-    fields.stateCommitment,
-    fields.currentTallyCommitment,
-    fields.newTallyCommitment,
-    fields.inputHash,
-  ];
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
+  return publicOutput(
+    [
+      'magic',
+      'version',
+      'circuit_id',
+      'hash_scheme',
+      'state_tree_depth',
+      'int_state_tree_depth',
+      'vote_option_tree_depth',
+      'packed_vals',
+      'state_commitment',
+      'current_tally_commitment',
+      'new_tally_commitment',
+      'input_hash',
+    ],
+    [
+      PUBLIC_OUTPUT_MAGIC,
+      NATIVE_PUBLIC_OUTPUT_VERSION,
+      TALLY_VOTES_NATIVE_CIRCUIT_ID,
+      STARKNET_POSEIDON_HASH_SCHEME,
+      BigInt(params.stateTreeDepth),
+      BigInt(params.intStateTreeDepth),
+      BigInt(params.voteOptionTreeDepth),
+      fields.packedVals,
+      fields.stateCommitment,
+      fields.currentTallyCommitment,
+      fields.newTallyCommitment,
+      fields.inputHash,
+    ],
+  );
 }
 
-export function canonicalProcessMessagesPublicOutput(
+export function canonicalNativeProcessMessagesPublicOutput(
   fields,
   params = SMALL_PROCESS_MESSAGES_PARAMS,
 ) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGES_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-  ];
-
-  pushU256(output, labels, 'packed_vals', fields.packedVals);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'batch_start_hash', fields.batchStartHash);
-  pushU256(output, labels, 'batch_end_hash', fields.batchEndHash);
-  pushU256(output, labels, 'current_state_commitment', fields.currentStateCommitment);
-  pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
-  pushU256(output, labels, 'deactivate_commitment', fields.deactivateCommitment);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-  pushU256(output, labels, 'input_hash', fields.inputHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
+  return publicOutput(
+    [
+      'magic',
+      'version',
+      'circuit_id',
+      'hash_scheme',
+      'state_tree_depth',
+      'vote_option_tree_depth',
+      'message_batch_size',
+      'packed_vals',
+      'coord_pub_key_hash',
+      'batch_start_hash',
+      'batch_end_hash',
+      'current_state_commitment',
+      'new_state_commitment',
+      'deactivate_commitment',
+      'expected_poll_id',
+      'input_hash',
+    ],
+    [
+      PUBLIC_OUTPUT_MAGIC,
+      NATIVE_PUBLIC_OUTPUT_VERSION,
+      PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+      STARKNET_POSEIDON_HASH_SCHEME,
+      BigInt(params.stateTreeDepth),
+      BigInt(params.voteOptionTreeDepth),
+      BigInt(params.messageBatchSize),
+      fields.packedVals,
+      fields.coordPubKeyHash,
+      fields.batchStartHash,
+      fields.batchEndHash,
+      fields.currentStateCommitment,
+      fields.newStateCommitment,
+      fields.deactivateCommitment,
+      fields.expectedPollId,
+      fields.inputHash,
+    ],
+  );
 }
 
-export function canonicalProcessMessageStepPublicOutput(
+export function canonicalNativeAddNewKeyPublicOutput(
   fields,
-  params = SMALL_PROCESS_MESSAGES_PARAMS,
+  params = { stateTreeDepth: 2, deactivateTreeDepth: 4 },
 ) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGE_STEP_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'packed_vals', fields.packedVals);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
-  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
-  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
-  pushU256(output, labels, 'new_state_root', fields.newStateRoot);
-  pushU256(output, labels, 'current_state_commitment', fields.currentStateCommitment);
-  pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
-  pushU256(output, labels, 'active_state_root', fields.activeStateRoot);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
+  return publicOutput(
+    [
+      'magic',
+      'version',
+      'circuit_id',
+      'hash_scheme',
+      'state_tree_depth',
+      'deactivate_tree_depth',
+      'deactivate_root_hash',
+      'coord_pub_key_hash',
+      'nullifier',
+      'c1_hash',
+      'c2_hash',
+      'shared_key_hash',
+      'deactivate_leaf_hash',
+      'd1_hash',
+      'd2_hash',
+      'rerandomize_binding_hash',
+      'new_pub_key_hash',
+      'poll_id',
+      'input_hash',
+    ],
+    [
+      PUBLIC_OUTPUT_MAGIC,
+      NATIVE_PUBLIC_OUTPUT_VERSION,
+      ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+      STARKNET_POSEIDON_HASH_SCHEME,
+      BigInt(params.stateTreeDepth),
+      BigInt(params.deactivateTreeDepth),
+      fields.deactivateRootHash,
+      fields.coordPubKeyHash,
+      fields.nullifier,
+      fields.c1Hash,
+      fields.c2Hash,
+      fields.sharedKeyHash,
+      fields.deactivateLeafHash,
+      fields.d1Hash,
+      fields.d2Hash,
+      fields.rerandomizeBindingHash,
+      fields.newPubKeyHash,
+      fields.pollId,
+      fields.inputHash,
+    ],
+  );
 }
 
-export function canonicalProcessMessageCoordKeyPublicOutput(
-  fields,
-  params = SMALL_PROCESS_MESSAGES_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGE_COORD_KEY_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-  ];
-
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessMessageEcdhPublicOutput(
-  fields,
-  params = SMALL_PROCESS_MESSAGES_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGE_ECDH_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-  pushU256(output, labels, 'enc_pub_key_hash', fields.encPubKeyHash);
-  pushU256(output, labels, 'shared_key_hash', fields.sharedKeyHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessMessageSignaturePublicOutput(
-  fields,
-  params = SMALL_PROCESS_MESSAGES_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGE_SIGNATURE_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'pub_key_hash', fields.pubKeyHash);
-  pushU256(output, labels, 'r8_hash', fields.r8Hash);
-  pushU256(output, labels, 'packed_command_hash', fields.packedCommandHash);
-  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
-  pushU256(output, labels, 'is_signature_valid', fields.isSignatureValid);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessMessageStepCorePublicOutput(
-  fields,
-  params = SMALL_PROCESS_MESSAGES_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'vote_option_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_MESSAGE_STEP_CORE_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.voteOptionTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'packed_vals', fields.packedVals);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
-  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
-  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
-  pushU256(output, labels, 'new_state_root', fields.newStateRoot);
-  pushU256(output, labels, 'current_state_commitment', fields.currentStateCommitment);
-  pushU256(output, labels, 'new_state_commitment', fields.newStateCommitment);
-  pushU256(output, labels, 'active_state_root', fields.activeStateRoot);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-  pushU256(output, labels, 'enc_pub_key_hash', fields.encPubKeyHash);
-  pushU256(output, labels, 'shared_key_hash', fields.sharedKeyHash);
-  pushU256(output, labels, 'signature_pub_key_hash', fields.signaturePubKeyHash);
-  pushU256(output, labels, 'signature_r8_hash', fields.signatureR8Hash);
-  pushU256(output, labels, 'packed_command_hash', fields.packedCommandHash);
-  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
-  pushU256(output, labels, 'is_signature_valid', fields.isSignatureValid);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalAddNewKeyPublicOutput(fields, params = { stateTreeDepth: 2 }) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    ADD_NEW_KEY_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.stateTreeDepth + 2),
-  ];
-
-  pushU256(output, labels, 'deactivate_root', fields.deactivateRoot);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'nullifier', fields.nullifier);
-  pushU256(output, labels, 'd1_x', fields.d1[0]);
-  pushU256(output, labels, 'd1_y', fields.d1[1]);
-  pushU256(output, labels, 'd2_x', fields.d2[0]);
-  pushU256(output, labels, 'd2_y', fields.d2[1]);
-  pushU256(output, labels, 'new_pub_key_hash', fields.newPubKeyHash);
-  pushU256(output, labels, 'poll_id', fields.pollId);
-  pushU256(output, labels, 'input_hash', fields.inputHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivatePublicOutput(
+export function canonicalNativeProcessDeactivatePublicOutput(
   fields,
   params = SMALL_PROCESS_DEACTIVATE_PARAMS,
 ) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-  ];
-
-  pushU256(output, labels, 'new_deactivate_root', fields.newDeactivateRoot);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'batch_start_hash', fields.batchStartHash);
-  pushU256(output, labels, 'batch_end_hash', fields.batchEndHash);
-  pushU256(output, labels, 'current_deactivate_commitment', fields.currentDeactivateCommitment);
-  pushU256(output, labels, 'new_deactivate_commitment', fields.newDeactivateCommitment);
-  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-  pushU256(output, labels, 'input_hash', fields.inputHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateStepPublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_STEP_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'deactivate_index', fields.deactivateIndex);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
-  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
-  pushU256(output, labels, 'current_active_state_root', fields.currentActiveStateRoot);
-  pushU256(output, labels, 'current_deactivate_root', fields.currentDeactivateRoot);
-  pushU256(output, labels, 'new_active_state_root', fields.newActiveStateRoot);
-  pushU256(output, labels, 'new_deactivate_root', fields.newDeactivateRoot);
-  pushU256(output, labels, 'current_deactivate_commitment', fields.currentDeactivateCommitment);
-  pushU256(output, labels, 'new_deactivate_commitment', fields.newDeactivateCommitment);
-  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateCoordKeyPublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_COORD_KEY_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-  ];
-
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateEcdhPublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-    'message_index',
-    'ecdh_kind',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_ECDH_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-    BigInt(fields.ecdhKind),
-  ];
-
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-  pushU256(output, labels, 'base_hash', fields.baseHash);
-  pushU256(output, labels, 'shared_key_hash', fields.sharedKeyHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateSignaturePublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_SIGNATURE_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'pub_key_hash', fields.pubKeyHash);
-  pushU256(output, labels, 'r8_hash', fields.r8Hash);
-  pushU256(output, labels, 'packed_cmd_hash', fields.packedCmdHash);
-  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
-  pushU256(output, labels, 'signature_valid', fields.signatureValid);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateDecryptPublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-    'message_index',
-    'decrypt_kind',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_DECRYPT_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-    BigInt(fields.decryptKind),
-  ];
-
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-  pushU256(output, labels, 'c1_hash', fields.c1Hash);
-  pushU256(output, labels, 'c2_hash', fields.c2Hash);
-  pushU256(output, labels, 'decrypt_is_odd', fields.decryptIsOdd);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
-}
-
-export function canonicalProcessDeactivateStepCorePublicOutput(
-  fields,
-  params = SMALL_PROCESS_DEACTIVATE_PARAMS,
-) {
-  const labels = [
-    'magic',
-    'version',
-    'circuit_id',
-    'state_tree_depth',
-    'deactivate_tree_depth',
-    'message_batch_size',
-    'message_index',
-  ];
-  const output = [
-    PUBLIC_OUTPUT_MAGIC,
-    PUBLIC_OUTPUT_VERSION,
-    PROCESS_DEACTIVATE_STEP_CORE_CIRCUIT_ID,
-    BigInt(params.stateTreeDepth),
-    BigInt(params.deactivateTreeDepth),
-    BigInt(params.messageBatchSize),
-    BigInt(fields.messageIndex),
-  ];
-
-  pushU256(output, labels, 'deactivate_index', fields.deactivateIndex);
-  pushU256(output, labels, 'coord_pub_key_hash', fields.coordPubKeyHash);
-  pushU256(output, labels, 'coord_priv_key_hash', fields.coordPrivKeyHash);
-  pushU256(output, labels, 'previous_message_hash', fields.previousMessageHash);
-  pushU256(output, labels, 'next_message_hash', fields.nextMessageHash);
-  pushU256(output, labels, 'current_active_state_root', fields.currentActiveStateRoot);
-  pushU256(output, labels, 'current_deactivate_root', fields.currentDeactivateRoot);
-  pushU256(output, labels, 'new_active_state_root', fields.newActiveStateRoot);
-  pushU256(output, labels, 'new_deactivate_root', fields.newDeactivateRoot);
-  pushU256(output, labels, 'current_deactivate_commitment', fields.currentDeactivateCommitment);
-  pushU256(output, labels, 'new_deactivate_commitment', fields.newDeactivateCommitment);
-  pushU256(output, labels, 'current_state_root', fields.currentStateRoot);
-  pushU256(output, labels, 'expected_poll_id', fields.expectedPollId);
-  pushU256(output, labels, 'enc_pub_key_hash', fields.encPubKeyHash);
-  pushU256(output, labels, 'command_shared_key_hash', fields.commandSharedKeyHash);
-  pushU256(output, labels, 'signature_pub_key_hash', fields.signaturePubKeyHash);
-  pushU256(output, labels, 'signature_r8_hash', fields.signatureR8Hash);
-  pushU256(output, labels, 'packed_cmd_hash', fields.packedCmdHash);
-  pushU256(output, labels, 'cmd_sig_s', fields.cmdSigS);
-  pushU256(output, labels, 'signature_valid', fields.signatureValid);
-  pushU256(output, labels, 'current_state_ciphertext_c1_hash', fields.currentStateCiphertextC1Hash);
-  pushU256(output, labels, 'current_state_ciphertext_c2_hash', fields.currentStateCiphertextC2Hash);
-  pushU256(output, labels, 'current_decrypt_is_odd', fields.currentDecryptIsOdd);
-  pushU256(output, labels, 'new_state_ciphertext_c1_hash', fields.newStateCiphertextC1Hash);
-  pushU256(output, labels, 'new_state_ciphertext_c2_hash', fields.newStateCiphertextC2Hash);
-  pushU256(output, labels, 'new_decrypt_is_odd', fields.newDecryptIsOdd);
-  pushU256(output, labels, 'deactivate_pub_key_hash', fields.deactivatePubKeyHash);
-  pushU256(output, labels, 'deactivate_shared_key_hash', fields.deactivateSharedKeyHash);
-
-  return {
-    labels,
-    felts: output,
-    decimalFelts: output.map(decimalize),
-  };
+  return publicOutput(
+    [
+      'magic',
+      'version',
+      'circuit_id',
+      'hash_scheme',
+      'state_tree_depth',
+      'deactivate_tree_depth',
+      'message_batch_size',
+      'new_deactivate_root',
+      'coord_pub_key_hash',
+      'batch_start_hash',
+      'batch_end_hash',
+      'current_deactivate_commitment',
+      'new_deactivate_commitment',
+      'current_state_root',
+      'expected_poll_id',
+      'input_hash',
+    ],
+    [
+      PUBLIC_OUTPUT_MAGIC,
+      NATIVE_PUBLIC_OUTPUT_VERSION,
+      PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+      STARKNET_POSEIDON_HASH_SCHEME,
+      BigInt(params.stateTreeDepth),
+      BigInt(params.deactivateTreeDepth),
+      BigInt(params.messageBatchSize),
+      fields.newDeactivateRoot,
+      fields.coordPubKeyHash,
+      fields.batchStartHash,
+      fields.batchEndHash,
+      fields.currentDeactivateCommitment,
+      fields.newDeactivateCommitment,
+      fields.currentStateRoot,
+      fields.expectedPollId,
+      fields.inputHash,
+    ],
+  );
 }

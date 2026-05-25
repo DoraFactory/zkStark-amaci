@@ -6,7 +6,7 @@ import {
   SMALL_PROCESS_DEACTIVATE_PARAMS,
   STARKNET_POSEIDON_HASH_SCHEME,
 } from '../constants.mjs';
-import { decimalize } from '../compat/encoding.mjs';
+import { decimalize } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessDeactivateMessagesStateful } from './process-deactivate-messages.mjs';
@@ -19,9 +19,9 @@ function assertSupportedParams(params) {
   if (
     params.stateTreeDepth !== 2 ||
     params.deactivateTreeDepth !== 4 ||
-    params.messageBatchSize !== 5
+    params.messageBatchSize !== 3
   ) {
-    throw new Error('only AMACI-STARK v2 ProcessDeactivateNativeBoundary(2, 4, 5) is supported');
+    throw new Error('only AMACI-STARK v2 ProcessDeactivateNativeBoundary(2, 4, 3) is supported');
   }
 }
 
@@ -113,7 +113,7 @@ export function evaluateNativeProcessDeactivateMessagesBoundary(
   expectMatrixShape(rawInput.encPubKeys, batchSize, ENC_PUB_KEY_LENGTH, 'encPubKeys');
 
   const nativeState = Array.isArray(rawInput.processOneWitnesses)
-    ? nativeProcessDeactivateStateRoots(evaluateProcessDeactivateMessagesStateful(rawInput).state)
+    ? nativeProcessDeactivateStateRoots(evaluateProcessDeactivateMessagesStateful(rawInput).state, rawInput)
     : undefined;
   const newDeactivateRoot = nativeState?.newDeactivateRoot ?? toStarkFelt(rawInput.newDeactivateRoot, 'newDeactivateRoot');
   const batchStartHash = toStarkFelt(rawInput.batchStartHash, 'batchStartHash');

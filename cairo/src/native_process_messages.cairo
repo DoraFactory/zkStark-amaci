@@ -2,6 +2,7 @@ use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
 
 pub const TREE_ARITY: u32 = 5;
+pub const MESSAGE_BATCH_SIZE: felt252 = 3;
 pub const MAX_SIGNUPS: u32 = 25;
 pub const MAX_VOTE_OPTIONS: u32 = 5;
 pub const TWO_POW_32: felt252 = 0x100000000;
@@ -63,13 +64,9 @@ pub struct ProcessMessagesNativeBoundaryWitness {
     pub msg_0: Felt10,
     pub msg_1: Felt10,
     pub msg_2: Felt10,
-    pub msg_3: Felt10,
-    pub msg_4: Felt10,
     pub enc_pub_key_0: Felt2,
     pub enc_pub_key_1: Felt2,
     pub enc_pub_key_2: Felt2,
-    pub enc_pub_key_3: Felt2,
-    pub enc_pub_key_4: Felt2,
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -182,9 +179,7 @@ fn verify_process_messages_native_boundary(
     );
     let hash_2 = message_hash_or_empty(witness.msg_1, witness.enc_pub_key_1, hash_1);
     let hash_3 = message_hash_or_empty(witness.msg_2, witness.enc_pub_key_2, hash_2);
-    let hash_4 = message_hash_or_empty(witness.msg_3, witness.enc_pub_key_3, hash_3);
-    let hash_5 = message_hash_or_empty(witness.msg_4, witness.enc_pub_key_4, hash_4);
-    assert(hash_5 == fields.batch_end_hash, 'BATCH_END_HASH');
+    assert(hash_3 == fields.batch_end_hash, 'BATCH_END_HASH');
 }
 
 fn build_process_messages_native_public_output(
@@ -197,7 +192,7 @@ fn build_process_messages_native_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         vote_option_tree_depth: 1,
-        message_batch_size: TREE_ARITY.into(),
+        message_batch_size: MESSAGE_BATCH_SIZE,
         packed_vals: fields.packed_vals,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         batch_start_hash: fields.batch_start_hash,

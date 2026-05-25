@@ -9,9 +9,8 @@ import {
   TALLY_VOTES_NATIVE_CIRCUIT_ID,
   TREE_ARITY,
 } from '../constants.mjs';
-import { decimalize, parseBigInt } from '../compat/encoding.mjs';
+import { decimalize, parseBigInt } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
-import { unpackPackedVals } from './tally-votes.mjs';
 
 const U32_MAX = (1n << 32n) - 1n;
 
@@ -29,6 +28,15 @@ export function toStarkFelt(value, label = 'value') {
   const parsed = parseBigInt(value, label);
   const reduced = parsed % STARK_FIELD;
   return reduced >= 0n ? reduced : reduced + STARK_FIELD;
+}
+
+export function unpackPackedVals(packedVals) {
+  const packed = parseBigInt(packedVals, 'packedVals');
+  const mask32 = (1n << 32n) - 1n;
+  return {
+    numSignUps: packed >> 32n,
+    batchNum: packed & mask32,
+  };
 }
 
 function feltVector(values, expected, label) {

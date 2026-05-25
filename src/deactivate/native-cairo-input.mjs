@@ -1,4 +1,4 @@
-import { bigintToHex } from '../compat/encoding.mjs';
+import { bigintToHex } from '../encoding.mjs';
 
 function feltObject(value) {
   return value.toString();
@@ -21,13 +21,9 @@ function buildNativeProcessDeactivateBoundaryWitness(evaluated) {
     msg_0: feltVector(witness.msgs[0], 10, 'msgs[0]'),
     msg_1: feltVector(witness.msgs[1], 10, 'msgs[1]'),
     msg_2: feltVector(witness.msgs[2], 10, 'msgs[2]'),
-    msg_3: feltVector(witness.msgs[3], 10, 'msgs[3]'),
-    msg_4: feltVector(witness.msgs[4], 10, 'msgs[4]'),
     enc_pub_key_0: feltVector(witness.encPubKeys[0], 2, 'encPubKeys[0]'),
     enc_pub_key_1: feltVector(witness.encPubKeys[1], 2, 'encPubKeys[1]'),
     enc_pub_key_2: feltVector(witness.encPubKeys[2], 2, 'encPubKeys[2]'),
-    enc_pub_key_3: feltVector(witness.encPubKeys[3], 2, 'encPubKeys[3]'),
-    enc_pub_key_4: feltVector(witness.encPubKeys[4], 2, 'encPubKeys[4]'),
   };
 }
 
@@ -90,13 +86,9 @@ function pushNativeProcessDeactivateBoundaryWitness(args, witness) {
   pushFeltVector(args, witness.msg_0, 10);
   pushFeltVector(args, witness.msg_1, 10);
   pushFeltVector(args, witness.msg_2, 10);
-  pushFeltVector(args, witness.msg_3, 10);
-  pushFeltVector(args, witness.msg_4, 10);
   pushFeltVector(args, witness.enc_pub_key_0, 2);
   pushFeltVector(args, witness.enc_pub_key_1, 2);
   pushFeltVector(args, witness.enc_pub_key_2, 2);
-  pushFeltVector(args, witness.enc_pub_key_3, 2);
-  pushFeltVector(args, witness.enc_pub_key_4, 2);
 }
 
 export function serializeNativeCairoProcessDeactivateBoundaryExecutableArgs(cairoInput) {

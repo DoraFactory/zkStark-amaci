@@ -1,17 +1,17 @@
 import { SMALL_PROCESS_MESSAGES_PARAMS, TREE_ARITY } from '../constants.mjs';
-import { deepMapBigInt, parseBigInt } from '../compat/encoding.mjs';
-import { buildElGamalDecryptWitness } from '../compat/babyjub.mjs';
-import { bn254, poseidonPermutationBn254 } from '../compat/poseidon-bn254.mjs';
-import { hash10 } from '../compat/poseidon.mjs';
-import { quinaryInclusionRoot, zeroRoot } from '../compat/quinary-tree.mjs';
+import { deepMapBigInt, parseBigInt } from '../encoding.mjs';
+import {
+  starkElGamalDecryptPoint,
+  starkPoseidonDecryptWithoutCheck7,
+  starkPoseidonEncryptWithoutCheck7,
+} from '../stark-native-crypto.mjs';
+import { nativeHash5, nativeHash10, nativeQuinaryInclusionRoot } from '../native-hash.mjs';
 
 const STATE_LEAF_LENGTH = 10;
 const MESSAGE_LENGTH = 10;
 const DECRYPTED_COMMAND_LENGTH = 7;
-const PADDED_DECRYPTED_COMMAND_LENGTH = 9;
 const MAX_STATE_INDEX = TREE_ARITY ** SMALL_PROCESS_MESSAGES_PARAMS.stateTreeDepth - 1;
 const U32_MODULUS = 1n << 32n;
-const TWO_POW_128 = 1n << 128n;
 const MAX_VALID_VOTE_WEIGHT = 147946756881789319005730692170996259609n;
 const CIRCOM_UINT32_TO_96_HIGH_FACTOR = 18446744073709552000n;
 
@@ -75,71 +75,12 @@ function stateLeafVoteRoot(stateLeaf) {
   return stateLeaf[3];
 }
 
-function bn254Sub(left, right) {
-  return bn254(parseBigInt(left) - parseBigInt(right));
-}
-
-function bn254AddValue(left, right) {
-  return bn254(parseBigInt(left) + parseBigInt(right));
-}
-
 export function poseidonDecryptWithoutCheck7(message, sharedKey, nonce = 0n) {
-  expectVectorShape(message, MESSAGE_LENGTH, 'msg');
-  expectVectorShape(sharedKey, 2, 'sharedKey');
-  const ciphertext = deepMapBigInt(message);
-  const key = deepMapBigInt(sharedKey);
-  const decrypted = [];
-  let state = poseidonPermutationBn254([
-    0n,
-    key[0],
-    key[1],
-    parseBigInt(nonce, 'nonce') + BigInt(DECRYPTED_COMMAND_LENGTH) * TWO_POW_128,
-  ]);
-
-  for (let i = 0; i < 3; i += 1) {
-    for (let j = 0; j < 3; j += 1) {
-      decrypted.push(bn254Sub(ciphertext[i * 3 + j], state[j + 1]));
-    }
-    state = poseidonPermutationBn254([
-      state[0],
-      ciphertext[i * 3],
-      ciphertext[i * 3 + 1],
-      ciphertext[i * 3 + 2],
-    ]);
-  }
-
-  return decrypted.slice(0, DECRYPTED_COMMAND_LENGTH);
+  return starkPoseidonDecryptWithoutCheck7(message, sharedKey, nonce);
 }
 
 export function poseidonEncryptWithoutCheck7(decryptedCommand, sharedKey, nonce = 0n) {
-  expectVectorShape(decryptedCommand, DECRYPTED_COMMAND_LENGTH, 'decryptedCommand');
-  expectVectorShape(sharedKey, 2, 'sharedKey');
-  const plaintext = [
-    ...deepMapBigInt(decryptedCommand),
-    ...Array.from({ length: PADDED_DECRYPTED_COMMAND_LENGTH - DECRYPTED_COMMAND_LENGTH }, () => 0n),
-  ];
-  const key = deepMapBigInt(sharedKey);
-  const ciphertext = [];
-  let state = poseidonPermutationBn254([
-    0n,
-    key[0],
-    key[1],
-    parseBigInt(nonce, 'nonce') + BigInt(DECRYPTED_COMMAND_LENGTH) * TWO_POW_128,
-  ]);
-
-  for (let i = 0; i < 3; i += 1) {
-    for (let j = 0; j < 3; j += 1) {
-      ciphertext.push(bn254AddValue(plaintext[i * 3 + j], state[j + 1]));
-    }
-    state = poseidonPermutationBn254([
-      state[0],
-      ciphertext[i * 3],
-      ciphertext[i * 3 + 1],
-      ciphertext[i * 3 + 2],
-    ]);
-  }
-  ciphertext.push(0n);
-  return ciphertext;
+  return starkPoseidonEncryptWithoutCheck7(decryptedCommand, sharedKey, nonce);
 }
 
 export function unpackCommandData(packedData) {
@@ -304,11 +245,11 @@ export function evaluateProcessOneStateTransition(rawInput, params = SMALL_PROCE
   const newCost = processOneCost(input.isQuadraticCost, input.cmdNewVoteWeight);
   const availableVoiceCredits = input.stateLeaf[2] + currentCost;
   const sufficientVoiceCredits = availableVoiceCredits >= newCost;
-  const stateDecrypt = buildElGamalDecryptWitness({
-    privKey: input.coordPrivKey,
-    c1: [input.stateLeaf[5], input.stateLeaf[6]],
-    c2: [input.stateLeaf[7], input.stateLeaf[8]],
-  });
+  const stateDecrypt = starkElGamalDecryptPoint(
+    [input.stateLeaf[5], input.stateLeaf[6]],
+    [input.stateLeaf[7], input.stateLeaf[8]],
+    input.coordPrivKey,
+  );
   const computedIsDecryptionActive = 1n - stateDecrypt.isOdd;
   expectEqual(input.isDecryptionActive, computedIsDecryptionActive, 'isDecryptionActive');
   const messageValid =
@@ -335,28 +276,31 @@ export function evaluateProcessOneStateTransition(rawInput, params = SMALL_PROCE
   const stateIndex = selectByValidity(computedIsValid, BigInt(MAX_STATE_INDEX), input.cmdStateIndex);
   const voteOptionIndex = selectByValidity(computedIsValid, 0n, input.cmdVoteOptionIndex);
   const currentVoteRoot = stateLeafVoteRoot(input.stateLeaf) === 0n
-    ? zeroRoot(params.voteOptionTreeDepth)
+    ? nativeHash5([0n, 0n, 0n, 0n, 0n], 'voteZeroRoot')
     : stateLeafVoteRoot(input.stateLeaf);
 
-  const stateLeafHash = hash10(input.stateLeaf);
-  const derivedCurrentStateRoot = quinaryInclusionRoot(
+  const stateLeafHash = nativeHash10(input.stateLeaf, 'stateLeaf');
+  const derivedCurrentStateRoot = nativeQuinaryInclusionRoot(
     stateLeafHash,
     input.stateLeafPathElements,
     stateIndex,
+    'currentStateRoot',
   );
   expectEqual(derivedCurrentStateRoot, input.currentStateRoot, 'currentStateRoot');
 
-  const derivedActiveStateRoot = quinaryInclusionRoot(
+  const derivedActiveStateRoot = nativeQuinaryInclusionRoot(
     input.activeStateLeaf,
     input.activeStateLeafPathElements,
     stateIndex,
+    'activeStateRoot',
   );
   expectEqual(derivedActiveStateRoot, input.activeStateRoot, 'activeStateRoot');
 
-  const derivedCurrentVoteRoot = quinaryInclusionRoot(
+  const derivedCurrentVoteRoot = nativeQuinaryInclusionRoot(
     input.currentVoteWeight,
     input.currentVoteWeightsPathElements,
     voteOptionIndex,
+    'currentVoteRoot',
   );
   expectEqual(derivedCurrentVoteRoot, currentVoteRoot, 'currentVoteRoot');
 
@@ -365,10 +309,11 @@ export function evaluateProcessOneStateTransition(rawInput, params = SMALL_PROCE
     input.currentVoteWeight,
     input.cmdNewVoteWeight,
   );
-  const newVoteOptionRoot = quinaryInclusionRoot(
+  const newVoteOptionRoot = nativeQuinaryInclusionRoot(
     updatedVoteWeight,
     input.currentVoteWeightsPathElements,
     voteOptionIndex,
+    'newVoteOptionRoot',
   );
 
   const provisionalDerived = {
@@ -386,11 +331,12 @@ export function evaluateProcessOneStateTransition(rawInput, params = SMALL_PROCE
     newVoteOptionRoot,
   };
   const newStateLeaf = buildProcessOneNewStateLeaf(input, provisionalDerived);
-  const newStateLeafHash = hash10(newStateLeaf);
-  const newStateRoot = quinaryInclusionRoot(
+  const newStateLeafHash = nativeHash10(newStateLeaf, 'newStateLeaf');
+  const newStateRoot = nativeQuinaryInclusionRoot(
     newStateLeafHash,
     input.stateLeafPathElements,
     stateIndex,
+    'newStateRoot',
   );
   if (input.newStateRoot !== undefined) {
     expectEqual(newStateRoot, input.newStateRoot, 'newStateRoot');

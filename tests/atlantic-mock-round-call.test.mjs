@@ -7,7 +7,7 @@ import {
   SHARP_BOOTLOADER_PROGRAM_HASH,
 } from '../src/atlantic/mock-round-call.mjs';
 import { calculateBootloadedFactHash, calculatePlainFactHash } from '../src/integrity/hashes.mjs';
-import { bigintToHex } from '../src/compat/encoding.mjs';
+import { bigintToHex } from '../src/encoding.mjs';
 
 const nativeTallyOutput = [
   0x4d414349535441524bn,
@@ -207,6 +207,16 @@ test('builds an Atlantic metadata process-messages submit command', () => {
   assert.equal(result.operationState.newStateCommitment, '0x202');
   assert.equal(result.operationState.currentDeactivateCommitment, '0x303');
   assert.match(result.submit.command, /submit_process_messages_atlantic_metadata_fact/);
+
+  const stageResult = buildAtlanticMockRoundCall({
+    summary: metadataBootloadedSummary(metadata),
+    metadata,
+    wrapperAddress: '0xabc',
+    operation: 'process-messages-stage-native',
+  });
+  assert.equal(stageResult.blockers.length, 0);
+  assert.match(stageResult.submit.command, /submit_process_messages_atlantic_metadata_fact/);
+
 });
 
 test('builds an Atlantic metadata process-deactivate submit command with state override', () => {
@@ -242,4 +252,14 @@ test('builds an Atlantic metadata process-deactivate submit command with state o
   assert.equal(result.operationState.newDeactivateCommitment, '0x505');
   assert.equal(result.operationState.currentStateCommitment, '0x707');
   assert.match(result.submit.command, /submit_process_deactivate_atlantic_metadata_fact/);
+
+  const stageResult = buildAtlanticMockRoundCall({
+    summary: metadataBootloadedSummary(metadata),
+    metadata,
+    wrapperAddress: '0xabc',
+    operation: 'process-deactivate-stage-native',
+    state: { currentStateCommitment: '0x707' },
+  });
+  assert.equal(stageResult.blockers.length, 0);
+  assert.match(stageResult.submit.command, /submit_process_deactivate_atlantic_metadata_fact/);
 });

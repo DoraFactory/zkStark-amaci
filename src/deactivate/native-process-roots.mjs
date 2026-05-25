@@ -1,5 +1,5 @@
 import { TREE_ARITY } from '../constants.mjs';
-import { parseBigInt } from '../compat/encoding.mjs';
+import { parseBigInt } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { nativeHash5, nativeHash10 } from '../msg/native-process-roots.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
@@ -30,7 +30,18 @@ function zeroRoots(leaf) {
   return roots;
 }
 
-function pathFromMap(nodeMap, depth, leaf, index, fallbackRoots, label) {
+function fallbackPathValue(pathElements, level, siblingCursor, fallbackRoots, label) {
+  if (Array.isArray(pathElements)) {
+    const levelPath = pathElements[level];
+    if (!Array.isArray(levelPath) || levelPath.length !== TREE_ARITY - 1) {
+      throw new Error(`${label}.pathElements[${level}] must contain ${TREE_ARITY - 1} siblings`);
+    }
+    return toStarkFelt(levelPath[siblingCursor], `${label}.fallback[${level}][${siblingCursor}]`);
+  }
+  return fallbackRoots[level];
+}
+
+function pathFromMap(nodeMap, depth, leaf, index, fallbackRoots, label, pathElements = undefined) {
   const indices = splitIndex(index, depth);
   let node = toStarkFelt(leaf, `${label}.leaf`);
   const path = [];
@@ -42,14 +53,17 @@ function pathFromMap(nodeMap, depth, leaf, index, fallbackRoots, label) {
     const groupStart = nodeIndexAtLevel - levelIndex;
     const children = [];
     const pathLevel = [];
+    let siblingCursor = 0;
     for (let offset = 0; offset < TREE_ARITY; offset += 1) {
       const absoluteIndex = groupStart + offset;
       if (offset === levelIndex) {
         children.push(node);
       } else {
-        const value = nodeMap.get(mapKey(level, absoluteIndex)) ?? fallbackRoots[level];
+        const value = nodeMap.get(mapKey(level, absoluteIndex))
+          ?? fallbackPathValue(pathElements, level, siblingCursor, fallbackRoots, label);
         children.push(value);
         pathLevel.push(value);
+        siblingCursor += 1;
       }
     }
     path.push(pathLevel);
@@ -73,6 +87,36 @@ function updateMap(nodeMap, depth, index, leaf, context) {
   }
 }
 
+function initializeFullNativeLeafMap(nodeMap, leaves, depth, label) {
+  if (!Array.isArray(leaves)) {
+    return false;
+  }
+  const expected = TREE_ARITY ** depth;
+  if (leaves.length !== expected) {
+    throw new Error(`${label} must contain ${expected} leaves`);
+  }
+
+  let levelValues = leaves.map((value, index) => {
+    const felt = toStarkFelt(value, `${label}[${index}]`);
+    nodeMap.set(mapKey(0, index), felt);
+    return felt;
+  });
+
+  for (let level = 1; level <= depth; level += 1) {
+    const next = [];
+    for (let index = 0; index < levelValues.length; index += TREE_ARITY) {
+      const node = nativeHash5(
+        levelValues.slice(index, index + TREE_ARITY),
+        `${label}.level${level}.${index / TREE_ARITY}`,
+      );
+      nodeMap.set(mapKey(level, index / TREE_ARITY), node);
+      next.push(node);
+    }
+    levelValues = next;
+  }
+  return true;
+}
+
 function nativeDeactivateLeaf(input, sharedKeyHash) {
   return nativeHash5([
     input.c1[0],
@@ -90,7 +134,7 @@ function nativeHashPoint(values, label) {
   return poseidonManyFelts(values.map((value, index) => toStarkFelt(value, `${label}[${index}]`)));
 }
 
-export function nativeProcessDeactivateTransitionContexts(stateResult) {
+export function nativeProcessDeactivateTransitionContexts(stateResult, contextInput = undefined) {
   const emptyStateLeafHash = nativeHash10(Array.from({ length: 10 }, () => 0n), 'emptyStateLeaf');
   const stateFallback = zeroRoots(emptyStateLeafHash);
   const activeFallback = zeroRoots(0n);
@@ -98,6 +142,13 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
   const stateMap = new Map();
   const activeMap = new Map();
   const deactivateMap = new Map();
+  initializeFullNativeLeafMap(activeMap, contextInput?.initialActiveLeaves, 2, 'initialActiveLeaves');
+  initializeFullNativeLeafMap(
+    deactivateMap,
+    contextInput?.initialDeactivateLeaves,
+    4,
+    'initialDeactivateLeaves',
+  );
 
   for (const transition of stateResult.transitions) {
     const stateIndex = Number(transition.derived.stateIndex);
@@ -112,6 +163,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       stateIndex,
       stateFallback,
       `seedStatePath${stateIndex}`,
+      transition.input.stateLeafPathElements,
     );
     const group = Math.floor(stateIndex / TREE_ARITY);
     stateMap.set(mapKey(1, group), nativeHash5(seeded.levelChildren[0], `seedStateGroup${group}`));
@@ -129,6 +181,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       stateIndex,
       stateFallback,
       `deactivate${messageIndex}.state`,
+      input.stateLeafPathElements,
     );
     const currentActivePath = pathFromMap(
       activeMap,
@@ -137,6 +190,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       stateIndex,
       activeFallback,
       `deactivate${messageIndex}.currentActive`,
+      input.activeStateLeafPathElements,
     );
     const newActiveLeaf = transition.derived.valid === 1n
       ? input.newActiveState
@@ -148,6 +202,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       stateIndex,
       activeFallback,
       `deactivate${messageIndex}.newActive`,
+      input.activeStateLeafPathElements,
     );
     const currentDeactivatePath = pathFromMap(
       deactivateMap,
@@ -156,6 +211,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       deactivateIndex,
       deactivateFallback,
       `deactivate${messageIndex}.currentDeactivate`,
+      input.deactivateLeafPathElements,
     );
     const sharedKeyHash = nativeHashPoint(transition.derived.sharedKey, 'deactivateSharedKey');
     const newDeactivateLeaf = input.isEmptyMsg === 1n ? 0n : nativeDeactivateLeaf(input, sharedKeyHash);
@@ -166,6 +222,7 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
       deactivateIndex,
       deactivateFallback,
       `deactivate${messageIndex}.newDeactivate`,
+      input.deactivateLeafPathElements,
     );
 
     updateMap(activeMap, 2, stateIndex, toStarkFelt(newActiveLeaf, 'newActiveLeaf'), newActivePath);
@@ -185,8 +242,8 @@ export function nativeProcessDeactivateTransitionContexts(stateResult) {
   });
 }
 
-export function nativeProcessDeactivateStateRoots(stateResult) {
-  const contexts = nativeProcessDeactivateTransitionContexts(stateResult);
+export function nativeProcessDeactivateStateRoots(stateResult, contextInput = undefined) {
+  const contexts = nativeProcessDeactivateTransitionContexts(stateResult, contextInput);
   return {
     transitionRoots: contexts,
     currentStateRoot: contexts[0].currentStateRoot,

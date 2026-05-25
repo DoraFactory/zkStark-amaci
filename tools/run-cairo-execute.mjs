@@ -8,209 +8,138 @@ import { buildSmallSyntheticFixture } from '../src/fixtures/small-amaci-fixtures
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const CIRCUITS = Object.freeze({
-  tally: {
-    prepareCircuit: 'tally',
-    executable: 'tally_votes',
-    synthetic: false,
-  },
   'tally-native': {
     prepareCircuit: 'tally-native',
     executable: 'tally_votes_native',
     synthetic: false,
   },
-  'add-new-key': {
-    prepareCircuit: 'add-new-key',
-    executable: 'add_new_key',
-    synthetic: true,
-  },
   'add-new-key-native': {
     prepareCircuit: 'add-new-key-native',
     executable: 'add_new_key_native',
     synthetic: true,
-  },
-  'process-messages': {
-    prepareCircuit: 'process-messages-stateful-ecdh-signature',
-    executable: 'process_messages_stateful_with_ecdh_signature',
-    synthetic: true,
+    fixtureCircuit: 'add-new-key',
   },
   'process-messages-boundary-native': {
     prepareCircuit: 'process-messages-boundary-native',
     executable: 'process_messages_native_boundary',
     synthetic: true,
+    fixtureCircuit: 'process-messages',
   },
-  'process-message-step': {
-    prepareCircuit: 'process-message-step-ecdh-signature',
-    executable: 'process_message_step_with_ecdh_signature',
+  'process-messages-stage-native': {
+    prepareCircuit: 'process-messages-stage-native',
+    executable: 'process_messages_stage_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-message-coord-key': {
-    prepareCircuit: 'process-message-coord-key',
-    executable: 'process_message_coord_key',
-    synthetic: true,
+    fixtureCircuit: 'process-messages',
   },
   'process-message-coord-key-native': {
     prepareCircuit: 'process-message-coord-key-native',
     executable: 'process_message_coord_key_native',
     synthetic: true,
-  },
-  'process-message-ecdh': {
-    prepareCircuit: 'process-message-ecdh',
-    executable: 'process_message_ecdh',
-    synthetic: true,
-    requiresMessageIndex: true,
+    fixtureCircuit: 'process-messages',
   },
   'process-message-ecdh-native': {
     prepareCircuit: 'process-message-ecdh-native',
     executable: 'process_message_ecdh_native',
     synthetic: true,
+    fixtureCircuit: 'process-messages',
     requiresMessageIndex: true,
   },
   'process-message-decrypt-native': {
     prepareCircuit: 'process-message-decrypt-native',
     executable: 'process_message_decrypt_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-message-signature': {
-    prepareCircuit: 'process-message-signature',
-    executable: 'process_message_signature',
-    synthetic: true,
+    fixtureCircuit: 'process-messages',
     requiresMessageIndex: true,
   },
   'process-message-signature-native': {
     prepareCircuit: 'process-message-signature-native',
     executable: 'process_message_signature_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-message-step-core': {
-    prepareCircuit: 'process-message-step-core',
-    executable: 'process_message_step_core',
-    synthetic: true,
+    fixtureCircuit: 'process-messages',
     requiresMessageIndex: true,
   },
   'process-message-step-core-native': {
     prepareCircuit: 'process-message-step-core-native',
     executable: 'process_message_step_core_native',
     synthetic: true,
+    fixtureCircuit: 'process-messages',
     requiresMessageIndex: true,
-  },
-  'process-deactivate': {
-    prepareCircuit: 'process-deactivate-stateful',
-    executable: 'process_deactivate_messages_stateful',
-    synthetic: true,
   },
   'process-deactivate-boundary-native': {
     prepareCircuit: 'process-deactivate-boundary-native',
     executable: 'process_deactivate_native_boundary',
     synthetic: true,
+    fixtureCircuit: 'process-deactivate',
   },
-  'process-deactivate-step': {
-    prepareCircuit: 'process-deactivate-step',
-    executable: 'process_deactivate_message_step',
+  'process-deactivate-stage-native': {
+    prepareCircuit: 'process-deactivate-stage-native',
+    executable: 'process_deactivate_stage_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-coord-key': {
-    prepareCircuit: 'process-deactivate-coord-key',
-    executable: 'process_deactivate_coord_key',
-    synthetic: true,
+    fixtureCircuit: 'process-deactivate',
   },
   'process-deactivate-coord-key-native': {
     prepareCircuit: 'process-deactivate-coord-key-native',
     executable: 'process_deactivate_coord_key_native',
     synthetic: true,
-  },
-  'process-deactivate-ecdh-command': {
-    prepareCircuit: 'process-deactivate-ecdh-command',
-    executable: 'process_deactivate_ecdh',
-    synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-ecdh-leaf': {
-    prepareCircuit: 'process-deactivate-ecdh-leaf',
-    executable: 'process_deactivate_ecdh',
-    synthetic: true,
-    requiresMessageIndex: true,
+    fixtureCircuit: 'process-deactivate',
   },
   'process-deactivate-ecdh-command-native': {
     prepareCircuit: 'process-deactivate-ecdh-command-native',
     executable: 'process_deactivate_ecdh_native',
     synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
   'process-deactivate-ecdh-leaf-native': {
     prepareCircuit: 'process-deactivate-ecdh-leaf-native',
     executable: 'process_deactivate_ecdh_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-signature': {
-    prepareCircuit: 'process-deactivate-signature',
-    executable: 'process_deactivate_signature',
-    synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
   'process-deactivate-signature-native': {
     prepareCircuit: 'process-deactivate-signature-native',
     executable: 'process_deactivate_signature_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-decrypt-current': {
-    prepareCircuit: 'process-deactivate-decrypt-current',
-    executable: 'process_deactivate_decrypt',
-    synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-decrypt-new': {
-    prepareCircuit: 'process-deactivate-decrypt-new',
-    executable: 'process_deactivate_decrypt',
-    synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
   'process-deactivate-decrypt-current-native': {
     prepareCircuit: 'process-deactivate-decrypt-current-native',
     executable: 'process_deactivate_decrypt_native',
     synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
   'process-deactivate-decrypt-new-native': {
     prepareCircuit: 'process-deactivate-decrypt-new-native',
     executable: 'process_deactivate_decrypt_native',
     synthetic: true,
-    requiresMessageIndex: true,
-  },
-  'process-deactivate-step-core': {
-    prepareCircuit: 'process-deactivate-step-core',
-    executable: 'process_deactivate_step_core',
-    synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
   'process-deactivate-step-core-native': {
     prepareCircuit: 'process-deactivate-step-core-native',
     executable: 'process_deactivate_step_core_native',
     synthetic: true,
+    fixtureCircuit: 'process-deactivate',
     requiresMessageIndex: true,
   },
 });
 
 function usage() {
   return `Usage:
-  node tools/run-cairo-execute.mjs --circuit <name> [input.json] [options]
+  node tools/run-cairo-execute.mjs --circuit <native-name> [input.json] [options]
 
-Circuits:
+Native circuits:
   ${Object.keys(CIRCUITS).join('\n  ')}
 
 Options:
   --out-dir <path>      Directory for generated input, Cairo args, stdout, and metadata.
   --timeout-ms <n>      scarb execute timeout in milliseconds. Default: 300000.
-  --message-index <n>   Message index for process-message-* or process-deactivate-* step slices. Default: 0.
+  --message-index <n>   Message index for per-message native circuits. Default: 0.
+  --layout <name>       scarb execute layout. Default: all_cairo.
   --no-resource-usage   Do not pass --print-resource-usage to scarb execute.
-
-If input.json is omitted for add-new-key, process-messages, or process-deactivate,
-this tool generates the current small synthetic fixture for that circuit.
 `;
 }
 
@@ -222,6 +151,7 @@ function parseArgs(argv) {
     timeoutMs: 300000,
     resourceUsage: true,
     messageIndex: 0,
+    layout: 'all_cairo',
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -236,6 +166,8 @@ function parseArgs(argv) {
       args.timeoutMs = Number(argv[++i]);
     } else if (arg === '--message-index') {
       args.messageIndex = Number(argv[++i]);
+    } else if (arg === '--layout') {
+      args.layout = argv[++i];
     } else if (arg === '--no-resource-usage') {
       args.resourceUsage = false;
     } else if (!args.inputPath) {
@@ -250,8 +182,9 @@ function parseArgs(argv) {
   if (!Number.isSafeInteger(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error('--timeout-ms must be a positive safe integer');
   }
-  if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex >= 5) {
-    throw new Error('--message-index must be an integer in [0, 4]');
+  const maxMessageIndex = 2;
+  if (!Number.isInteger(args.messageIndex) || args.messageIndex < 0 || args.messageIndex > maxMessageIndex) {
+    throw new Error(`--message-index must be an integer in [0, ${maxMessageIndex}]`);
   }
   return args;
 }
@@ -260,8 +193,8 @@ function run(command, commandArgs, options) {
   const result = spawnSync(command, commandArgs, {
     cwd: options.cwd,
     encoding: 'utf8',
-    maxBuffer: 1024 * 1024 * 512,
     timeout: options.timeoutMs,
+    maxBuffer: 64 * 1024 * 1024,
   });
   if (result.error) {
     throw result.error;
@@ -269,63 +202,69 @@ function run(command, commandArgs, options) {
   return result;
 }
 
-function ensureInput(args, circuit, outDir) {
-  if (args.inputPath) {
-    const inputPath = resolve(args.inputPath);
-    if (!existsSync(inputPath)) {
-      throw new Error(`input file does not exist: ${inputPath}`);
-    }
-    return { inputPath, generatedInput: false };
+function ensureDir(path) {
+  mkdirSync(path, { recursive: true });
+}
+
+function writeSyntheticInput(circuit, outPath) {
+  const fixture = buildSmallSyntheticFixture(circuit);
+  writeFileSync(outPath, `${JSON.stringify(fixture, null, 2)}\n`);
+}
+
+function serializeBigInts(value) {
+  if (typeof value === 'bigint') return value.toString();
+  if (Array.isArray(value)) return value.map(serializeBigInts);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, serializeBigInts(val)]));
   }
-  if (!circuit.synthetic) {
-    throw new Error(`input.json is required for ${args.circuit}`);
-  }
-  const inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
-  const syntheticCircuit = args.circuit === 'add-new-key-native'
-    ? 'add-new-key'
-    : args.circuit === 'process-message-step' || args.circuit.startsWith('process-message-')
-    ? 'process-messages'
-    : args.circuit === 'process-deactivate-step' || args.circuit.startsWith('process-deactivate-')
-      ? 'process-deactivate'
-      : args.circuit;
-  writeFileSync(inputPath, `${JSON.stringify(buildSmallSyntheticFixture(syntheticCircuit), null, 2)}\n`);
-  return { inputPath, generatedInput: true };
+  return value;
 }
 
 const args = parseArgs(process.argv.slice(2));
 const circuit = CIRCUITS[args.circuit];
-const outDir = resolve(args.outDir ?? `${ROOT_DIR}/target/cairo-execute/${args.circuit}`);
-mkdirSync(outDir, { recursive: true });
 
-const { inputPath, generatedInput } = ensureInput(args, circuit, outDir);
-const preparedJson = resolve(outDir, `${args.circuit}-prepared.json`);
-const cairoInputJson = resolve(outDir, `${args.circuit}-cairo-input.json`);
-const cairoArgsJson = resolve(outDir, `${args.circuit}-cairo-args.json`);
-const stdoutPath = resolve(outDir, `${args.circuit}-execute.stdout.txt`);
-const stderrPath = resolve(outDir, `${args.circuit}-execute.stderr.txt`);
-const metadataPath = resolve(outDir, `${args.circuit}-execute.json`);
+const outDir = resolve(args.outDir ?? `target/cairo-execute/${args.circuit}`);
+ensureDir(outDir);
 
-const prepareResult = run(
-  process.execPath,
-  [
-    `${ROOT_DIR}/tools/prepare-amaci-circuit-input.mjs`,
-    '--circuit',
-    circuit.prepareCircuit,
-    inputPath,
-    '--out',
-    preparedJson,
-    '--cairo-input-out',
-    cairoInputJson,
-    '--cairo-args-out',
-    cairoArgsJson,
-    ...(circuit.requiresMessageIndex ? ['--message-index', String(args.messageIndex)] : []),
-  ],
-  { cwd: ROOT_DIR, timeoutMs: args.timeoutMs },
-);
-if (prepareResult.status !== 0) {
-  process.stdout.write(prepareResult.stdout);
-  process.stderr.write(prepareResult.stderr);
-  process.exit(prepareResult.status ?? 1);
+let inputPath = args.inputPath ? resolve(args.inputPath) : undefined;
+let generatedInput = false;
+if (!inputPath) {
+  if (!circuit.synthetic) {
+    throw new Error(`${args.circuit} requires an input JSON`);
+  }
+  inputPath = resolve(outDir, `${args.circuit}-small-input.json`);
+  writeSyntheticInput(circuit.fixtureCircuit, inputPath);
+  generatedInput = true;
+}
+if (!existsSync(inputPath)) {
+  throw new Error(`input file not found: ${inputPath}`);
+}
+
+const preparedPath = resolve(outDir, `${args.circuit}-prepared.json`);
+const cairoInputPath = resolve(outDir, `${args.circuit}-cairo-input.json`);
+const cairoArgsPath = resolve(outDir, `${args.circuit}-cairo-args.json`);
+
+const prepareArgs = [
+  'tools/prepare-amaci-circuit-input.mjs',
+  '--circuit',
+  circuit.prepareCircuit,
+  inputPath,
+  '--out',
+  preparedPath,
+  '--cairo-input-out',
+  cairoInputPath,
+  '--cairo-args-out',
+  cairoArgsPath,
+];
+if (circuit.requiresMessageIndex) {
+  prepareArgs.push('--message-index', String(args.messageIndex));
+}
+
+const prepare = run('node', prepareArgs, { cwd: ROOT_DIR, timeoutMs: args.timeoutMs });
+if (prepare.status !== 0) {
+  process.stdout.write(prepare.stdout);
+  process.stderr.write(prepare.stderr);
+  process.exit(prepare.status ?? 1);
 }
 
 const executeArgs = [
@@ -333,44 +272,55 @@ const executeArgs = [
   '--executable-name',
   circuit.executable,
   '--arguments-file',
-  cairoArgsJson,
+  cairoArgsPath,
   '--print-program-output',
+  '--layout',
+  args.layout,
 ];
 if (args.resourceUsage) {
   executeArgs.push('--print-resource-usage');
 }
 
-const executeResult = run('scarb', executeArgs, {
-  cwd: `${ROOT_DIR}/cairo`,
-  timeoutMs: args.timeoutMs,
-});
-writeFileSync(stdoutPath, executeResult.stdout);
-writeFileSync(stderrPath, executeResult.stderr);
+const execute = run('scarb', executeArgs, { cwd: resolve(ROOT_DIR, 'cairo'), timeoutMs: args.timeoutMs });
 
-const prepared = JSON.parse(readFileSync(preparedJson, 'utf8'));
+const stdoutPath = resolve(outDir, `${args.circuit}-stdout.log`);
+const stderrPath = resolve(outDir, `${args.circuit}-stderr.log`);
+writeFileSync(stdoutPath, execute.stdout);
+writeFileSync(stderrPath, execute.stderr);
+
+let expectedPublicOutputFelts = 0;
+try {
+  const prepared = JSON.parse(readFileSync(preparedPath, 'utf8'));
+  expectedPublicOutputFelts = prepared.publicOutput?.felts?.length ?? 0;
+} catch {
+  expectedPublicOutputFelts = 0;
+}
+
 const metadata = {
   circuit: args.circuit,
   prepareCircuit: circuit.prepareCircuit,
   executable: circuit.executable,
-  messageIndex: circuit.requiresMessageIndex ? args.messageIndex : undefined,
-  generatedInput,
   inputPath,
-  preparedJson,
-  cairoInputJson,
-  cairoArgsJson,
+  generatedInput,
+  layout: args.layout,
+  messageIndex: circuit.requiresMessageIndex ? args.messageIndex : undefined,
+  preparedPath,
+  cairoInputPath,
+  cairoArgsPath,
   stdoutPath,
   stderrPath,
-  status: executeResult.status,
-  signal: executeResult.signal,
-  expectedPublicOutputFelts:
-    prepared.publicOutput?.felts?.length ?? prepared.publicOutput?.length ?? undefined,
+  stdoutLog: stdoutPath,
+  stderrLog: stderrPath,
+  expectedPublicOutputFelts,
+  status: execute.status,
+  signal: execute.signal,
 };
-writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+writeFileSync(resolve(outDir, 'execution-run.json'), `${JSON.stringify(serializeBigInts(metadata), null, 2)}\n`);
 
-if (executeResult.status !== 0) {
-  process.stdout.write(executeResult.stdout);
-  process.stderr.write(executeResult.stderr);
-  process.exit(executeResult.status ?? 1);
+if (execute.status === 0) {
+  process.stdout.write(`${JSON.stringify(serializeBigInts(metadata), null, 2)}\n`);
+} else {
+  process.stdout.write(execute.stdout);
+  process.stderr.write(execute.stderr);
 }
-
-process.stdout.write(`${JSON.stringify(metadata, null, 2)}\n`);
+process.exit(execute.status ?? 0);

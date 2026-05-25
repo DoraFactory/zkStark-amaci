@@ -1,5 +1,8 @@
 use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
+use crate::native_stark_crypto::{
+    assert_stark_point_equals, assert_stark_point_valid, stark_elgamal_rerandomize, stark_scalar_mul,
+};
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const DEACTIVATE_TREE_DEPTH: felt252 = 4;
@@ -39,6 +42,7 @@ pub struct NativeAddNewKeyWitness {
     pub c1: U256x2,
     pub c2: U256x2,
     pub shared_key: U256x2,
+    pub random_val: u256,
     pub deactivate_leaf_path_0: U256x4,
     pub deactivate_leaf_path_1: U256x4,
     pub deactivate_leaf_path_2: U256x4,
@@ -208,6 +212,41 @@ fn native_input_hash(fields: NativeAddNewKeyPublicFields) -> felt252 {
 }
 
 fn verify_native_add_new_key(fields: NativeAddNewKeyPublicFields, witness: NativeAddNewKeyWitness) {
+    assert_stark_point_valid(witness.coord_pub_key.v0, witness.coord_pub_key.v1);
+    assert_stark_point_valid(witness.new_pub_key.v0, witness.new_pub_key.v1);
+    assert_stark_point_valid(witness.c1.v0, witness.c1.v1);
+    assert_stark_point_valid(witness.c2.v0, witness.c2.v1);
+    assert_stark_point_valid(witness.d1.v0, witness.d1.v1);
+    assert_stark_point_valid(witness.d2.v0, witness.d2.v1);
+
+    let (computed_shared_key_x, computed_shared_key_y) = stark_scalar_mul(
+        witness.coord_pub_key.v0, witness.coord_pub_key.v1, witness.old_private_key,
+    );
+    assert_stark_point_equals(
+        computed_shared_key_x,
+        computed_shared_key_y,
+        witness.shared_key.v0,
+        witness.shared_key.v1,
+        'N_SHARED_X',
+        'N_SHARED_Y',
+    );
+
+    let (computed_d1_x, computed_d1_y, computed_d2_x, computed_d2_y) = stark_elgamal_rerandomize(
+        witness.coord_pub_key.v0,
+        witness.coord_pub_key.v1,
+        witness.c1.v0,
+        witness.c1.v1,
+        witness.c2.v0,
+        witness.c2.v1,
+        witness.random_val,
+    );
+    assert_stark_point_equals(
+        computed_d1_x, computed_d1_y, witness.d1.v0, witness.d1.v1, 'N_D1_X', 'N_D1_Y',
+    );
+    assert_stark_point_equals(
+        computed_d2_x, computed_d2_y, witness.d2.v0, witness.d2.v1, 'N_D2_X', 'N_D2_Y',
+    );
+
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(native_hash_u256x2(witness.new_pub_key) == fields.new_pub_key_hash, 'N_NEW_KEY');
     assert(native_nullifier(witness.old_private_key, witness.poll_id) == fields.nullifier, 'N_NULLIFIER');

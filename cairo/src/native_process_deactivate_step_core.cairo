@@ -1,5 +1,10 @@
 use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
+use crate::native_stark_crypto::{
+    STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN, STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+    assert_stark_point_equals, assert_stark_poseidon_decrypt7,
+    stark_elgamal_decrypt_point_is_odd, stark_scalar_mul, stark_verify_command_signature,
+};
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const DEACTIVATE_ECDH_KIND_COMMAND: felt252 = 0;
@@ -28,6 +33,7 @@ const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
     0x414d4143495f44454143545f534841524544;
 const NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN: felt252 =
     0x414d4143495f44454143545f4445435f42494e44;
+const PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE: felt252 = 3;
 const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 const U128_TWO_POW_32: u128 = 0x100000000;
 const U128_TWO_POW_64: u128 = 0x10000000000000000;
@@ -311,6 +317,8 @@ pub struct NativeProcessDeactivateStepCoreWitness {
     pub c1: U256x2,
     pub c2: U256x2,
     pub state_leaf: U256x10,
+    pub current_decrypted_point: U256x2,
+    pub new_decrypted_point: U256x2,
     pub state_leaf_path_0: U256x4,
     pub state_leaf_path_1: U256x4,
     pub active_state_leaf_path_0: U256x4,
@@ -743,9 +751,7 @@ fn assert_valid_deactivate_message_index(message_index: felt252) {
     assert(
         message_index == 0
             || message_index == 1
-            || message_index == 2
-            || message_index == 3
-            || message_index == 4,
+            || message_index == 2,
         'BAD_DEACT_MSG_INDEX',
     );
 }
@@ -863,7 +869,7 @@ fn build_native_process_deactivate_coord_key_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         coord_pub_key_hash: fields.coord_pub_key_hash,
         coord_priv_key_hash: fields.coord_priv_key_hash,
         coord_key_binding_hash: fields.coord_key_binding_hash,
@@ -889,7 +895,7 @@ fn build_native_process_deactivate_ecdh_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         ecdh_kind: fields.ecdh_kind,
         coord_priv_key_hash: fields.coord_priv_key_hash,
@@ -917,7 +923,7 @@ fn build_native_process_deactivate_signature_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         pub_key_hash: fields.pub_key_hash,
         r8_hash: fields.r8_hash,
@@ -946,7 +952,7 @@ fn build_native_process_deactivate_decrypt_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         decrypt_kind: fields.decrypt_kind,
         coord_priv_key_hash: fields.coord_priv_key_hash,
@@ -984,6 +990,17 @@ fn verify_native_process_deactivate_step_core(
         'N_COORD_PRIV',
     );
     assert(native_hash_u256x2(witness.enc_pub_key) == fields.enc_pub_key_hash, 'N_ENC_KEY');
+    let (command_shared_key_x, command_shared_key_y) = stark_scalar_mul(
+        witness.enc_pub_key.v0, witness.enc_pub_key.v1, witness.coord_priv_key,
+    );
+    assert_stark_point_equals(
+        command_shared_key_x,
+        command_shared_key_y,
+        witness.command_shared_key.v0,
+        witness.command_shared_key.v1,
+        'N_CMD_SHARED_X',
+        'N_CMD_SHARED_Y',
+    );
     assert(
         native_hash_u256x2(witness.command_shared_key) == fields.command_shared_key_hash,
         'N_CMD_SHARED',
@@ -1005,6 +1022,19 @@ fn verify_native_process_deactivate_step_core(
     assert(native_hash_u256x2(witness.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
     assert(native_hash_u256x3(witness.packed_cmd) == fields.packed_cmd_hash, 'N_CMD');
     assert(native_hash_u256(witness.cmd_sig_s) == fields.cmd_sig_s_hash, 'N_SIG_S');
+    let signature_valid = stark_verify_command_signature(
+        STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
+        witness.state_leaf.v0,
+        witness.state_leaf.v1,
+        witness.cmd_sig_r8.v0,
+        witness.cmd_sig_r8.v1,
+        witness.cmd_sig_s,
+        witness.packed_cmd.v0,
+        witness.packed_cmd.v1,
+        witness.packed_cmd.v2,
+        witness.decrypted_command.v3,
+    );
+    assert(signature_valid == fields.signature_valid, 'N_SIG_VALID');
     assert(
         native_deactivate_command_auth_hash(
             fields.signature_pub_key_hash,
@@ -1028,6 +1058,29 @@ fn verify_native_process_deactivate_step_core(
         ) == fields.command_plaintext_binding_hash,
         'N_CMD_PLAIN',
     );
+    assert_stark_poseidon_decrypt7(
+        STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+        witness.command_shared_key.v0,
+        witness.command_shared_key.v1,
+        0,
+        witness.msg.v0,
+        witness.msg.v1,
+        witness.msg.v2,
+        witness.msg.v3,
+        witness.msg.v4,
+        witness.msg.v5,
+        witness.msg.v6,
+        witness.msg.v7,
+        witness.msg.v8,
+        witness.msg.v9,
+        witness.decrypted_command.v0,
+        witness.decrypted_command.v1,
+        witness.decrypted_command.v2,
+        witness.decrypted_command.v3,
+        witness.decrypted_command.v4,
+        witness.decrypted_command.v5,
+        witness.decrypted_command.v6,
+    );
     assert(witness.signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(felt_from_u128(witness.signature_valid.low) == fields.signature_valid, 'SIG_VALID');
     assert(
@@ -1040,6 +1093,16 @@ fn verify_native_process_deactivate_step_core(
             == fields.current_state_ciphertext_c2_hash,
         'N_CUR_C2',
     );
+    let current_decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
+        witness.coord_priv_key,
+        witness.state_leaf.v5,
+        witness.state_leaf.v6,
+        witness.state_leaf.v7,
+        witness.state_leaf.v8,
+        witness.current_decrypted_point.v0,
+        witness.current_decrypted_point.v1,
+    );
+    assert(current_decrypt_is_odd == fields.current_decrypt_is_odd, 'N_CUR_DEC_ODD');
     assert(witness.current_decrypt_is_odd.high == 0, 'CUR_DEC_HIGH');
     assert(
         felt_from_u128(witness.current_decrypt_is_odd.low) == fields.current_decrypt_is_odd,
@@ -1057,6 +1120,11 @@ fn verify_native_process_deactivate_step_core(
     );
     assert(native_hash_u256x2(witness.c1) == fields.new_state_ciphertext_c1_hash, 'N_NEW_C1');
     assert(native_hash_u256x2(witness.c2) == fields.new_state_ciphertext_c2_hash, 'N_NEW_C2');
+    let new_decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
+        witness.coord_priv_key, witness.c1.v0, witness.c1.v1, witness.c2.v0, witness.c2.v1,
+        witness.new_decrypted_point.v0, witness.new_decrypted_point.v1,
+    );
+    assert(new_decrypt_is_odd == fields.new_decrypt_is_odd, 'N_NEW_DEC_ODD');
     assert(witness.new_decrypt_is_odd.high == 0, 'NEW_DEC_HIGH');
     assert(
         felt_from_u128(witness.new_decrypt_is_odd.low) == fields.new_decrypt_is_odd,
@@ -1076,6 +1144,17 @@ fn verify_native_process_deactivate_step_core(
         native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
             == fields.deactivate_pub_key_hash,
         'N_DEACT_PUB',
+    );
+    let (deactivate_shared_key_x, deactivate_shared_key_y) = stark_scalar_mul(
+        witness.state_leaf.v0, witness.state_leaf.v1, witness.coord_priv_key,
+    );
+    assert_stark_point_equals(
+        deactivate_shared_key_x,
+        deactivate_shared_key_y,
+        witness.deactivate_shared_key.v0,
+        witness.deactivate_shared_key.v1,
+        'N_DEACT_SHARED_X',
+        'N_DEACT_SHARED_Y',
     );
     assert(
         native_hash_u256x2(witness.deactivate_shared_key) == fields.deactivate_shared_key_hash,
@@ -1197,7 +1276,7 @@ fn build_native_process_deactivate_step_core_public_output(
         hash_scheme: STARKNET_POSEIDON_HASH_SCHEME,
         state_tree_depth: 2,
         deactivate_tree_depth: 4,
-        message_batch_size: 5,
+        message_batch_size: PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE,
         message_index: fields.message_index,
         deactivate_index: fields.deactivate_index,
         coord_priv_key_hash: fields.coord_priv_key_hash,

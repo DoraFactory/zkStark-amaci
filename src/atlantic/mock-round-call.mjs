@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
+import { bigintToHex, parseBigInt } from '../encoding.mjs';
 import {
   calculateBootloadedFactHash,
   calculatePlainFactHash,
@@ -534,14 +534,16 @@ function operationFromInput(operation = 'tally') {
   if (
     normalized === 'process-messages' ||
     normalized === 'processmessages' ||
-    normalized === 'process-messages-boundary-native'
+    normalized === 'process-messages-boundary-native' ||
+    normalized === 'process-messages-stage-native'
   ) {
     return 'processMessages';
   }
   if (
     normalized === 'process-deactivate' ||
     normalized === 'processdeactivate' ||
-    normalized === 'process-deactivate-boundary-native'
+    normalized === 'process-deactivate-boundary-native' ||
+    normalized === 'process-deactivate-stage-native'
   ) {
     return 'processDeactivate';
   }

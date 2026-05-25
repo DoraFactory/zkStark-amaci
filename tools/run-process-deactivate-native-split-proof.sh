@@ -11,12 +11,12 @@ Usage:
 This proves the small ProcessDeactivateMessages relation as Starknet-native linked pieces:
   1. one process-deactivate-boundary-native proof
   2. one process-deactivate-coord-key-native proof
-  3. five process-deactivate-ecdh-command-native proofs
-  4. five process-deactivate-signature-native proofs
-  5. five process-deactivate-decrypt-current-native proofs
-  6. five process-deactivate-decrypt-new-native proofs
-  7. five process-deactivate-ecdh-leaf-native proofs
-  8. five process-deactivate-step-core-native proofs
+  3. three process-deactivate-ecdh-command-native proofs
+  4. three process-deactivate-signature-native proofs
+  5. three process-deactivate-decrypt-current-native proofs
+  6. three process-deactivate-decrypt-new-native proofs
+  7. three process-deactivate-ecdh-leaf-native proofs
+  8. three process-deactivate-step-core-native proofs
 
 If --input is omitted, the current small synthetic ProcessDeactivateMessages
 fixture is generated under the output directory.
@@ -67,7 +67,7 @@ INPUT_PATH="$(cd "$(dirname "$INPUT_PATH")" && pwd)/$(basename "$INPUT_PATH")"
   --input "$INPUT_PATH" \
   --out-dir "$OUT_DIR/coord-key"
 
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   "$ROOT_DIR/tools/run-cairo-proof.sh" \
     --circuit process-deactivate-ecdh-command-native \
     --input "$INPUT_PATH" \
@@ -109,54 +109,54 @@ printf '{\n' > "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "boundary": "%s",\n' "$OUT_DIR/boundary/proof-run.json" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "coordKey": "%s",\n' "$OUT_DIR/coord-key/proof-run.json" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "commandEcdh": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/command-ecdh-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "signatures": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/signature-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "currentDecrypt": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/current-decrypt-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "newDecrypt": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/new-decrypt-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "leafEcdh": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/leaf-ecdh-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 done
 printf '  ],\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
 printf '  "cores": [\n' >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
-for message_index in 0 1 2 3 4; do
+for message_index in 0 1 2; do
   suffix=","
-  if [[ "$message_index" == "4" ]]; then
+  if [[ "$message_index" == "2" ]]; then
     suffix=""
   fi
   printf '    "%s"%s\n' "$OUT_DIR/core-$message_index/proof-run.json" "$suffix" >> "$OUT_DIR/split-process-deactivate-native-proofs.json"
