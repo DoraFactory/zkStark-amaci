@@ -39,7 +39,7 @@ test('exports Atlantic-compatible program and input files from a Stone AIR run',
   assert.equal(result.manifest.fields.cairoVm, 'rust');
   assert.equal(result.manifest.fields.result, 'PROOF_VERIFICATION_ON_L2');
   assert.equal(result.manifest.fields.sharpProver, 'stone');
-  assert.equal(result.manifest.fields.layout, 'recursive_with_poseidon');
+  assert.equal(result.manifest.fields.layout, 'auto');
   assert.equal(result.manifest.fields.externalId, 'amaci-test');
   assert.equal(result.manifest.files.inputFile.feltCount, 3);
   assert.equal(result.manifest.files.inputFile.arrayWrapped, true);

@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { simulateNativeRoundWrapperFlowFromDir } from '../src/wrapper/native-round-flow-model.mjs';
 
 const FLOW_STAGES = Object.freeze([
   {
@@ -66,6 +67,7 @@ Options:
   --wrapper-address <addr>  MockAmaciRound/AMACI wrapper contract address.
   --profile <name>          sncast profile for exported wrapper commands.
   --export-wrapper-calls    Export wrapper submit commands from fetched Atlantic metadata.
+  --simulate-wrapper        Locally simulate the 4-stage wrapper state flow.
   --text                    Print a compact human-readable flow.
   --help                    Show this help.
 
@@ -87,6 +89,7 @@ function parseArgs(argv) {
     wrapperAddress: undefined,
     profile: undefined,
     exportWrapperCalls: false,
+    simulateWrapper: false,
     text: false,
   };
 
@@ -118,6 +121,8 @@ function parseArgs(argv) {
       args.profile = argv[++i];
     } else if (arg === '--export-wrapper-calls') {
       args.exportWrapperCalls = true;
+    } else if (arg === '--simulate-wrapper') {
+      args.simulateWrapper = true;
     } else if (arg === '--text') {
       args.text = true;
     } else {
@@ -223,6 +228,11 @@ function loadQueryMap(path) {
   );
 }
 
+function readChainIfExists(fixtureDir) {
+  const path = resolve(fixtureDir, 'chain.json');
+  return existsSync(path) ? readJson(path) : undefined;
+}
+
 function stagePaths({ outDir, fixtureDir }, stage) {
   const stageDir = resolve(outDir, 'stages', stage.id);
   return {
@@ -241,12 +251,26 @@ function stagePaths({ outDir, fixtureDir }, stage) {
   };
 }
 
-function wrapperArgsForStage(stage) {
-  return [
-    '--operation',
-    stage.operation,
-    ...stage.wrapperStateArgs,
-  ];
+function wrapperArgsForStage(stage, chain) {
+  const stateCommitment =
+    chain?.processMessages?.currentStateCommitment ?? chain?.signup?.initialStateCommitment;
+  if (stage.id === 'addNewKey') {
+    return [
+      '--operation',
+      stage.operation,
+      '--new-state-commitment',
+      stateCommitment ?? '<NEW_STATE_COMMITMENT>',
+    ];
+  }
+  if (stage.id === 'processDeactivate') {
+    return [
+      '--operation',
+      stage.operation,
+      '--state-commitment',
+      stateCommitment ?? '<CURRENT_STATE_COMMITMENT>',
+    ];
+  }
+  return ['--operation', stage.operation];
 }
 
 function buildStagePlan(context, stage, queryId) {
@@ -332,7 +356,7 @@ function buildStagePlan(context, stage, queryId) {
             context.wrapperAddress ?? '<WRAPPER_ADDRESS>',
             '--profile',
             context.profile ?? '<SNCAST_PROFILE>',
-            ...wrapperArgsForStage(stage),
+            ...wrapperArgsForStage(stage, context.chain),
             '--out',
             paths.wrapperCall,
             '--text',
@@ -430,7 +454,7 @@ function exportWrapperCallForStage(context, stage, paths, queryId) {
     context.wrapperAddress,
     '--profile',
     context.profile,
-    ...wrapperArgsForStage(stage),
+    ...wrapperArgsForStage(stage, context.chain),
     '--out',
     paths.wrapperCall,
     '--text',
@@ -440,10 +464,10 @@ function exportWrapperCallForStage(context, stage, paths, queryId) {
 
 function runStageAction(stage, action, callback) {
   try {
-    return { stage: stage.id, action, result: callback() };
+    return { stage: typeof stage === 'string' ? stage : stage.id, action, result: callback() };
   } catch (error) {
     return {
-      stage: stage.id,
+      stage: typeof stage === 'string' ? stage : stage.id,
       action,
       result: {
         skipped: false,
@@ -464,6 +488,22 @@ function textReport(manifest) {
     '',
     'Proof/wrapper stages:',
   ];
+  const roundActions = manifest.execution.filter((entry) => entry.stage === 'fullRound');
+  for (const entry of roundActions) {
+    if (entry.result.failed) {
+      lines.push(`  - ${entry.action}: failed - ${entry.result.error}`);
+    } else if (entry.result.skipped) {
+      lines.push(`  - ${entry.action}: skipped - ${entry.result.reason}`);
+    } else {
+      lines.push(`  - ${entry.action}: ok`);
+      if (entry.result.summary) {
+        lines.push(`    ${entry.result.summary}`);
+      }
+    }
+  }
+  if (roundActions.length > 0) {
+    lines.push('');
+  }
   for (const stage of manifest.stages) {
     lines.push(`  - ${stage.id}: ${stage.circuit}`);
     lines.push(`    input: ${stage.files.fixtureInput}`);
@@ -503,12 +543,28 @@ const context = {
   apiKeyEnv: args.apiKeyEnv,
   wrapperAddress: args.wrapperAddress,
   profile: args.profile,
+  chain: undefined,
 };
 
 const execution = [];
 
 if (args.executeLocal) {
   run('node', ['tools/write-full-round-fixture.mjs', '--out-dir', fixtureDir, '--text']);
+}
+
+context.chain = readChainIfExists(fixtureDir);
+
+if (args.simulateWrapper) {
+  execution.push(runStageAction('fullRound', 'simulateWrapper', () => {
+    const result = simulateNativeRoundWrapperFlowFromDir(fixtureDir);
+    const output = resolve(outDir, 'wrapper-flow-check.json');
+    writeJson(output, result);
+    return {
+      skipped: false,
+      output,
+      summary: `wrapper final state=${result.finalState.stateCommitment}, tally=${result.finalState.tallyCommitment}`,
+    };
+  }));
 }
 
 const generatedQueryMap = {};
@@ -553,6 +609,7 @@ const manifest = {
     submitAtlantic: args.submitAtlantic,
     fetchAtlantic: args.fetchAtlantic,
     exportWrapperCalls: args.exportWrapperCalls,
+    simulateWrapper: args.simulateWrapper,
   },
   files: {
     manifest: manifestPath,
@@ -567,6 +624,7 @@ const manifest = {
     'Stone/Atlantic packaging turns each Cairo program and input into programFile/inputFile.',
     'Atlantic proves and verifies on L2, then returns query status and metadata artifacts.',
     'Wrapper-call export reconstructs the registered fact and emits a sncast command.',
+    'Optional local wrapper simulation checks the same native public outputs against a MockAmaciRound-style state machine.',
     'The wrapper contract checks fact hash, program hash, public output, verification hash, and security bits before mutating AMACI round state.',
   ],
   stages,

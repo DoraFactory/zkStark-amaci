@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bigintToHex, decimalize } from '../src/compat/encoding.mjs';
+import { bigintToHex, decimalize } from '../src/encoding.mjs';
 import { evaluateNativeTallyVotes } from '../src/tally/native-tally-votes.mjs';
 import {
   buildNativeCairoTallyInput,

@@ -1,9 +1,8 @@
 # Cairo Target
 
-This package contains the Starknet-native AMACI proof circuits. The previous
-Circom-compatible Cairo ports for BabyJubJub, BN254 Poseidon, and SHA-256 were
-removed from this package; current executable targets use the native AMACI
-field/public-output model and Starknet-friendly hashing.
+This package contains the Starknet-native AMACI proof circuits. Current
+executable targets use the native AMACI field/public-output model and
+Starknet-friendly hashing.
 
 ## Native Executables
 
@@ -73,13 +72,4 @@ npm run stone:prove:all-native-split-small -- \
   --out-dir /tmp/amaci-all-native-stone-split
 ```
 
-Atlantic submissions are generated from the native Cairo1 program/input files,
-not from the removed legacy executable targets.
-
-## Compatibility Layer
-
-Some JavaScript fixture builders and regression tests still keep legacy AMACI
-compatibility evaluators so old sample data can be transformed into native
-public inputs and compared against historical behavior. Those helpers are not
-Scarb executable targets and are not used as Starknet/Cairo crypto
-implementations.
+Atlantic submissions are generated from the native Cairo1 program/input files.

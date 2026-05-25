@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
+import { bigintToHex, parseBigInt } from '../encoding.mjs';
 import { calculatePlainFactHash, poseidonManyFelts } from './hashes.mjs';
 
 function readJson(path, label) {

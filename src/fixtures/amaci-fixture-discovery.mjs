@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { evaluateTallyVotes } from '../tally/tally-votes.mjs';
+import { evaluateNativeTallyVotes } from '../tally/native-tally-votes.mjs';
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -55,7 +55,7 @@ function classifyTally(input) {
   return {
     circuit: 'tally',
     supported,
-    supportedProgram: supported ? 'tally_votes' : undefined,
+    supportedProgram: supported ? 'tally_votes_native' : undefined,
     shape,
     unsupportedReason: supported
       ? undefined
@@ -88,7 +88,7 @@ function classifyProcessMessages(input) {
   return {
     circuit: 'process-messages',
     supported,
-    supportedProgram: supported ? 'process_messages_stateful_with_ecdh_signature' : undefined,
+    supportedProgram: supported ? 'process_messages_stage_native' : undefined,
     shape,
     unsupportedReason: supported
       ? undefined
@@ -112,7 +112,7 @@ function classifyProcessDeactivate(input) {
   return {
     circuit: 'process-deactivate',
     supported,
-    supportedProgram: supported ? 'process_deactivate_messages_stateful' : undefined,
+    supportedProgram: supported ? 'process_deactivate_stage_native' : undefined,
     shape,
     unsupportedReason: supported
       ? undefined
@@ -135,7 +135,7 @@ function classifyAddNewKey(input) {
   return {
     circuit: 'add-new-key',
     supported,
-    supportedProgram: supported ? 'add_new_key' : undefined,
+    supportedProgram: supported ? 'add_new_key_native' : undefined,
     shape,
     unsupportedReason: supported
       ? undefined
@@ -170,7 +170,7 @@ function maybeValidateTally(input, classification) {
   if (classification.circuit !== 'tally' || !classification.supported) {
     return undefined;
   }
-  const evaluated = evaluateTallyVotes(input);
+  const evaluated = evaluateNativeTallyVotes(input);
   return {
     inputHash: evaluated.publicFields.inputHash.toString(),
     newTallyCommitment: evaluated.publicFields.newTallyCommitment.toString(),

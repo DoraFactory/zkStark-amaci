@@ -7,7 +7,7 @@ import {
   STARKNET_POSEIDON_HASH_SCHEME,
   TREE_ARITY,
 } from '../constants.mjs';
-import { decimalize } from '../compat/encoding.mjs';
+import { decimalize } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessMessagesStateful } from './process-messages.mjs';

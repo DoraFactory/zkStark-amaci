@@ -11,7 +11,7 @@ import {
 import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { bigintToHex } from '../compat/encoding.mjs';
+import { bigintToHex } from '../encoding.mjs';
 import { asciiToFelt, calculateVerifierConfigHash } from './hashes.mjs';
 import { parseIntegrityCalldata } from './calldata.mjs';
 

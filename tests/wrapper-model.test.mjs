@@ -298,14 +298,19 @@ test('generic AMACI wrapper model tracks AddNewKey nullifiers', { skip: wrapperT
     minSecurityBits: 96,
   });
   const fields = {
-    deactivateRoot: 1n,
+    deactivateRootHash: 1n,
     coordPubKeyHash: 2n,
     nullifier: 3n,
-    d1: [4n, 5n],
-    d2: [6n, 7n],
-    newPubKeyHash: 8n,
-    pollId: 9n,
-    inputHash: 10n,
+    c1Hash: 4n,
+    c2Hash: 5n,
+    sharedKeyHash: 6n,
+    deactivateLeafHash: 7n,
+    d1Hash: 8n,
+    d2Hash: 9n,
+    rerandomizeBindingHash: 10n,
+    newPubKeyHash: 11n,
+    pollId: 12n,
+    inputHash: 13n,
   };
   const fact = wrapper.expectedFact('addNewKey', fields);
   integrity.registerFact(fact.factHash, 128);

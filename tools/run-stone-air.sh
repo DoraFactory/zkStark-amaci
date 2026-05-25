@@ -32,7 +32,7 @@ Supported native circuits:
   process-deactivate-step-core-native
 
 Default layout:
-  recursive_with_poseidon
+  all_cairo
 
 Outputs:
   prepared.json
@@ -997,12 +997,12 @@ if is_message_index_circuit "$CIRCUIT"; then
 fi
 
 if [[ -z "$LAYOUT" ]]; then
-  LAYOUT="recursive_with_poseidon"
+  LAYOUT="all_cairo"
 fi
 
-if [[ "$LAYOUT" != "recursive_with_poseidon" ]]; then
+if [[ "$LAYOUT" != "all_cairo" && "$LAYOUT" != "all_cairo_stwo" ]]; then
   echo "layout '$LAYOUT' is not compatible with native Stone AIR" >&2
-  echo "native AMACI circuits use the Starknet Poseidon builtin; use --layout recursive_with_poseidon" >&2
+  echo "native AMACI circuits use Starknet Poseidon, EC OP, and ECDSA builtins; use --layout all_cairo" >&2
   exit 1
 fi
 
@@ -1037,6 +1037,7 @@ case "$CIRCUIT" in
     ;;
   process-messages-stage-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_messages
       native_process_message_components
       native_process_message_step_core
@@ -1049,6 +1050,7 @@ case "$CIRCUIT" in
     ;;
   process-deactivate-stage-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_deactivate
       native_process_deactivate_components
       native_process_deactivate_step_core
@@ -1058,30 +1060,35 @@ case "$CIRCUIT" in
     ;;
   add-new-key-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_add_new_key
       "$STONE_ENTRY_MODULE"
     )
     ;;
   process-message-coord-key-native|process-message-ecdh-native|process-message-decrypt-native|process-message-signature-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_message_components
       "$STONE_ENTRY_MODULE"
     )
     ;;
   process-message-step-core-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_message_step_core
       "$STONE_ENTRY_MODULE"
     )
     ;;
   process-deactivate-coord-key-native|process-deactivate-ecdh-command-native|process-deactivate-ecdh-leaf-native|process-deactivate-signature-native|process-deactivate-decrypt-current-native|process-deactivate-decrypt-new-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_deactivate_components
       "$STONE_ENTRY_MODULE"
     )
     ;;
   process-deactivate-step-core-native)
     STONE_MODULES=(
+      native_stark_crypto
       native_process_deactivate_step_core
       "$STONE_ENTRY_MODULE"
     )
@@ -1217,8 +1224,6 @@ mkdir -p "$STONE_PACKAGE_DIR/src"
 for module in "${STONE_MODULES[@]}"; do
   if [[ "$module" == "$STONE_ENTRY_MODULE" ]]; then
     write_stone_wrapper "$CIRCUIT" "$STONE_PACKAGE_DIR/src/$module.cairo"
-  elif [[ "$module" == "native_add_new_key" ]]; then
-    write_native_add_new_key_module "$STONE_PACKAGE_DIR/src/$module.cairo"
   else
     cp "$ROOT_DIR/cairo/src/$module.cairo" "$STONE_PACKAGE_DIR/src/$module.cairo"
   fi

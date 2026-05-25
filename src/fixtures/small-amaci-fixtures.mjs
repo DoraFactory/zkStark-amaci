@@ -1,16 +1,30 @@
-import { TREE_ARITY } from '../constants.mjs';
 import {
-  addNewKeyInputHash,
-  processDeactivateInputHash,
-  processMessagesInputHash,
-} from '../compat/encoding.mjs';
+  ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+  ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
+  ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN,
+  ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN,
+  PROCESS_DEACTIVATE_NATIVE_INPUT_HASH_DOMAIN,
+  PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
+  TREE_ARITY,
+} from '../constants.mjs';
 import {
-  BABYJUB_BASE8,
-  babyjubAdd,
-  babyjubScalarMul,
-  poseidonSignatureMessage,
-} from '../compat/babyjub.mjs';
-import { hash5, hash10, hashLeftRight } from '../compat/poseidon.mjs';
+  STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN,
+  STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
+  STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+  starkElGamalEncryptPoint,
+  starkPointAdd,
+  starkPointWithXParity,
+  starkPublicKeyPoint,
+  starkPoseidonEncryptWithoutCheck7,
+  starkScalarMul,
+  starkSignCommand,
+} from '../stark-native-crypto.mjs';
+import {
+  nativeHash5,
+  nativeHash10,
+  nativeHashFelts,
+  nativeHashPoint,
+} from '../native-hash.mjs';
 import { evaluateProcessDeactivateOne, elGamalDecryptPoint } from '../deactivate/process-deactivate-one.mjs';
 import { evaluateNativeTallyVotes } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessOneStateTransition, packCommandData, poseidonEncryptWithoutCheck7 } from '../msg/process-one.mjs';
@@ -27,7 +41,6 @@ import { processDeactivateMessageHashChain } from '../deactivate/process-deactiv
 import {
   evaluateNativeProcessDeactivateMessagesBoundary,
 } from '../deactivate/native-process-deactivate-messages.mjs';
-import { requireZkKitPackage } from '../compat/zk-kit-require.mjs';
 
 export const SMALL_SYNTHETIC_CIRCUITS = Object.freeze([
   'add-new-key',
@@ -35,22 +48,18 @@ export const SMALL_SYNTHETIC_CIRCUITS = Object.freeze([
   'process-deactivate',
 ]);
 
-let eddsaPoseidon;
-
-function loadEddsaPoseidon() {
-  if (eddsaPoseidon) {
-    return eddsaPoseidon;
+function secretToScalar(secretKey) {
+  if (typeof secretKey === 'bigint' || typeof secretKey === 'number' || typeof secretKey === 'string') {
+    return BigInt(secretKey);
   }
-  eddsaPoseidon = requireZkKitPackage('@zk-kit/eddsa-poseidon');
-  return eddsaPoseidon;
+  if (Buffer.isBuffer(secretKey) || secretKey instanceof Uint8Array) {
+    return BigInt(`0x${Buffer.from(secretKey).toString('hex')}`);
+  }
+  throw new Error('unsupported STARK native secret key format');
 }
 
 function derivePublicKeyFromSecret(secretKey) {
-  return loadEddsaPoseidon().derivePublicKey(secretKey).map(BigInt);
-}
-
-function signPoseidonMessage(secretKey, message) {
-  return loadEddsaPoseidon().signMessage(secretKey, message);
+  return starkPublicKeyPoint(secretToScalar(secretKey));
 }
 
 function decimalize(value) {
@@ -72,7 +81,7 @@ function quinaryLayers(leaves, depth) {
   for (let d = 0; d < depth; d += 1) {
     const next = [];
     for (let i = 0; i < level.length; i += TREE_ARITY) {
-      next.push(hash5(level.slice(i, i + TREE_ARITY)));
+      next.push(nativeHash5(level.slice(i, i + TREE_ARITY), `tree.level${d}.${i}`));
     }
     layers.push(next);
     level = next;
@@ -103,9 +112,10 @@ function pathFor(leaves, depth, index) {
 }
 
 function buildActiveCiphertext(coordPrivKey, seed) {
-  const c1 = babyjubScalarMul(BABYJUB_BASE8, BigInt(seed));
-  const c2 = babyjubScalarMul(c1, coordPrivKey);
-  return { c1, c2 };
+  const coordPubKey = starkPublicKeyPoint(coordPrivKey);
+  const { point: activePoint } = starkPointWithXParity(0n, BigInt(seed) + 1000n);
+  const encrypted = starkElGamalEncryptPoint(activePoint, coordPubKey, BigInt(seed));
+  return { c1: encrypted.c1, c2: encrypted.c2, decryptedPoint: activePoint };
 }
 
 function buildProcessMessagesStateLeaf(
@@ -205,7 +215,7 @@ function buildProcessMessagesState({
     ? Array.from({ length: 25 }, () => 0n)
     : initialActiveLeavesOption.map(BigInt);
   const activeStateRoot = pathFor(activeLeaves, 2, 0).root;
-  let stateLeafHashes = stateLeaves.map(hash10);
+  let stateLeafHashes = stateLeaves.map((leaf, index) => nativeHash10(leaf, `stateLeaf[${index}]`));
   const currentStateRoot = pathFor(stateLeafHashes, 2, 0).root;
   const initialStateLeaves = stateLeaves.map((leaf) => leaf.slice());
   const initialVoteLeavesByState = voteLeavesByState.map((row) => row.slice());
@@ -224,7 +234,7 @@ function buildProcessMessagesState({
       stateLeaves[stateIndex][2] +
       processOneCost(isQuadraticCost, currentVoteWeight) -
       processOneCost(isQuadraticCost, command.newVoteWeight);
-    const cmdNewPubKey = [BigInt(500 + i), BigInt(600 + i)];
+    const cmdNewPubKey = starkPublicKeyPoint(BigInt(500 + i));
     const cmdSalt = BigInt(700 + i);
     const sharedKey = sharedKeys?.[i] ?? [BigInt(1100 + i), BigInt(1200 + i)];
     const packedCommand = [
@@ -237,14 +247,17 @@ function buildProcessMessagesState({
       }),
       ...cmdNewPubKey,
     ];
-    const signaturePreimage = command.isValid
-      ? packedCommand
-      : [packedCommand[0] + 1n, packedCommand[1], packedCommand[2]];
+    const fallbackRPoint = starkPublicKeyPoint(BigInt(800 + i));
     const signature = signatureSecretKeys?.[i]
-      ? signPoseidonMessage(signatureSecretKeys[i], poseidonSignatureMessage(signaturePreimage))
-      : { R8: [BigInt(800 + i), BigInt(900 + i)], S: BigInt(1000 + i) };
-    const cmdSigR8 = signature.R8.map(BigInt);
-    const cmdSigS = BigInt(signature.S);
+      ? starkSignCommand(
+        secretToScalar(signatureSecretKeys[i]),
+        command.isValid ? packedCommand : [packedCommand[0] + 1n, packedCommand[1], packedCommand[2]],
+        cmdSalt,
+        STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN,
+      )
+      : { r: fallbackRPoint[0], rPoint: fallbackRPoint, s: BigInt(1000 + i) };
+    const cmdSigR8 = signature.rPoint.map(BigInt);
+    const cmdSigS = BigInt(signature.s);
     const decryptedCommand = [packedCommand[0], ...cmdNewPubKey, cmdSalt, ...cmdSigR8, cmdSigS];
     const msg = poseidonEncryptWithoutCheck7(decryptedCommand, sharedKey);
     const witness = {
@@ -315,18 +328,28 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
     numSignUps,
     maxVoteOptions,
   });
-  const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, BigInt(coordPrivKey));
-  const coordPubKeyHash = hashLeftRight(coordPubKey[0], coordPubKey[1]);
+  const coordPubKey = starkPublicKeyPoint(BigInt(coordPrivKey));
+  const coordPubKeyHash = nativeHashPoint(coordPubKey, 'coordPubKey');
   const msgs = state.processOneWitnesses.map((witness) => witness.msg.map(BigInt));
   const batchStartHash = 123n;
   const { endHash: batchEndHash } = processMessageHashChain(msgs, encPubKeys, batchStartHash);
   const currentStateSalt = 701n;
   const newStateSalt = 702n;
   const deactivateRoot = BigInt(state.deactivateRoot ?? 703n);
-  const currentStateCommitment = hashLeftRight(BigInt(state.currentStateRoot), currentStateSalt);
-  const newStateCommitment = hashLeftRight(BigInt(state.newStateRoot), newStateSalt);
-  const deactivateCommitment = hashLeftRight(BigInt(state.activeStateRoot), deactivateRoot);
-  const inputHash = processMessagesInputHash(
+  const currentStateCommitment = nativeHashFelts(
+    [BigInt(state.currentStateRoot), currentStateSalt],
+    'currentStateCommitment',
+  );
+  const newStateCommitment = nativeHashFelts(
+    [BigInt(state.newStateRoot), newStateSalt],
+    'newStateCommitment',
+  );
+  const deactivateCommitment = nativeHashFelts(
+    [BigInt(state.activeStateRoot), deactivateRoot],
+    'deactivateCommitment',
+  );
+  const inputHash = nativeHashFelts([
+    PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
     packedVals,
     coordPubKeyHash,
     batchStartHash,
@@ -335,7 +358,7 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
     newStateCommitment,
     deactivateCommitment,
     expectedPollId,
-  );
+  ], 'processMessagesInputHash');
 
   return decimalize({
     ...state,
@@ -359,10 +382,8 @@ function buildProcessMessagesBoundary({ state, coordPrivKey, encPubKeys }) {
 
 function smallProcessMessageCryptoInputs() {
   const coordPrivKey = 5n;
-  const encPubKeys = [2n, 3n, 4n].map((scalar) =>
-    babyjubScalarMul(BABYJUB_BASE8, scalar),
-  );
-  const sharedKeys = encPubKeys.map((pubKey) => babyjubScalarMul(pubKey, coordPrivKey));
+  const encPubKeys = [2n, 3n, 4n].map((scalar) => starkPublicKeyPoint(scalar));
+  const sharedKeys = encPubKeys.map((pubKey) => starkScalarMul(pubKey, coordPrivKey));
   const signatureSecretKeys = [
     Buffer.from([1, 2, 3, 4, 5]),
     Buffer.from([2, 3, 4, 5, 6]),
@@ -460,38 +481,56 @@ export function buildSmallNativeRoundFixture() {
 }
 
 export function buildSmallAddNewKeyFixture() {
-  const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, 5n);
+  const coordPubKey = starkPublicKeyPoint(5n);
   const oldPrivateKey = 7n;
   const pollId = 77n;
-  const c1 = babyjubScalarMul(BABYJUB_BASE8, 2n);
-  const c2 = babyjubScalarMul(BABYJUB_BASE8, 3n);
+  const c1 = starkPublicKeyPoint(2n);
+  const c2 = starkPublicKeyPoint(3n);
   const randomVal = 11n;
-  const randomBase8 = babyjubScalarMul(BABYJUB_BASE8, randomVal);
-  const randomCoordPubKey = babyjubScalarMul(coordPubKey, randomVal);
-  const d1 = babyjubAdd(randomBase8, c1);
-  const d2 = babyjubAdd(randomCoordPubKey, c2);
-  const sharedKey = babyjubScalarMul(coordPubKey, oldPrivateKey);
-  const sharedKeyHash = hashLeftRight(sharedKey[0], sharedKey[1]);
-  const deactivateLeaf = hash5([...c1, ...c2, sharedKeyHash]);
+  const randomBase = starkPublicKeyPoint(randomVal);
+  const randomCoordPubKey = starkScalarMul(coordPubKey, randomVal);
+  const d1 = starkPointAdd(randomBase, c1);
+  const d2 = starkPointAdd(randomCoordPubKey, c2);
+  const sharedKey = starkScalarMul(coordPubKey, oldPrivateKey);
+  const sharedKeyHash = nativeHashPoint(sharedKey, 'sharedKey');
+  const c1Hash = nativeHashPoint(c1, 'c1');
+  const c2Hash = nativeHashPoint(c2, 'c2');
+  const deactivateLeaf = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN, c1Hash, c2Hash, sharedKeyHash],
+    'addNewKeyDeactivateLeaf',
+  );
   const deactivateIndex = 42;
   const leaves = Array.from({ length: TREE_ARITY ** 4 }, () => 0n);
   leaves[deactivateIndex] = deactivateLeaf;
   const deactivateTree = pathFor(leaves, 4, deactivateIndex);
-  const nullifier = hashLeftRight(oldPrivateKey, pollId);
-  const newPubKey = babyjubScalarMul(BABYJUB_BASE8, 13n);
-  const coordPubKeyHash = hashLeftRight(coordPubKey[0], coordPubKey[1]);
-  const newPubKeyHash = hashLeftRight(newPubKey[0], newPubKey[1]);
-  const inputHash = addNewKeyInputHash(
+  const nullifier = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN, oldPrivateKey, pollId],
+    'addNewKeyNullifier',
+  );
+  const newPubKey = starkPublicKeyPoint(13n);
+  const coordPubKeyHash = nativeHashPoint(coordPubKey, 'coordPubKey');
+  const d1Hash = nativeHashPoint(d1, 'd1');
+  const d2Hash = nativeHashPoint(d2, 'd2');
+  const rerandomizeBindingHash = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN, coordPubKeyHash, c1Hash, c2Hash, d1Hash, d2Hash],
+    'addNewKeyRerandomizeBinding',
+  );
+  const newPubKeyHash = nativeHashPoint(newPubKey, 'newPubKey');
+  const inputHash = nativeHashFelts([
+    ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN,
     deactivateTree.root,
     coordPubKeyHash,
     nullifier,
-    d1[0],
-    d1[1],
-    d2[0],
-    d2[1],
+    c1Hash,
+    c2Hash,
+    sharedKeyHash,
+    deactivateLeaf,
+    d1Hash,
+    d2Hash,
+    rerandomizeBindingHash,
     newPubKeyHash,
     pollId,
-  );
+  ], 'addNewKeyInputHash');
 
   return decimalize({
     deactivateRoot: deactivateTree.root,
@@ -513,10 +552,11 @@ export function buildSmallAddNewKeyFixture() {
 }
 
 function identityDecryptCiphertext(coordPrivKey, randomScalar) {
-  const c1 = babyjubScalarMul(BABYJUB_BASE8, randomScalar);
-  const c2 = babyjubScalarMul(c1, coordPrivKey);
+  const coordPubKey = starkPublicKeyPoint(coordPrivKey);
+  const { point: activePoint } = starkPointWithXParity(0n, BigInt(randomScalar) + 2000n);
+  const { c1, c2 } = starkElGamalEncryptPoint(activePoint, coordPubKey, randomScalar);
   const decrypt = elGamalDecryptPoint(c1, c2, coordPrivKey);
-  if (decrypt.decryptedPoint[0] !== 0n || decrypt.isOdd !== 0n) {
+  if (decrypt.isOdd !== 0n) {
     throw new Error('identity ciphertext did not decrypt to the expected active state');
   }
   return { c1, c2 };
@@ -524,14 +564,17 @@ function identityDecryptCiphertext(coordPrivKey, randomScalar) {
 
 export function buildSmallProcessDeactivateFixture(options = {}) {
   const coordPrivKey = 5n;
-  const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, coordPrivKey);
+  const coordPubKey = starkPublicKeyPoint(coordPrivKey);
   const expectedPollId = 77n;
   const deactivateIndex0 = 40n;
   const stateIndexes = options.stateIndexes ?? [0, 1, 2];
   if (!Array.isArray(stateIndexes) || stateIndexes.length !== 3) {
     throw new Error('stateIndexes must contain exactly 3 entries');
   }
-  const emptyStateLeafHash = hash10([0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n]);
+  const emptyStateLeafHash = nativeHash10(
+    [0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n],
+    'emptyStateLeaf',
+  );
   const stateLeafHashes = Array.from({ length: 25 }, () => emptyStateLeafHash);
   const stateLeaves = [];
 
@@ -552,7 +595,7 @@ export function buildSmallProcessDeactivateFixture(options = {}) {
       0n,
     ];
     stateLeaves.push({ secretKey, stateIndex, stateLeaf });
-    stateLeafHashes[stateIndex] = hash10(stateLeaf);
+    stateLeafHashes[stateIndex] = nativeHash10(stateLeaf, `deactivateStateLeaf[${stateIndex}]`);
   }
 
   const stateTree = pathFor(stateLeafHashes, 2, 0);
@@ -588,19 +631,30 @@ export function buildSmallProcessDeactivateFixture(options = {}) {
       0n,
       0n,
     ];
-    const signature = signPoseidonMessage(secretKey, poseidonSignatureMessage(packedCmd));
-    const encPubKey = babyjubScalarMul(BABYJUB_BASE8, BigInt(70 + i));
-    const sharedKey = babyjubScalarMul(encPubKey, coordPrivKey);
+    const cmdSalt = 900n + BigInt(i);
+    const signature = starkSignCommand(
+      secretToScalar(secretKey),
+      packedCmd,
+      cmdSalt,
+      STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
+    );
+    const encPubKey = starkPublicKeyPoint(BigInt(70 + i));
+    const sharedKey = starkScalarMul(encPubKey, coordPrivKey);
     const decryptedCommand = [
       packedCmd[0],
       packedCmd[1],
       packedCmd[2],
-      900n + BigInt(i),
-      signature.R8.map(BigInt)[0],
-      signature.R8.map(BigInt)[1],
-      BigInt(signature.S),
+      cmdSalt,
+      BigInt(signature.rPoint[0]),
+      BigInt(signature.rPoint[1]),
+      BigInt(signature.s),
     ];
-    const msg = poseidonEncryptWithoutCheck7(decryptedCommand, sharedKey);
+    const msg = starkPoseidonEncryptWithoutCheck7(
+      decryptedCommand,
+      sharedKey,
+      0n,
+      STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+    );
     const processOne = {
       isEmptyMsg: 0n,
       coordPrivKey,
@@ -616,8 +670,9 @@ export function buildSmallProcessDeactivateFixture(options = {}) {
       newActiveState: BigInt(i + 1),
       cmdStateIndex: BigInt(stateIndex),
       cmdPollId: expectedPollId,
-      cmdSigR8: signature.R8.map(BigInt),
-      cmdSigS: BigInt(signature.S),
+      cmdSigR8: signature.rPoint.map(BigInt),
+      cmdSigS: BigInt(signature.s),
+      cmdSalt,
       packedCmd,
       expectedPollId,
       deactivateIndex: BigInt(deactivateIndex),
@@ -639,10 +694,17 @@ export function buildSmallProcessDeactivateFixture(options = {}) {
 
   const batchStartHash = 123n;
   const { endHash } = processDeactivateMessageHashChain(msgs, encPubKeys, batchStartHash);
-  const currentDeactivateCommitment = hashLeftRight(currentActiveStateRoot, currentDeactivateRoot);
-  const newDeactivateCommitment = hashLeftRight(activeRoot, deactivateRoot);
-  const coordPubKeyHash = hashLeftRight(coordPubKey[0], coordPubKey[1]);
-  const inputHash = processDeactivateInputHash(
+  const currentDeactivateCommitment = nativeHashFelts(
+    [currentActiveStateRoot, currentDeactivateRoot],
+    'currentDeactivateCommitment',
+  );
+  const newDeactivateCommitment = nativeHashFelts(
+    [activeRoot, deactivateRoot],
+    'newDeactivateCommitment',
+  );
+  const coordPubKeyHash = nativeHashPoint(coordPubKey, 'coordPubKey');
+  const inputHash = nativeHashFelts([
+    PROCESS_DEACTIVATE_NATIVE_INPUT_HASH_DOMAIN,
     deactivateRoot,
     coordPubKeyHash,
     batchStartHash,
@@ -651,7 +713,7 @@ export function buildSmallProcessDeactivateFixture(options = {}) {
     newDeactivateCommitment,
     currentStateRoot,
     expectedPollId,
-  );
+  ], 'processDeactivateInputHash');
 
   return decimalize({
     inputHash,
@@ -688,15 +750,13 @@ function buildLinkedProcessDeactivateBoundaryFixture({
   expectedPollId = 77n,
 }) {
   const coordPrivKey = 5n;
-  const coordPubKey = babyjubScalarMul(BABYJUB_BASE8, coordPrivKey);
+  const coordPubKey = starkPublicKeyPoint(coordPrivKey);
   const msgs = [
     [101n, 102n, 103n, 104n, 105n, 106n, 107n, 108n, 109n, 0n],
     [201n, 202n, 203n, 204n, 205n, 206n, 207n, 208n, 209n, 0n],
     [301n, 302n, 303n, 304n, 305n, 306n, 307n, 308n, 309n, 0n],
   ];
-  const encPubKeys = [80n, 81n, 82n].map((scalar) =>
-    babyjubScalarMul(BABYJUB_BASE8, scalar),
-  );
+  const encPubKeys = [80n, 81n, 82n].map((scalar) => starkPublicKeyPoint(scalar));
   const batchStartHash = 321n;
   const { endHash } = processDeactivateMessageHashChain(msgs, encPubKeys, batchStartHash);
   const draft = decimalize({
@@ -745,7 +805,7 @@ export function buildSmallNativeLifecycleRoundFixture() {
     initialVoteLeavesByState,
     initialActiveLeaves: processDeactivate.finalActiveLeaves,
     deactivateRoot: processDeactivateEvaluated.publicFields.newDeactivateRoot,
-    signatureSecretKeys: [signatureSecretKey, signatureSecretKey, signatureSecretKey],
+    signatureSecretKeys: [501n, 502n, signatureSecretKey],
   });
   const processMessagesEvaluated = evaluateNativeProcessMessagesBoundary(processMessagesDraft);
   const processMessages = processMessagesDraft;

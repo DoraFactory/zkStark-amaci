@@ -1,4 +1,4 @@
-import { bigintToHex } from './compat/encoding.mjs';
+import { bigintToHex } from './encoding.mjs';
 
 function feltObject(value) {
   return value.toString();

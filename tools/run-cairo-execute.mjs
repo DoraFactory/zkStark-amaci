@@ -138,6 +138,7 @@ Options:
   --out-dir <path>      Directory for generated input, Cairo args, stdout, and metadata.
   --timeout-ms <n>      scarb execute timeout in milliseconds. Default: 300000.
   --message-index <n>   Message index for per-message native circuits. Default: 0.
+  --layout <name>       scarb execute layout. Default: all_cairo.
   --no-resource-usage   Do not pass --print-resource-usage to scarb execute.
 `;
 }
@@ -150,6 +151,7 @@ function parseArgs(argv) {
     timeoutMs: 300000,
     resourceUsage: true,
     messageIndex: 0,
+    layout: 'all_cairo',
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -164,6 +166,8 @@ function parseArgs(argv) {
       args.timeoutMs = Number(argv[++i]);
     } else if (arg === '--message-index') {
       args.messageIndex = Number(argv[++i]);
+    } else if (arg === '--layout') {
+      args.layout = argv[++i];
     } else if (arg === '--no-resource-usage') {
       args.resourceUsage = false;
     } else if (!args.inputPath) {
@@ -270,6 +274,8 @@ const executeArgs = [
   '--arguments-file',
   cairoArgsPath,
   '--print-program-output',
+  '--layout',
+  args.layout,
 ];
 if (args.resourceUsage) {
   executeArgs.push('--print-resource-usage');
@@ -296,6 +302,7 @@ const metadata = {
   executable: circuit.executable,
   inputPath,
   generatedInput,
+  layout: args.layout,
   messageIndex: circuit.requiresMessageIndex ? args.messageIndex : undefined,
   preparedPath,
   cairoInputPath,

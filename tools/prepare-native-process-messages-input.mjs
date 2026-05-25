@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bigintToHex } from '../src/compat/encoding.mjs';
+import { bigintToHex } from '../src/encoding.mjs';
 import {
   buildNativeCairoProcessMessagesBoundaryInput,
   serializeNativeCairoProcessMessagesBoundaryExecutableArgs,

@@ -1406,6 +1406,147 @@ get_tally_submitted = true
 
 这轮说明：在不改变 add-key/tally 数据的前提下，`tail3 + head2` segment proof 可以替代原来的 22 个 processMessage component facts，并在 Starknet Sepolia 上完成同一个 round 状态推进和最终 tally commitment 校验。
 
+### ProcessMessage 2 Facts -> 1 Business Fact Attempt
+
+状态：这条路线已经测试过，但当前代码已回滚，继续采用上一版 4 fact 方案：
+
+```text
+add-new-key + process-messages-tail3 + process-messages-head2 + tally = 4
+```
+
+本节只保留探索记录和链上成本数据，后续不作为当前实现说明。
+
+当时的目标是把业务 wrapper 侧的 `processMessage` 从两次提交：
+
+```text
+submit process-messages-tail3-native fact   // messages[2..4]
+submit process-messages-head2-native fact   // messages[0..1]
+```
+
+压成一次业务提交：
+
+```text
+submit aggregated process-messages segment-pair fact
+```
+
+这样完整 round 的业务 fact 从：
+
+```text
+add-new-key + tail3 + head2 + tally = 4
+```
+
+变为：
+
+```text
+add-new-key + process-messages-segment-pair + tally = 3
+```
+
+#### 直接单 proof 尝试
+
+先尝试了更理想的 `process-messages-stage-native` 单 proof，也就是把 5 条 message 的 boundary / coord-key / ECDH / decrypt / signature / step-core 全部放进一个 Cairo1/Stone program 里，让 Atlantic 直接注册一个 processMessage fact。
+
+本地 Cairo execution 可通过，且输出仍是同一个 16-felt `PROCESS_MESSAGES_NATIVE` public output。但提交 Atlantic 后仍失败在 Integrity L2 verification calldata 限制：
+
+| item | value |
+| --- | --- |
+| query id | `01KS7C022M3ETMV2XNQVEV9NJ0` |
+| status | `FAILED` |
+| step | `PROOF_VERIFICATION` |
+| error | `CALLDATA_TOO_LARGE: initial has 5653 felts, exceeding Starknet calldata limit of 5000` |
+| program hash | `0x6ada2bb488a38963daf1bfe271a41161071c5e3c53ea5bf4b15e10760fac6` |
+| integrity fact hash | `0x52313831a78d6b97732b4955aee443feedf82e3adf05784640b1592fb1e79b8` |
+| local artifacts | `target/stage-one-verify-only-20260522T081202Z` |
+
+结论：当前 Atlantic L2 verifier 路径下，5-message single-stage proof 仍然超过 `initial <= 5000 felts` 的限制。因此当前不采用这个路径，避免让 processMessage 单 proof 卡在 verifier calldata 限制上。
+
+补充复测：为了确认是否是手动指定 layout 导致 calldata 分布不理想，又提交了一次 `layout=auto` 的 `process-messages-stage-native`。Atlantic 实际仍选择了 `recursive_with_poseidon`，最终失败原因和手动 layout 一致：
+
+| item | value |
+| --- | --- |
+| query id | `01KS9812WS2E24PMGS958KATVD` |
+| console | `https://www.herodotus.cloud/en/atlantic/01KS9812WS2E24PMGS958KATVD` |
+| status | `FAILED` |
+| step | `PROOF_VERIFICATION` |
+| error | `CALLDATA_TOO_LARGE: initial has 5653 felts, exceeding Starknet calldata limit of 5000` |
+| requested layout | `auto` |
+| selected layout | `recursive_with_poseidon` |
+| declared job size | `M` |
+| actual job size | `S` |
+| program hash | `0x6ada2bb488a38963daf1bfe271a41161071c5e3c53ea5bf4b15e10760fac6` |
+| integrity fact hash | `0x52313831a78d6b97732b4955aee443feedf82e3adf05784640b1592fb1e79b8` |
+| local artifacts | `target/stage-one-layout-auto-20260523T014334Z` |
+
+这说明 `layout=auto` 目前也不能绕开 L2 split calldata 的 initial 限制。单个 `process-messages-stage-native` proof 虽然业务上最干净，但当前不能直接作为 Starknet L2 Integrity fact 路径落地。
+
+#### 已测试但暂不采用的合约侧聚合方式
+
+这条路线采用合约侧 aggregate fact：Atlantic 仍分别验证并注册 `tail3` 和 `head2` 两个已经可通过的 facts，但 AMACI round wrapper 新增一次性消费这两个 facts 的入口：
+
+```text
+submit_process_messages_segment_pair_atlantic_metadata_fact
+```
+
+这个入口会同时检查：
+
+```text
+tail3.current_state == round.current_state
+tail3.new_state == head2.current_state
+head2.new_state == requested new_state
+tail3.deactivate == head2.deactivate == round.deactivate
+tail3/head2 fact 都已在 Integrity/Satellite 注册
+```
+
+然后只做一次业务状态推进：
+
+```text
+state_commitment = head2.new_state
+message_batches_processed += 1
+total_facts_accepted += 1
+```
+
+链上测试记录：
+
+| item | value |
+| --- | --- |
+| MockAmaciRound class hash | `0x7909ca53f4beb9c85879d90db9084a31e867b258a313c4d3b7a6976a408b198` |
+| declare tx | `0x0508202dedfb51de780ad090edd66c288607b467d78291abb536a1bc496d8d79` |
+| wrapper address | `0x003cf9629d90c9d241feb713e364718bce733ab988cd85d91c631e02bec7ed84` |
+| deploy tx | `0x04b15d94f12a80dcda4d8da1a7db19fb7254d6ebae2e7386a85d29658e7ec553` |
+| add-key tx | `0x01c55f562c2f986f5758ef4396c4e500d8df0eccfa031a66ab1bb6703038eae4` |
+| aggregated processMessage tx | `0x0506b3aad6037f30d9303faa5fe7edd847fb725a7aa450a8074bfe5fc235334a` |
+| tally tx | `0x06f6d8287478655e6069020c39530b1788fe000395483976227740d15a549e11` |
+| local artifacts | `target/segment-stage-e2e-fixed-20260522T070423Z/chain-segment-wrapper-aggregate` |
+
+最终链上状态：
+
+| state getter | value |
+| --- | --- |
+| `get_total_facts_accepted()` | `0x3` |
+| `get_message_batches_processed()` | `0x1` |
+| `get_state_commitment()` | `0x6870bab41e9daf5aae373119bec58a46700a063002f69586bc0158770b0c775` |
+| `get_tally_commitment()` | `0x43ade83b1ca050d3f5d89c0e8c8b93b598387322c82d9f894ac321cd48348cc` |
+| `get_tally_submitted()` | `true` |
+
+业务 wrapper 侧费用：
+
+| tx | actual fee |
+| --- | ---: |
+| deploy | `0.06144939984687299 STRK` |
+| add new key | `0.03874162331393056 STRK` |
+| processMessage segment-pair aggregate | `0.1673911699113112 STRK` |
+| tally | `0.03196991835017325 STRK` |
+| business flow total, excluding deploy | `0.23810271157541502 STRK` |
+
+对比上一版 `tail3 + head2` 两次业务提交：
+
+| scope | previous 2 processMessage txs | aggregate 1 processMessage tx |
+| --- | ---: | ---: |
+| processMessage wrapper fee | `0.1783379105 STRK` | `0.1673911699 STRK` |
+| full business flow fee, excluding deploy | `0.2496059619 STRK` | `0.2381027116 STRK` |
+| business facts accepted | `4` | `3` |
+
+注意：这一步降低的是 AMACI 业务 wrapper 的 fact consumption 次数和费用；Atlantic/Integrity 侧 proof verification 仍然是 `tail3` 和 `head2` 两个 facts。由于当前暂时回到 4 fact 方案，相关合约入口代码已回滚。要把 Atlantic/Integrity 侧也压成 1 个 processMessage fact，需要后续走递归聚合或 Herodotus bucket/applicative recursion，而不是这个合约侧 aggregate。
+
 ### Atlantic Proof Verification Fees
 
 Atlantic 侧真实 proof verification 成本可以通过官方 query jobs API 批量查询：
@@ -1521,3 +1662,99 @@ target/full-component-e2e-20260518T023503Z/atlantic-credit-cost-summary.md
 | total | `24` | `24` | `1704` | `$17.04` | `2304` | `$23.04` |
 
 当前建议：做预算和向外沟通时先使用 `7200 credits / $72` 这个实际 API quote 口径，因为这是 Atlantic 在 insufficient credits/x402 flow 中实际要求补足的 `S` query 支付量。官方 pricing 文档口径可以作为理论解释和后续跟 Herodotus 对账时的问题点：为什么公开 pricing 的 `S=70 credits + trace` 与实际 x402 quote 的 `S=300 credits` 存在差异。
+
+## ProcessMessage Atlantic Bucket 聚合尝试
+
+目的：把 `processMessage` 从业务合约侧的两个 segment facts 进一步压成 Atlantic/Integrity 侧的一个 aggregate fact。目标 round fact 分布为：
+
+| stage | target fact count |
+| --- | ---: |
+| add new key | `1` |
+| processMessage aggregate | `1` |
+| tally | `1` |
+| total | `3` |
+
+官方路径：Herodotus Atlantic Applicative Recursion，即先创建 bucket，再把多个 `PROOF_GENERATION` query 带 `bucketId` / `bucketJobIndex` 提交进去，最后 close bucket 触发 aggregate query。官方文档要求 `bucketJobIndex` 为 `0, 1, 2, ...` 连续递增。
+
+本轮使用的两个 processMessage segment 输入：
+
+| segment | source Stone AIR | input felts |
+| --- | --- | ---: |
+| `tail3` | `target/segment-stage-e2e-fixed-20260522T070423Z/tail3/stone-air/stone-air-run.json` | `898` |
+| `head2` | `target/segment-stage-e2e-fixed-20260522T070423Z/head2/stone-air/stone-air-run.json` | `898` |
+
+本地记录目录：
+
+```text
+target/atlantic-process-messages-bucket-20260522T091333Z
+target/atlantic-process-messages-bucket-20260522T092459Z-zero-index-test
+```
+
+### Attempt 1: 0-based index, blocked by Atlantic API validation
+
+Bucket:
+
+```text
+bucketId = 01KS7FC8RQGFXP89M692TB0WPS
+aggregatorVersion = snos_aggregator_0.14.2
+nodeWidth = 2
+```
+
+按官方文档先提交 `bucketJobIndex=0`，Atlantic API 返回：
+
+```text
+{"message":"MISSING_BUCKET_JOB_INDEX"}
+```
+
+这个请求没有创建 query。随后用 `--form-string bucketJobIndex=0`、multipart JSON part、Node 原生 `FormData` numeric value、以及把 `apiKey` 放到 query string 的形式重试到新 bucket：
+
+```text
+bucketId = 01KS7G16WY1EN1K0DHXB8ND5NH
+```
+
+仍然返回同样错误：
+
+```text
+{"message":"MISSING_BUCKET_JOB_INDEX"}
+```
+
+结论：当前 Atlantic API 对 `bucketJobIndex=0` 的 multipart 解析/校验存在阻塞，和官方文档要求的 `0,1,2,...` 顺序不一致。这个问题需要后续和 Herodotus 对齐。
+
+### Attempt 2: 1-based workaround, child proofs OK, aggregate failed
+
+为了验证 bucket 绑定和 aggregate 流程是否能继续推进，临时用 `bucketJobIndex=1` / `2` 重试。这个 workaround 被 API 接收，但不符合官方 `0,1` 顺序。
+
+Accepted child queries:
+
+| segment | query id | status | program hash | integrity fact hash | sharp fact hash |
+| --- | --- | --- | --- | --- | --- |
+| `tail3` | `01KS7FFVHGBTXH0H2T4XK69QEF` | `DONE` | `0x629bd3434387bfd139c424ac566f46cfe9cb7efd7dabef9874c3a6cb96a33fc` | `0x735298b2398cb6926bfc56f631c8bf56997cdea3fe6a58b3238e4de023bd2df` | `0x67c137b5645e23ee5da79e06e2a869ac9509c98dbe5ac09cb2c29a564f309d4e` |
+| `head2` | `01KS7FG5NDZ2VX3RAJK3QZ81D8` | `DONE` | `0x629bd3434387bfd139c424ac566f46cfe9cb7efd7dabef9874c3a6cb96a33fc` | `0x4bab46c4095ad95750f426a843e7688cf1ba6c9e2a2d7ee6049a9a218f1fa78` | `0x64b5942967601e25b89055a8252aeeaa2c86b3398af28cb0f95a8edfd2a37080` |
+
+Close bucket 后 Atlantic 自动创建 aggregate query：
+
+```text
+aggregate query id = 01KS7FXZNT8T5G2VJQY2FQNQAX
+result = PROOF_VERIFICATION_ON_L1
+chain = L1
+```
+
+该 aggregate query 在 `TRACE_AND_METADATA_GENERATION` 阶段失败：
+
+```text
+Error: Expected a bool felt
+```
+
+Bucket final status:
+
+```text
+bucketId = 01KS7FC8RQGFXP89M692TB0WPS
+status = FAILED
+leaves = 2
+```
+
+当前判断：两个 child proof 可以进入 bucket 并完成 `PROOF_GENERATION`，但 workaround 的 `1/2` index 不能作为正确方案；aggregate 失败可能与 index 不从 `0` 开始、或 Atlantic aggregator 当前只走 L1 aggregate path 有关。下一步不应继续重复提交同类 bucket，而应先和 Herodotus 确认：
+
+1. `bucketJobIndex=0` 被 API 判定 missing 是否为后端 bug。
+2. Cairo1 Rust VM + `recursive_with_poseidon` + `snos_aggregator_0.14.2` 是否支持 Starknet L2 aggregate fact。
+3. 如果支持，bucket close 后 aggregate query 如何配置为 `PROOF_VERIFICATION_ON_L2`，而不是当前自动生成的 `PROOF_VERIFICATION_ON_L1`。

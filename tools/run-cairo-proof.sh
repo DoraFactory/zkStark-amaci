@@ -234,6 +234,7 @@ run_one() {
       --execute \
       --executable-name "$executable" \
       --arguments-file "$cairo_args_json" \
+      --layout all_cairo \
       --print-program-output \
       2>&1 | tee "$prove_log"
 

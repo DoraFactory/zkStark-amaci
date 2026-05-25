@@ -1,14 +1,13 @@
 import {
+  PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
   SMALL_PROCESS_MESSAGES_PARAMS,
   TREE_ARITY,
 } from '../constants.mjs';
 import {
   deepMapBigInt,
   parseBigInt,
-  processMessagesInputHash,
-} from '../compat/encoding.mjs';
-import { hash13, hashLeftRight } from '../compat/poseidon.mjs';
-import { canonicalProcessMessagesPublicOutput } from '../public-output.mjs';
+} from '../encoding.mjs';
+import { nativeHashFelts, nativeHashPoint } from '../native-hash.mjs';
 import { evaluateProcessOneStateTransition } from './process-one.mjs';
 
 const MSG_LENGTH = 10;
@@ -95,12 +94,12 @@ export function unpackProcessMessagesPackedVals(packedVals) {
 export function processMessageHash(message, encPubKey, prevHash) {
   expectVectorShape(message, MSG_LENGTH, 'message');
   expectVectorShape(encPubKey, ENC_PUB_KEY_LENGTH, 'encPubKey');
-  return hash13([
+  return nativeHashFelts([
     ...message.map((value, idx) => parseBigInt(value, `message[${idx}]`)),
     parseBigInt(encPubKey[0], 'encPubKey[0]'),
     parseBigInt(encPubKey[1], 'encPubKey[1]'),
     parseBigInt(prevHash, 'prevHash'),
-  ]);
+  ], 'messageHash');
 }
 
 export function processMessageHashChain(messages, encPubKeys, batchStartHash) {
@@ -127,14 +126,14 @@ export function evaluateProcessMessages(rawInput, params = SMALL_PROCESS_MESSAGE
 
   const input = {
     packedVals: parseBigInt(rawInput.packedVals, 'packedVals'),
-    inputHash: parseBigInt(rawInput.inputHash, 'inputHash'),
     coordPubKey: deepMapBigInt(rawInput.coordPubKey),
     batchStartHash: parseBigInt(rawInput.batchStartHash, 'batchStartHash'),
-    batchEndHash: parseBigInt(rawInput.batchEndHash, 'batchEndHash'),
+    batchEndHash:
+      rawInput.batchEndHash === undefined
+        ? undefined
+        : parseBigInt(rawInput.batchEndHash, 'batchEndHash'),
     currentStateRoot: parseBigInt(rawInput.currentStateRoot, 'currentStateRoot'),
     currentStateSalt: parseBigInt(rawInput.currentStateSalt, 'currentStateSalt'),
-    currentStateCommitment: parseBigInt(rawInput.currentStateCommitment, 'currentStateCommitment'),
-    newStateCommitment: parseBigInt(rawInput.newStateCommitment, 'newStateCommitment'),
     newStateRoot:
       rawInput.newStateRoot === undefined
         ? undefined
@@ -142,7 +141,6 @@ export function evaluateProcessMessages(rawInput, params = SMALL_PROCESS_MESSAGE
     newStateSalt: parseBigInt(rawInput.newStateSalt, 'newStateSalt'),
     activeStateRoot: parseBigInt(rawInput.activeStateRoot, 'activeStateRoot'),
     deactivateRoot: parseBigInt(rawInput.deactivateRoot, 'deactivateRoot'),
-    deactivateCommitment: parseBigInt(rawInput.deactivateCommitment, 'deactivateCommitment'),
     expectedPollId: parseBigInt(rawInput.expectedPollId, 'expectedPollId'),
     msgs: deepMapBigInt(rawInput.msgs),
     encPubKeys: deepMapBigInt(rawInput.encPubKeys),
@@ -165,61 +163,63 @@ export function evaluateProcessMessages(rawInput, params = SMALL_PROCESS_MESSAGE
     'packedVals',
   );
 
-  const coordPubKeyHash = hashLeftRight(input.coordPubKey[0], input.coordPubKey[1]);
-  const currentStateCommitment = hashLeftRight(input.currentStateRoot, input.currentStateSalt);
-  expectEqual(currentStateCommitment, input.currentStateCommitment, 'currentStateCommitment');
-
-  const deactivateCommitment = hashLeftRight(input.activeStateRoot, input.deactivateRoot);
-  expectEqual(deactivateCommitment, input.deactivateCommitment, 'deactivateCommitment');
-
-  if (input.newStateRoot !== undefined) {
-    const newStateCommitment = hashLeftRight(input.newStateRoot, input.newStateSalt);
-    expectEqual(newStateCommitment, input.newStateCommitment, 'newStateCommitment');
-  }
-
-  const expectedInputHash = processMessagesInputHash(
-    input.packedVals,
-    coordPubKeyHash,
-    input.batchStartHash,
-    input.batchEndHash,
-    input.currentStateCommitment,
-    input.newStateCommitment,
-    input.deactivateCommitment,
-    input.expectedPollId,
+  const coordPubKeyHash = nativeHashPoint(input.coordPubKey, 'coordPubKey');
+  const currentStateCommitment = nativeHashFelts(
+    [input.currentStateRoot, input.currentStateSalt],
+    'currentStateCommitment',
   );
-  expectEqual(expectedInputHash, input.inputHash, 'inputHash');
-
+  const deactivateCommitment = nativeHashFelts(
+    [input.activeStateRoot, input.deactivateRoot],
+    'deactivateCommitment',
+  );
+  const newStateCommitment = input.newStateRoot === undefined
+    ? 0n
+    : nativeHashFelts([input.newStateRoot, input.newStateSalt], 'newStateCommitment');
   const { chain: messageHashChain, endHash } = processMessageHashChain(
     input.msgs,
     input.encPubKeys,
     input.batchStartHash,
   );
-  expectEqual(endHash, input.batchEndHash, 'batchEndHash');
+  if (input.batchEndHash !== undefined) {
+    expectEqual(endHash, input.batchEndHash, 'batchEndHash');
+  }
+
+  const inputHash = nativeHashFelts([
+    PROCESS_MESSAGES_NATIVE_INPUT_HASH_DOMAIN,
+    input.packedVals,
+    coordPubKeyHash,
+    input.batchStartHash,
+    endHash,
+    currentStateCommitment,
+    newStateCommitment,
+    deactivateCommitment,
+    input.expectedPollId,
+  ], 'processMessagesInputHash');
 
   const publicFields = {
     packedVals: input.packedVals,
     coordPubKeyHash,
     batchStartHash: input.batchStartHash,
-    batchEndHash: input.batchEndHash,
-    currentStateCommitment: input.currentStateCommitment,
-    newStateCommitment: input.newStateCommitment,
-    deactivateCommitment: input.deactivateCommitment,
+    batchEndHash: endHash,
+    currentStateCommitment,
+    newStateCommitment,
+    deactivateCommitment,
     expectedPollId: input.expectedPollId,
-    inputHash: input.inputHash,
+    inputHash,
   };
 
   return {
     params,
     publicFields,
-    publicOutput: canonicalProcessMessagesPublicOutput(publicFields, params),
     derived: {
       ...unpacked,
       coordPubKeyHash,
       currentStateCommitment,
+      newStateCommitment,
       deactivateCommitment,
       expectedPollId: input.expectedPollId,
       messageHashChain,
-      inputHash: expectedInputHash,
+      inputHash,
     },
   };
 }

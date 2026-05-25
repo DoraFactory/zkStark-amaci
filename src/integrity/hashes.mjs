@@ -2,7 +2,7 @@ import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { bigintToHex, parseBigInt } from '../compat/encoding.mjs';
+import { bigintToHex, parseBigInt } from '../encoding.mjs';
 
 let starknetHash;
 

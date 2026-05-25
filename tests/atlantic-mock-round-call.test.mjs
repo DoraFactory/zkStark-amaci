@@ -7,7 +7,7 @@ import {
   SHARP_BOOTLOADER_PROGRAM_HASH,
 } from '../src/atlantic/mock-round-call.mjs';
 import { calculateBootloadedFactHash, calculatePlainFactHash } from '../src/integrity/hashes.mjs';
-import { bigintToHex } from '../src/compat/encoding.mjs';
+import { bigintToHex } from '../src/encoding.mjs';
 
 const nativeTallyOutput = [
   0x4d414349535441524bn,

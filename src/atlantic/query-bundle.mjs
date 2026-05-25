@@ -137,7 +137,7 @@ export function createAtlanticQueryBundle(stoneAirRunPath, outDir, options = {})
     externalId: options.externalId ?? '',
     dedupId: options.dedupId ?? null,
     sharpProver: options.sharpProver ?? 'stone',
-    layout: options.layout ?? stoneAirRun.layout ?? 'recursive_with_poseidon',
+    layout: options.layout ?? 'auto',
     cairoVm: options.cairoVm ?? 'rust',
     cairoVersion: options.cairoVersion ?? 'cairo1',
     result: options.result ?? 'PROOF_VERIFICATION_ON_L2',

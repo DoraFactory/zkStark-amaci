@@ -1,10 +1,16 @@
-import { SMALL_PROCESS_DEACTIVATE_PARAMS } from '../constants.mjs';
-import { deepMapBigInt, parseBigInt, processDeactivateInputHash } from '../compat/encoding.mjs';
-import { hash13, hashLeftRight } from '../compat/poseidon.mjs';
-import { babyjubScalarMul } from '../compat/babyjub.mjs';
-import { canonicalProcessDeactivatePublicOutput } from '../public-output.mjs';
+import {
+  PROCESS_DEACTIVATE_NATIVE_INPUT_HASH_DOMAIN,
+  SMALL_PROCESS_DEACTIVATE_PARAMS,
+} from '../constants.mjs';
+import { deepMapBigInt, parseBigInt } from '../encoding.mjs';
+import {
+  STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+  starkPoseidonDecryptWithoutCheck7,
+  starkScalarMul,
+} from '../stark-native-crypto.mjs';
+import { nativeHashFelts, nativeHashPoint } from '../native-hash.mjs';
 import { evaluateProcessDeactivateOne } from './process-deactivate-one.mjs';
-import { poseidonDecryptWithoutCheck7, unpackCommandData } from '../msg/process-one.mjs';
+import { unpackCommandData } from '../msg/process-one.mjs';
 
 const MSG_LENGTH = 10;
 const ENC_PUB_KEY_LENGTH = 2;
@@ -47,8 +53,13 @@ function expectProcessOneMessageCommand(messageIndex, rawInput, transition) {
   }
   const coordPrivKey = parseBigInt(rawInput.coordPrivKey, 'coordPrivKey');
   const encPubKey = deepMapBigInt(rawInput.encPubKeys[messageIndex]);
-  const sharedKey = babyjubScalarMul(encPubKey, coordPrivKey);
-  const decryptedCommand = poseidonDecryptWithoutCheck7(msg, sharedKey);
+  const sharedKey = starkScalarMul(encPubKey, coordPrivKey);
+  const decryptedCommand = starkPoseidonDecryptWithoutCheck7(
+    msg,
+    sharedKey,
+    0n,
+    STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
+  );
   const unpacked = unpackCommandData(decryptedCommand[0]);
   const input = transition.input;
 
@@ -69,12 +80,12 @@ function expectProcessOneMessageCommand(messageIndex, rawInput, transition) {
 export function processDeactivateMessageHash(message, encPubKey, prevHash) {
   expectVectorShape(message, MSG_LENGTH, 'message');
   expectVectorShape(encPubKey, ENC_PUB_KEY_LENGTH, 'encPubKey');
-  return hash13([
+  return nativeHashFelts([
     ...message.map((value, idx) => parseBigInt(value, `message[${idx}]`)),
     parseBigInt(encPubKey[0], 'encPubKey[0]'),
     parseBigInt(encPubKey[1], 'encPubKey[1]'),
     parseBigInt(prevHash, 'prevHash'),
-  ]);
+  ], 'deactivateMessageHash');
 }
 
 export function processDeactivateMessageHashChain(messages, encPubKeys, batchStartHash) {
@@ -115,76 +126,75 @@ export function evaluateProcessDeactivateMessages(
   expectMatrixShape(rawInput.encPubKeys, params.messageBatchSize, ENC_PUB_KEY_LENGTH, 'encPubKeys');
 
   const input = {
-    inputHash: parseBigInt(rawInput.inputHash, 'inputHash'),
     newDeactivateRoot: parseBigInt(rawInput.newDeactivateRoot, 'newDeactivateRoot'),
     coordPubKey: deepMapBigInt(rawInput.coordPubKey),
     batchStartHash: parseBigInt(rawInput.batchStartHash, 'batchStartHash'),
-    batchEndHash: parseBigInt(rawInput.batchEndHash, 'batchEndHash'),
+    batchEndHash:
+      rawInput.batchEndHash === undefined
+        ? undefined
+        : parseBigInt(rawInput.batchEndHash, 'batchEndHash'),
     currentActiveStateRoot: parseBigInt(rawInput.currentActiveStateRoot, 'currentActiveStateRoot'),
     currentDeactivateRoot: parseBigInt(rawInput.currentDeactivateRoot, 'currentDeactivateRoot'),
-    currentDeactivateCommitment: parseBigInt(
-      rawInput.currentDeactivateCommitment,
-      'currentDeactivateCommitment',
-    ),
-    newDeactivateCommitment: parseBigInt(rawInput.newDeactivateCommitment, 'newDeactivateCommitment'),
+    newActiveStateRoot:
+      rawInput.newActiveStateRoot === undefined
+        ? undefined
+        : parseBigInt(rawInput.newActiveStateRoot, 'newActiveStateRoot'),
     currentStateRoot: parseBigInt(rawInput.currentStateRoot, 'currentStateRoot'),
     expectedPollId: parseBigInt(rawInput.expectedPollId, 'expectedPollId'),
     msgs: deepMapBigInt(rawInput.msgs),
     encPubKeys: deepMapBigInt(rawInput.encPubKeys),
   };
 
-  const coordPubKeyHash = hashLeftRight(input.coordPubKey[0], input.coordPubKey[1]);
-  const currentDeactivateCommitment = hashLeftRight(
-    input.currentActiveStateRoot,
-    input.currentDeactivateRoot,
-  );
-  expectEqual(
-    currentDeactivateCommitment,
-    input.currentDeactivateCommitment,
-    'currentDeactivateCommitment',
-  );
-
-  const expectedInputHash = processDeactivateInputHash(
-    input.newDeactivateRoot,
-    coordPubKeyHash,
-    input.batchStartHash,
-    input.batchEndHash,
-    input.currentDeactivateCommitment,
-    input.newDeactivateCommitment,
-    input.currentStateRoot,
-    input.expectedPollId,
-  );
-  expectEqual(expectedInputHash, input.inputHash, 'inputHash');
-
   const { chain: messageHashChain, endHash } = processDeactivateMessageHashChain(
     input.msgs,
     input.encPubKeys,
     input.batchStartHash,
   );
-  expectEqual(endHash, input.batchEndHash, 'batchEndHash');
+  if (input.batchEndHash !== undefined) {
+    expectEqual(endHash, input.batchEndHash, 'batchEndHash');
+  }
+  const coordPubKeyHash = nativeHashPoint(input.coordPubKey, 'coordPubKey');
+  const currentDeactivateCommitment = nativeHashFelts(
+    [input.currentActiveStateRoot, input.currentDeactivateRoot],
+    'currentDeactivateCommitment',
+  );
+  const newDeactivateCommitment = input.newActiveStateRoot === undefined
+    ? 0n
+    : nativeHashFelts([input.newActiveStateRoot, input.newDeactivateRoot], 'newDeactivateCommitment');
+  const inputHash = nativeHashFelts([
+    PROCESS_DEACTIVATE_NATIVE_INPUT_HASH_DOMAIN,
+    input.newDeactivateRoot,
+    coordPubKeyHash,
+    input.batchStartHash,
+    endHash,
+    currentDeactivateCommitment,
+    newDeactivateCommitment,
+    input.currentStateRoot,
+    input.expectedPollId,
+  ], 'processDeactivateInputHash');
 
   const publicFields = {
     newDeactivateRoot: input.newDeactivateRoot,
     coordPubKeyHash,
     batchStartHash: input.batchStartHash,
-    batchEndHash: input.batchEndHash,
-    currentDeactivateCommitment: input.currentDeactivateCommitment,
-    newDeactivateCommitment: input.newDeactivateCommitment,
+    batchEndHash: endHash,
+    currentDeactivateCommitment,
+    newDeactivateCommitment,
     currentStateRoot: input.currentStateRoot,
     expectedPollId: input.expectedPollId,
-    inputHash: input.inputHash,
+    inputHash,
   };
 
   return {
     params,
     input,
     publicFields,
-    publicOutput: canonicalProcessDeactivatePublicOutput(publicFields, params),
     derived: {
       coordPubKeyHash,
       currentDeactivateCommitment,
+      newDeactivateCommitment,
       messageHashChain,
-      inputHash: expectedInputHash,
+      inputHash,
     },
   };
 }
@@ -266,11 +276,13 @@ export function evaluateProcessDeactivateMessagesStateful(
   expectEqual(state.input.expectedPollId, boundary.input.expectedPollId, 'state.expectedPollId');
   expectEqual(state.derived.newDeactivateRoot, boundary.input.newDeactivateRoot, 'newDeactivateRoot');
 
-  const newDeactivateCommitment = hashLeftRight(
+  const newDeactivateCommitment = nativeHashFelts(
+    [
     state.derived.newActiveStateRoot,
     state.derived.newDeactivateRoot,
+    ],
+    'newDeactivateCommitment',
   );
-  expectEqual(newDeactivateCommitment, boundary.input.newDeactivateCommitment, 'newDeactivateCommitment');
 
   for (let i = 0; i < params.messageBatchSize; i += 1) {
     const expectedIsEmpty = boundary.input.msgs[i][0] === 0n ? 1n : 0n;

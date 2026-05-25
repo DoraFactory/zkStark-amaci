@@ -1,5 +1,5 @@
 import { TREE_ARITY } from '../constants.mjs';
-import { parseBigInt } from '../compat/encoding.mjs';
+import { parseBigInt } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 

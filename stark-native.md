@@ -16,8 +16,8 @@ The native path therefore replaces the heavy migrated compatibility model with:
 - Smaller proof-mode entrypoints built specifically for Stone.
 - Split local circuits for process-message and process-deactivate flows.
 
-The compatibility path is still present for comparison, but new Stone work
-should target the native optimized path.
+The old compatibility path has now been removed from the active codebase; new
+Stone work targets the native optimized path only.
 
 ## Implemented Optimization Work
 
@@ -32,7 +32,7 @@ Native tally is implemented in:
 
 Main changes:
 
-- Replaced BN254 Poseidon/SHA-style public hash claims with Starknet Poseidon
+- Replaced legacy Poseidon/SHA-style public hash claims with Starknet Poseidon
   commitments over `felt252`.
 - Reduced the tally executable arguments from the legacy witness-heavy shape to
   a fixed native input shape.
@@ -65,7 +65,7 @@ tools/run-stone-air.sh --circuit tally-native --input fixtures/tally-small/00000
 ```
 
 The old compatibility Stone path has been removed from exposed npm scripts so
-new runs do not accidentally generate legacy BN254/SHA artifacts.
+new runs do not accidentally generate legacy SHA-style artifacts.
 
 ### Stone AIR/Proof Tooling
 
@@ -124,7 +124,7 @@ This was the old compatibility Stone path before it was removed from the
 exposed run commands:
 
 - circuit: `tally`
-- executable: removed legacy BN254/SHA Stone tally wrapper
+- executable: removed legacy SHA-style Stone tally wrapper
 - layout: `recursive`
 - Cairo args: `488` felts
 - AIR `n_steps`: `67,108,864`

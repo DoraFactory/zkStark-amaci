@@ -7,7 +7,7 @@ import {
   analyzeNativeStwoHandoff,
   createNativeStwoHandoffPackage,
 } from '../src/native-proof/handoff.mjs';
-import { bigintToHex } from '../src/compat/encoding.mjs';
+import { bigintToHex } from '../src/encoding.mjs';
 import { calculatePlainFactHash, isIntegrityHashingAvailable } from '../src/integrity/hashes.mjs';
 
 function writeJson(path, value) {

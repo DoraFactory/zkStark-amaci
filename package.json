@@ -5,13 +5,11 @@
   "type": "module",
   "description": "Independent Stark/STARK proof-layer prototype for AMACI tally and process-message circuits",
   "dependencies": {
-    "@zk-kit/baby-jubjub": "^1.0.3",
-    "@zk-kit/eddsa-poseidon": "^1.1.0",
     "starknet": "^6.24.1"
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "test:msg": "node --test tests/process-messages.test.mjs",
+    "test:msg": "node --test tests/native-split-links.test.mjs",
     "test:cairo": "cd cairo && scarb test",
     "test:cairo-execute": "RUN_CAIRO_EXECUTION_TESTS=1 node --test tests/cairo-execution.test.mjs",
     "test:contracts": "cd contracts && scarb test",
@@ -21,6 +19,8 @@
     "write:minimal-round-fixture": "node tools/write-minimal-round-fixture.mjs",
     "write:full-round-fixture": "node tools/write-full-round-fixture.mjs",
     "e2e:round-flow": "node tools/run-e2e-round-flow.mjs",
+    "e2e:round-flow:local": "node tools/run-e2e-round-flow.mjs --execute-local --simulate-wrapper --text",
+    "check:native-round-wrapper-flow": "node tools/check-native-round-wrapper-flow.mjs",
     "prepare:circuit": "node tools/prepare-amaci-circuit-input.mjs",
     "prepare:add-new-key-native": "node tools/prepare-amaci-circuit-input.mjs --circuit add-new-key-native",
     "prepare:process-messages-boundary-native": "node tools/prepare-amaci-circuit-input.mjs --circuit process-messages-boundary-native",

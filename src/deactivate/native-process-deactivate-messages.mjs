@@ -6,7 +6,7 @@ import {
   SMALL_PROCESS_DEACTIVATE_PARAMS,
   STARKNET_POSEIDON_HASH_SCHEME,
 } from '../constants.mjs';
-import { decimalize } from '../compat/encoding.mjs';
+import { decimalize } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { toStarkFelt } from '../tally/native-tally-votes.mjs';
 import { evaluateProcessDeactivateMessagesStateful } from './process-deactivate-messages.mjs';
