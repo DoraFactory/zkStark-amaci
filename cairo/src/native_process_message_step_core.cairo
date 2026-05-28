@@ -2,8 +2,8 @@ use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
 use crate::native_stark_crypto::{
     STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN, STARK_NATIVE_COMMAND_STREAM_DOMAIN,
-    assert_stark_point_equals, assert_stark_poseidon_decrypt7,
-    stark_elgamal_decrypt_point_is_odd, stark_scalar_mul, stark_verify_command_signature,
+    assert_stark_point_equals, assert_stark_poseidon_decrypt7, stark_elgamal_decrypt_point_is_odd,
+    stark_scalar_mul, stark_verify_command_signature,
 };
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
@@ -20,13 +20,10 @@ const PROCESS_MESSAGE_SIGNATURE_NATIVE_CIRCUIT_ID: felt252 =
 const PROCESS_MESSAGE_STEP_CORE_NATIVE_CIRCUIT_ID: felt252 =
     0x414d4143495f504d53475f535445505f434f52455f4e4154495645;
 const NATIVE_COORD_PRIV_KEY_HASH_DOMAIN: felt252 = 0x414d4143495f434f4f52445f50524956;
-const NATIVE_COORD_KEY_BINDING_DOMAIN: felt252 =
-    0x414d4143495f504d53475f434f4f52445f42494e44;
+const NATIVE_COORD_KEY_BINDING_DOMAIN: felt252 = 0x414d4143495f504d53475f434f4f52445f42494e44;
 const NATIVE_COMMAND_AUTH_DOMAIN: felt252 = 0x414d4143495f504d53475f41555448;
-const NATIVE_COMMAND_PLAINTEXT_DOMAIN: felt252 =
-    0x414d4143495f504d53475f434d445f504c41494e;
-const NATIVE_DECRYPT_BINDING_DOMAIN: felt252 =
-    0x414d4143495f504d53475f4445435f42494e44;
+const NATIVE_COMMAND_PLAINTEXT_DOMAIN: felt252 = 0x414d4143495f504d53475f434d445f504c41494e;
+const NATIVE_DECRYPT_BINDING_DOMAIN: felt252 = 0x414d4143495f504d53475f4445435f42494e44;
 const NATIVE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f504d53475f534841524544;
 const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 const TWO_POW_32: u256 = 0x100000000;
@@ -390,13 +387,7 @@ fn native_hash_values_5(
 }
 
 fn native_hash_values_7(
-    v0: felt252,
-    v1: felt252,
-    v2: felt252,
-    v3: felt252,
-    v4: felt252,
-    v5: felt252,
-    v6: felt252,
+    v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252, v5: felt252, v6: felt252,
 ) -> felt252 {
     let mut state = PoseidonTrait::new();
     state = state.update(v0);
@@ -496,10 +487,7 @@ fn native_shared_key_binding_hash(
 }
 
 fn native_decrypt_binding_hash(
-    coord_priv_key_hash: felt252,
-    c1_hash: felt252,
-    c2_hash: felt252,
-    decrypt_is_odd: felt252,
+    coord_priv_key_hash: felt252, c1_hash: felt252, c2_hash: felt252, decrypt_is_odd: felt252,
 ) -> felt252 {
     native_hash_values_5(
         NATIVE_DECRYPT_BINDING_DOMAIN, coord_priv_key_hash, c1_hash, c2_hash, decrypt_is_odd,
@@ -714,8 +702,7 @@ fn native_hash10_values(
     v9: felt252,
 ) -> felt252 {
     native_hash_values_2(
-        native_hash5_values(v0, v1, v2, v3, v4),
-        native_hash5_values(v5, v6, v7, v8, v9),
+        native_hash5_values(v0, v1, v2, v3, v4), native_hash5_values(v5, v6, v7, v8, v9),
     )
 }
 
@@ -851,8 +838,12 @@ fn native_process_message_roots(
         current_leaf_vote_root
     };
     let new_state_leaf_hash = native_hash10_values(
-        felt_from_u256(select_u256(valid, process_one.state_leaf.v0, process_one.cmd_new_pub_key.v0)),
-        felt_from_u256(select_u256(valid, process_one.state_leaf.v1, process_one.cmd_new_pub_key.v1)),
+        felt_from_u256(
+            select_u256(valid, process_one.state_leaf.v0, process_one.cmd_new_pub_key.v0),
+        ),
+        felt_from_u256(
+            select_u256(valid, process_one.state_leaf.v1, process_one.cmd_new_pub_key.v1),
+        ),
         felt_from_u256(select_u256(valid, process_one.state_leaf.v2, process_one.new_balance)),
         new_leaf_vote_root,
         felt_from_u256(select_u256(valid, process_one.state_leaf.v4, process_one.new_sl_nonce)),
@@ -885,12 +876,7 @@ fn assert_message_matches(message: U256x10, process_one_msg: U256x10) {
 }
 
 fn assert_valid_message_index(message_index: felt252) {
-    assert(
-        message_index == 0
-            || message_index == 1
-            || message_index == 2,
-        'BAD_MSG_INDEX',
-    );
+    assert(message_index == 0 || message_index == 1 || message_index == 2, 'BAD_MSG_INDEX');
 }
 
 fn verify_native_process_message_coord_key(
@@ -902,8 +888,10 @@ fn verify_native_process_message_coord_key(
         'N_COORD_PRIV',
     );
     assert(
-        native_coord_key_binding_hash(fields.coord_pub_key_hash, fields.coord_priv_key_hash)
-            == fields.coord_key_binding_hash,
+        native_coord_key_binding_hash(
+            fields.coord_pub_key_hash, fields.coord_priv_key_hash,
+        ) == fields
+            .coord_key_binding_hash,
         'N_COORD_BIND',
     );
 }
@@ -921,7 +909,8 @@ fn verify_native_process_message_ecdh(
     assert(
         native_shared_key_binding_hash(
             fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.shared_key_hash,
-        ) == fields.shared_key_binding_hash,
+        ) == fields
+            .shared_key_binding_hash,
         'N_SHARED_BIND',
     );
 }
@@ -939,17 +928,16 @@ fn verify_native_process_message_decrypt(
     assert(native_hash_u256x2(witness.c2) == fields.c2_hash, 'N_C2');
     assert(
         native_decrypt_binding_hash(
-            fields.coord_priv_key_hash,
-            fields.c1_hash,
-            fields.c2_hash,
-            fields.decrypt_is_odd,
-        ) == fields.decrypt_binding_hash,
+            fields.coord_priv_key_hash, fields.c1_hash, fields.c2_hash, fields.decrypt_is_odd,
+        ) == fields
+            .decrypt_binding_hash,
         'N_DECRYPT_BIND',
     );
 }
 
 fn verify_native_process_message_signature(
-    fields: NativeProcessMessageSignaturePublicFields, witness: NativeProcessMessageSignatureWitness,
+    fields: NativeProcessMessageSignaturePublicFields,
+    witness: NativeProcessMessageSignatureWitness,
 ) {
     assert_valid_message_index(fields.message_index);
     assert(fields.is_signature_valid == 0 || fields.is_signature_valid == 1, 'BAD_SIG_BOOL');
@@ -965,7 +953,8 @@ fn verify_native_process_message_signature(
             fields.cmd_sig_s_hash,
             witness.cmd_salt,
             fields.is_signature_valid,
-        ) == fields.command_auth_hash,
+        ) == fields
+            .command_auth_hash,
         'N_CMD_AUTH',
     );
 }
@@ -1073,7 +1062,8 @@ fn build_native_process_message_signature_public_output(
 
 #[executable]
 pub fn process_message_signature_native_main(
-    fields: NativeProcessMessageSignaturePublicFields, witness: NativeProcessMessageSignatureWitness,
+    fields: NativeProcessMessageSignaturePublicFields,
+    witness: NativeProcessMessageSignatureWitness,
 ) -> NativeProcessMessageSignaturePublicOutput {
     verify_native_process_message_signature(fields, witness);
     build_native_process_message_signature_public_output(fields)
@@ -1110,11 +1100,14 @@ fn verify_native_process_message_step_core(
         'N_SHARED_X',
         'N_SHARED_Y',
     );
-    assert(native_hash_u256x2(witness.process_one.shared_key) == fields.shared_key_hash, 'N_SHARED');
+    assert(
+        native_hash_u256x2(witness.process_one.shared_key) == fields.shared_key_hash, 'N_SHARED',
+    );
     assert(
         native_shared_key_binding_hash(
             fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.shared_key_hash,
-        ) == fields.shared_key_binding_hash,
+        ) == fields
+            .shared_key_binding_hash,
         'N_SHARED_BIND',
     );
     assert(fields.state_decrypt_is_odd == 0 || fields.state_decrypt_is_odd == 1, 'BAD_DEC_BOOL');
@@ -1131,13 +1124,15 @@ fn verify_native_process_message_step_core(
     assert(
         native_hash_u256x2(
             U256x2 { v0: witness.process_one.state_leaf.v5, v1: witness.process_one.state_leaf.v6 },
-        ) == fields.state_ciphertext_c1_hash,
+        ) == fields
+            .state_ciphertext_c1_hash,
         'N_STATE_C1',
     );
     assert(
         native_hash_u256x2(
             U256x2 { v0: witness.process_one.state_leaf.v7, v1: witness.process_one.state_leaf.v8 },
-        ) == fields.state_ciphertext_c2_hash,
+        ) == fields
+            .state_ciphertext_c2_hash,
         'N_STATE_C2',
     );
     assert(
@@ -1146,13 +1141,15 @@ fn verify_native_process_message_step_core(
             fields.state_ciphertext_c1_hash,
             fields.state_ciphertext_c2_hash,
             fields.state_decrypt_is_odd,
-        ) == fields.state_decrypt_binding_hash,
+        ) == fields
+            .state_decrypt_binding_hash,
         'N_STATE_DEC_BIND',
     );
     assert(
         native_hash_u256x2(
             U256x2 { v0: witness.process_one.state_leaf.v0, v1: witness.process_one.state_leaf.v1 },
-        ) == fields.signature_pub_key_hash,
+        ) == fields
+            .signature_pub_key_hash,
         'N_SIG_PUB',
     );
     assert(native_hash_u256x2(witness.process_one.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
@@ -1182,7 +1179,8 @@ fn verify_native_process_message_step_core(
             fields.cmd_sig_s_hash,
             witness.process_one.cmd_salt,
             fields.is_signature_valid,
-        ) == fields.command_auth_hash,
+        ) == fields
+            .command_auth_hash,
         'N_CMD_AUTH',
     );
     assert(
@@ -1194,7 +1192,8 @@ fn verify_native_process_message_step_core(
             fields.signature_r8_hash,
             fields.cmd_sig_s_hash,
             fields.command_auth_hash,
-        ) == fields.command_plaintext_binding_hash,
+        ) == fields
+            .command_plaintext_binding_hash,
         'N_CMD_PLAIN',
     );
     assert_stark_poseidon_decrypt7(
@@ -1232,14 +1231,19 @@ fn verify_native_process_message_step_core(
     assert(next_message_hash == fields.next_message_hash, 'N_NEXT_MSG');
 
     let (native_current_state_root, native_active_state_root, native_new_state_root) =
-        native_process_message_roots(witness.process_one);
+        native_process_message_roots(
+        witness.process_one,
+    );
     assert(native_current_state_root == fields.current_state_root_hash, 'N_CUR_ROOT');
     assert(native_active_state_root == fields.active_state_root_hash, 'N_ACTIVE');
     assert_u256_eq(witness.process_one.is_quadratic_cost, witness.is_quadratic_cost);
     assert_u256_eq(witness.process_one.num_signups, witness.num_signups);
     assert_u256_eq(witness.process_one.max_vote_options, witness.max_vote_options);
     assert(witness.process_one.expected_poll_id.high == 0, 'POLL_HIGH');
-    assert(felt_from_u128(witness.process_one.expected_poll_id.low) == fields.expected_poll_id, 'POLL_ID');
+    assert(
+        felt_from_u128(witness.process_one.expected_poll_id.low) == fields.expected_poll_id,
+        'POLL_ID',
+    );
     assert_message_matches(witness.msg, witness.process_one.msg);
 
     if is_zero(witness.enc_pub_key.v0) {
@@ -1247,12 +1251,12 @@ fn verify_native_process_message_step_core(
     } else {
         assert(witness.process_one.is_decryption_active.high == 0, 'DEC_BOOL_HIGH');
         assert(
-            felt_from_u128(witness.process_one.is_decryption_active.low)
-                == 1 - fields.state_decrypt_is_odd,
+            felt_from_u128(witness.process_one.is_decryption_active.low) == 1
+                - fields.state_decrypt_is_odd,
             'DEC_ACTIVE',
         );
         let _validation = validate_process_one_command(witness.process_one);
-    };
+    }
     assert(native_new_state_root == fields.new_state_root_hash, 'N_NEW_ROOT');
 
     if fields.message_index == 2 {
@@ -1262,7 +1266,9 @@ fn verify_native_process_message_step_core(
         assert(current_state_commitment == fields.current_state_commitment_hash, 'N_CUR_COMMIT');
     }
     if fields.message_index == 0 {
-        let new_state_commitment = native_felt_commitment(native_new_state_root, witness.new_state_salt);
+        let new_state_commitment = native_felt_commitment(
+            native_new_state_root, witness.new_state_salt,
+        );
         assert(new_state_commitment == fields.new_state_commitment_hash, 'N_NEW_COMMIT');
     }
 }

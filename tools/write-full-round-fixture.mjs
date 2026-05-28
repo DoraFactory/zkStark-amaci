@@ -14,16 +14,16 @@ Options:
   --text            Print generated paths and chain commitments.
 
 This writes one coherent native lifecycle fixture:
-  add-new-key-native.json
   process-deactivate-stage-native.json
   process-deactivate-boundary-native.json
+  add-new-key-native.json
   process-messages-stage-native.json
   process-messages-boundary-native.json
   tally-native.json
   chain.json
 
-The generated flow is signup -> vote -> deactivate -> vote -> processMsg -> tally,
-with signupCount=1 and messageBatchSize=3.
+The generated flow is signup -> deactivate -> processDeactivate -> addNewKey
+-> vote -> processMessages -> tally, with signupCount=3 and messageBatchSize=3.
 `;
 }
 
@@ -74,9 +74,9 @@ writeFileSync(paths.chain, `${JSON.stringify(fixture.chain, null, 2)}\n`);
 
 if (args.text) {
   const lines = [
-    `Add new key input: ${paths.addNewKey}`,
     `Process deactivate stage input: ${paths.processDeactivateStage}`,
     `Process deactivate boundary input: ${paths.processDeactivateBoundary}`,
+    `Add new key input: ${paths.addNewKey}`,
     `Process messages stage input: ${paths.processMessagesStage}`,
     `Process messages boundary input: ${paths.processMessagesBoundary}`,
     `Tally input: ${paths.tally}`,

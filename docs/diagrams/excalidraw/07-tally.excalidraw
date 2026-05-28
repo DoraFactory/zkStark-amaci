@@ -1,17 +1,17 @@
 {
   "type": "excalidraw",
   "version": 2,
-  "source": "https://excalidraw.com",
+  "source": "https://marketplace.visualstudio.com/items?itemName=pomdtr.excalidraw-editor",
   "elements": [
     {
       "type": "text",
       "id": "title",
-      "x": 60,
-      "y": 20,
-      "width": 500,
+      "x": 262.63222918238296,
+      "y": 21.166139413345377,
+      "width": 620,
       "height": 28,
-      "text": "Tally  —  single circuit, single proof",
-      "originalText": "Tally  —  single circuit, single proof",
+      "text": "Tally  —  one proof, 5 state leaves per batch",
+      "originalText": "Tally  —  one proof, 5 state leaves per batch",
       "fontSize": 22,
       "fontFamily": 3,
       "textAlign": "left",
@@ -25,15 +25,20 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700001,
-      "version": 1,
-      "versionNonce": 700002,
+      "version": 92,
+      "versionNonce": 1905319209,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.25
+      "lineHeight": 1.25,
+      "index": "a0",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940222958,
+      "autoResize": true
     },
     {
       "type": "rectangle",
@@ -41,7 +46,7 @@
       "x": 60,
       "y": 68,
       "width": 260,
-      "height": 180,
+      "height": 250,
       "strokeColor": "#555555",
       "backgroundColor": "#f0f0f0",
       "fillStyle": "solid",
@@ -51,14 +56,24 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700003,
-      "version": 1,
-      "versionNonce": 700004,
+      "version": 2,
+      "versionNonce": 32649511,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": [{"id": "arr_w_steps", "type": "arrow"}],
+      "boundElements": [
+        {
+          "id": "arr_w_steps",
+          "type": "arrow"
+        }
+      ],
       "link": null,
       "locked": false,
-      "roundness": {"type": 3}
+      "roundness": {
+        "type": 3
+      },
+      "index": "a1",
+      "frameId": null,
+      "updated": 1779940133403
     },
     {
       "type": "text",
@@ -82,15 +97,20 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700005,
-      "version": 1,
-      "versionNonce": 700006,
+      "version": 2,
+      "versionNonce": 1919031497,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.25
+      "lineHeight": 1.25,
+      "index": "a2",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403,
+      "autoResize": true
     },
     {
       "type": "text",
@@ -98,10 +118,10 @@
       "x": 80,
       "y": 108,
       "width": 228,
-      "height": 128,
-      "text": "stateRoot  (from Process Messages)\nstateSalt\nnumSignUps\nbatchNum  (0..4)\nstateLeaf[5][10]\nstatePathElements\nvotes[5][5]\ncurrentResults[5]\ncurrentResultsRootSalt\nnewResultsRootSalt",
-      "originalText": "stateRoot  (from Process Messages)\nstateSalt\nnumSignUps\nbatchNum  (0..4)\nstateLeaf[5][10]\nstatePathElements\nvotes[5][5]\ncurrentResults[5]\ncurrentResultsRootSalt\nnewResultsRootSalt",
-      "fontSize": 11,
+      "height": 180,
+      "text": "stateRoot + stateSalt\nnumSignUps\nbatchNum\n  batchStartIndex = batchNum * 5\nstateLeaf_0..4  (5 leaves)\nstatePathElements\nvotes_0..4[5]\n  5 vote options per leaf\ncurrentResults[5]\ncurrentResultsRootSalt\nnewResultsRootSalt",
+      "originalText": "stateRoot + stateSalt\nnumSignUps\nbatchNum\n  batchStartIndex = batchNum * 5\nstateLeaf_0..4  (5 leaves)\nstatePathElements\nvotes_0..4[5]\n  5 vote options per leaf\ncurrentResults[5]\ncurrentResultsRootSalt\nnewResultsRootSalt",
+      "fontSize": 10,
       "fontFamily": 3,
       "textAlign": "left",
       "verticalAlign": "top",
@@ -114,21 +134,26 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700007,
-      "version": 1,
-      "versionNonce": 700008,
+      "version": 2,
+      "versionNonce": 1862235207,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.5
+      "lineHeight": 1.5,
+      "index": "a3",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403,
+      "autoResize": true
     },
     {
       "type": "arrow",
       "id": "arr_w_steps",
       "x": 322,
-      "y": 158,
+      "y": 183,
       "width": 58,
       "height": 0,
       "strokeColor": "#333333",
@@ -140,18 +165,40 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700009,
-      "version": 1,
-      "versionNonce": 700010,
+      "version": 2,
+      "versionNonce": 437655465,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
-      "points": [[0, 0], [58, 0]],
-      "startBinding": {"elementId": "witness_box", "focus": 0, "gap": 2},
-      "endBinding": {"elementId": "steps_box", "focus": 0, "gap": 2},
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          58,
+          0
+        ]
+      ],
+      "startBinding": {
+        "elementId": "witness_box",
+        "focus": 0,
+        "gap": 2
+      },
+      "endBinding": {
+        "elementId": "steps_box",
+        "focus": 0,
+        "gap": 2
+      },
       "startArrowhead": null,
-      "endArrowhead": "arrow"
+      "endArrowhead": "arrow",
+      "lastCommittedPoint": null,
+      "index": "a4",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403
     },
     {
       "type": "rectangle",
@@ -159,7 +206,7 @@
       "x": 380,
       "y": 68,
       "width": 400,
-      "height": 180,
+      "height": 250,
       "strokeColor": "#333333",
       "backgroundColor": "#e8e8e8",
       "fillStyle": "solid",
@@ -169,17 +216,28 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700011,
-      "version": 1,
-      "versionNonce": 700012,
+      "version": 2,
+      "versionNonce": 1270305639,
       "isDeleted": false,
       "groupIds": [],
       "boundElements": [
-        {"id": "arr_w_steps", "type": "arrow"},
-        {"id": "arr_steps_out", "type": "arrow"}
+        {
+          "id": "arr_w_steps",
+          "type": "arrow"
+        },
+        {
+          "id": "arr_steps_out",
+          "type": "arrow"
+        }
       ],
       "link": null,
       "locked": false,
-      "roundness": {"type": 3}
+      "roundness": {
+        "type": 3
+      },
+      "index": "a5",
+      "frameId": null,
+      "updated": 1779940133403
     },
     {
       "type": "text",
@@ -203,15 +261,20 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700013,
-      "version": 1,
-      "versionNonce": 700014,
+      "version": 2,
+      "versionNonce": 1822898825,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.25
+      "lineHeight": 1.25,
+      "index": "a6",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403,
+      "autoResize": true
     },
     {
       "type": "text",
@@ -219,10 +282,10 @@
       "x": 400,
       "y": 108,
       "width": 368,
-      "height": 128,
-      "text": "1. State tree inclusion  rebuild root from leaves + path\n2. State commitment  H(stateRoot, stateSalt)\n   → must equal processMessages.newStateCommitment\n3. Vote root match  H(votes[i]) == stateLeaf[i].voteRoot\n4. Current tally check  batchNum==0 → assert(current==0)\n5. Quadratic tally  tallyVote(v) = v × (v + 10^24)\n6. New tally commitment  H(H(newResults), salt)\n7. inputHash  aggregates all public fields",
-      "originalText": "1. State tree inclusion  rebuild root from leaves + path\n2. State commitment  H(stateRoot, stateSalt)\n   → must equal processMessages.newStateCommitment\n3. Vote root match  H(votes[i]) == stateLeaf[i].voteRoot\n4. Current tally check  batchNum==0 → assert(current==0)\n5. Quadratic tally  tallyVote(v) = v × (v + 10^24)\n6. New tally commitment  H(H(newResults), salt)\n7. inputHash  aggregates all public fields",
-      "fontSize": 12,
+      "height": 198,
+      "text": "1. Rebuild StateTree root from 5 leaves + paths\n2. stateCommitment = H(stateRoot, stateSalt)\n   equals final ProcessMessages state commitment\n3. For each leaf:\n   H(votes_i[0..4]) == stateLeaf_i.voteOptionRoot\n4. Current tally:\n   batch 0  -> currentTallyCommitment = 0\n   batch >0 -> H(H(currentResults), currentSalt)\n5. Add encoded votes:\n   newResults[j] = currentResults[j] + sum tallyVote(v_ij)\n   tallyVote(v) = v * (v + 10^24)\n6. newTallyCommitment = H(H(newResults), newSalt)\n7. inputHash binds public fields",
+      "originalText": "1. Rebuild StateTree root from 5 leaves + paths\n2. stateCommitment = H(stateRoot, stateSalt)\n   equals final ProcessMessages state commitment\n3. For each leaf:\n   H(votes_i[0..4]) == stateLeaf_i.voteOptionRoot\n4. Current tally:\n   batch 0  -> currentTallyCommitment = 0\n   batch >0 -> H(H(currentResults), currentSalt)\n5. Add encoded votes:\n   newResults[j] = currentResults[j] + sum tallyVote(v_ij)\n   tallyVote(v) = v * (v + 10^24)\n6. newTallyCommitment = H(H(newResults), newSalt)\n7. inputHash binds public fields",
+      "fontSize": 10,
       "fontFamily": 3,
       "textAlign": "left",
       "verticalAlign": "top",
@@ -235,21 +298,26 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700015,
-      "version": 1,
-      "versionNonce": 700016,
+      "version": 2,
+      "versionNonce": 6704775,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.5
+      "lineHeight": 1.5,
+      "index": "a7",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403,
+      "autoResize": true
     },
     {
       "type": "arrow",
       "id": "arr_steps_out",
       "x": 782,
-      "y": 158,
+      "y": 183,
       "width": 58,
       "height": 0,
       "strokeColor": "#333333",
@@ -261,18 +329,40 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700017,
-      "version": 1,
-      "versionNonce": 700018,
+      "version": 2,
+      "versionNonce": 1523646825,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
-      "points": [[0, 0], [58, 0]],
-      "startBinding": {"elementId": "steps_box", "focus": 0, "gap": 2},
-      "endBinding": {"elementId": "output_box", "focus": 0, "gap": 2},
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          58,
+          0
+        ]
+      ],
+      "startBinding": {
+        "elementId": "steps_box",
+        "focus": 0,
+        "gap": 2
+      },
+      "endBinding": {
+        "elementId": "output_box",
+        "focus": 0,
+        "gap": 2
+      },
       "startArrowhead": null,
-      "endArrowhead": "arrow"
+      "endArrowhead": "arrow",
+      "lastCommittedPoint": null,
+      "index": "a8",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940133403
     },
     {
       "type": "rectangle",
@@ -280,7 +370,7 @@
       "x": 840,
       "y": 68,
       "width": 200,
-      "height": 180,
+      "height": 250,
       "strokeColor": "#555555",
       "backgroundColor": "#f0f0f0",
       "fillStyle": "solid",
@@ -290,24 +380,34 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700019,
-      "version": 1,
-      "versionNonce": 700020,
+      "version": 2,
+      "versionNonce": 935912871,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": [{"id": "arr_steps_out", "type": "arrow"}],
+      "boundElements": [
+        {
+          "id": "arr_steps_out",
+          "type": "arrow"
+        }
+      ],
       "link": null,
       "locked": false,
-      "roundness": {"type": 3}
+      "roundness": {
+        "type": 3
+      },
+      "index": "a9",
+      "frameId": null,
+      "updated": 1779940133403
     },
     {
       "type": "text",
       "id": "t_out_title",
-      "x": 860,
-      "y": 84,
-      "width": 160,
-      "height": 20,
-      "text": "Public Output  (12 felts)",
-      "originalText": "Public Output  (12 felts)",
+      "x": 860.1875,
+      "y": 84.81094360351562,
+      "width": 123.046875,
+      "height": 17.5,
+      "text": "Public Output  ",
+      "originalText": "Public Output  ",
       "fontSize": 14,
       "fontFamily": 3,
       "textAlign": "left",
@@ -321,26 +421,31 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700021,
-      "version": 1,
-      "versionNonce": 700022,
+      "version": 5,
+      "versionNonce": 352904455,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.25
+      "lineHeight": 1.25,
+      "index": "aA",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940199207,
+      "autoResize": true
     },
     {
       "type": "text",
       "id": "t_out_body",
       "x": 860,
       "y": 108,
-      "width": 168,
-      "height": 128,
-      "text": "magic / version\ncircuit_id\nhash_scheme\nstateTreeDepth\nintStateTreeDepth\nvoteOptionTreeDepth\npackedVals\nstateCommitment\ncurrentTallyCommitment\nnewTallyCommitment\ninputHash",
-      "originalText": "magic / version\ncircuit_id\nhash_scheme\nstateTreeDepth\nintStateTreeDepth\nvoteOptionTreeDepth\npackedVals\nstateCommitment\ncurrentTallyCommitment\nnewTallyCommitment\ninputHash",
-      "fontSize": 11,
+      "width": 134.765625,
+      "height": 180,
+      "text": "magic / version\ncircuit_id\nhash_scheme\nstateTreeDepth\nintStateTreeDepth\nvoteOptionTreeDepth\npackedVals\n  numSignUps + batchNum\nstateCommitment\ncurrentTallyCommitment\nnewTallyCommitment\ninputHash",
+      "originalText": "magic / version\ncircuit_id\nhash_scheme\nstateTreeDepth\nintStateTreeDepth\nvoteOptionTreeDepth\npackedVals\n  numSignUps + batchNum\nstateCommitment\ncurrentTallyCommitment\nnewTallyCommitment\ninputHash",
+      "fontSize": 10,
       "fontFamily": 3,
       "textAlign": "left",
       "verticalAlign": "top",
@@ -353,25 +458,30 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700023,
-      "version": 1,
-      "versionNonce": 700024,
+      "version": 3,
+      "versionNonce": 1592428103,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.5
+      "lineHeight": 1.5,
+      "index": "aB",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940185523,
+      "autoResize": true
     },
     {
       "type": "text",
       "id": "note",
       "x": 60,
-      "y": 268,
-      "width": 980,
-      "height": 18,
-      "text": "stateCommitment must equal processMessages.newStateCommitment  |  plaintext vote totals never stored on-chain, only newTallyCommitment",
-      "originalText": "stateCommitment must equal processMessages.newStateCommitment  |  plaintext vote totals never stored on-chain, only newTallyCommitment",
+      "y": 338,
+      "width": 984.375,
+      "height": 15,
+      "text": "Tally consumes final ProcessMessages stateCommitment. Contract stores commitments; operator may publish raw results + salt for verification.",
+      "originalText": "Tally consumes final ProcessMessages stateCommitment. Contract stores commitments; operator may publish raw results + salt for verification.",
       "fontSize": 12,
       "fontFamily": 3,
       "textAlign": "left",
@@ -385,20 +495,27 @@
       "opacity": 100,
       "angle": 0,
       "seed": 700025,
-      "version": 1,
-      "versionNonce": 700026,
+      "version": 3,
+      "versionNonce": 329350471,
       "isDeleted": false,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "link": null,
       "locked": false,
       "containerId": null,
-      "lineHeight": 1.25
+      "lineHeight": 1.25,
+      "index": "aC",
+      "frameId": null,
+      "roundness": null,
+      "updated": 1779940172505,
+      "autoResize": true
     }
   ],
   "appState": {
-    "viewBackgroundColor": "#ffffff",
-    "gridSize": 20
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#ffffff"
   },
   "files": {}
 }

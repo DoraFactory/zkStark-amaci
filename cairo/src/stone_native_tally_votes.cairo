@@ -6,9 +6,9 @@ use crate::native_tally_votes::{
 #[executable]
 pub fn tally_votes_native_stone_main(input: Array<felt252>) -> Array<felt252> {
     let mut serialized = input.span();
-    let fields: TallyNativePublicFields = Serde::<TallyNativePublicFields>::deserialize(
-        ref serialized,
-    )
+    let fields: TallyNativePublicFields = Serde::<
+        TallyNativePublicFields,
+    >::deserialize(ref serialized)
         .expect('STONE_NATIVE_FIELDS');
     let witness: TallyNativeWitness = Serde::<TallyNativeWitness>::deserialize(ref serialized)
         .expect('STONE_NATIVE_WITNESS');

@@ -114,9 +114,7 @@ fn message_hash(message: Felt10, enc_pub_key: Felt2, previous_hash: felt252) -> 
     state.finalize()
 }
 
-fn message_hash_or_empty(
-    message: Felt10, enc_pub_key: Felt2, previous_hash: felt252,
-) -> felt252 {
+fn message_hash_or_empty(message: Felt10, enc_pub_key: Felt2, previous_hash: felt252) -> felt252 {
     if enc_pub_key.v0 == 0 {
         previous_hash
     } else {
@@ -148,8 +146,7 @@ fn assert_packed_vals(
     let is_quadratic_cost: felt252 = witness.is_quadratic_cost.into();
     let num_signups: felt252 = witness.num_signups.into();
     let max_vote_options: felt252 = witness.max_vote_options.into();
-    let packed_vals = is_quadratic_cost * TWO_POW_64 + num_signups * TWO_POW_32
-        + max_vote_options;
+    let packed_vals = is_quadratic_cost * TWO_POW_64 + num_signups * TWO_POW_32 + max_vote_options;
     assert(packed_vals == fields.packed_vals, 'PACKED_VALS');
 }
 
@@ -161,9 +158,7 @@ fn verify_process_messages_native_boundary(
     let coord_pub_key_hash = hash2(witness.coord_pub_key.v0, witness.coord_pub_key.v1);
     assert(coord_pub_key_hash == fields.coord_pub_key_hash, 'COORD_KEY_HASH');
 
-    let current_state_commitment = hash2(
-        witness.current_state_root, witness.current_state_salt,
-    );
+    let current_state_commitment = hash2(witness.current_state_root, witness.current_state_salt);
     assert(current_state_commitment == fields.current_state_commitment, 'CURRENT_STATE');
 
     let new_state_commitment = hash2(witness.new_state_root, witness.new_state_salt);

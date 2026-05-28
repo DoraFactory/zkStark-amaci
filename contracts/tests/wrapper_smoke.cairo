@@ -264,8 +264,8 @@ fn submit_add_new_key_atlantic_metadata_fact_rejects_wrong_nullifier() {
     let metadata_output = array![
         0, 0x99, 1, 21, ADD_NEW_KEY_PROGRAM_HASH, 0, 19, PUBLIC_OUTPUT_MAGIC,
         NATIVE_PUBLIC_OUTPUT_VERSION, ADD_NEW_KEY_NATIVE_CIRCUIT_ID, STARKNET_POSEIDON_HASH_SCHEME,
-        2, 4, 0x201, 0x202, KEY_NULLIFIER + 1, 0x203, 0x204, 0x205, 0x206, 0x207, 0x208,
-        0x209, 0x20a, 0x20b, 0x20c,
+        2, 4, 0x201, 0x202, KEY_NULLIFIER + 1, 0x203, 0x204, 0x205, 0x206, 0x207, 0x208, 0x209,
+        0x20a, 0x20b, 0x20c,
     ];
     let fact_hash = wrapper
         .get_expected_atlantic_metadata_fact_hash(
@@ -320,9 +320,7 @@ fn submit_process_messages_fact_accepts_mock_integrity_fact() {
         );
 
     assert(wrapper.get_state_commitment() == STATE_AFTER_MESSAGES, 'STATE_NOT_UPDATED');
-    assert(
-        wrapper.get_deactivate_commitment() == INITIAL_DEACTIVATE_COMMITMENT, 'DEACT_CHANGED',
-    );
+    assert(wrapper.get_deactivate_commitment() == INITIAL_DEACTIVATE_COMMITMENT, 'DEACT_CHANGED');
     assert(wrapper.get_message_batches_processed() == 1, 'MSG_COUNT_BAD');
 }
 
@@ -333,8 +331,8 @@ fn submit_process_messages_atlantic_metadata_fact_accepts_mock_integrity_fact() 
     let metadata_output = array![
         0, 0x99, 1, 18, PROCESS_MESSAGES_PROGRAM_HASH, 0, 16, PUBLIC_OUTPUT_MAGIC,
         NATIVE_PUBLIC_OUTPUT_VERSION, PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
-        STARKNET_POSEIDON_HASH_SCHEME, 2, 1, 5, 0x301, 0x302, 0x303, 0x304,
-        STATE_COMMITMENT, STATE_AFTER_MESSAGES, INITIAL_DEACTIVATE_COMMITMENT, 0x305, 0x306,
+        STARKNET_POSEIDON_HASH_SCHEME, 2, 1, 5, 0x301, 0x302, 0x303, 0x304, STATE_COMMITMENT,
+        STATE_AFTER_MESSAGES, INITIAL_DEACTIVATE_COMMITMENT, 0x305, 0x306,
     ];
     let fact_hash = wrapper
         .get_expected_atlantic_metadata_fact_hash(
@@ -383,8 +381,8 @@ fn submit_process_messages_atlantic_metadata_fact_rejects_wrong_new_state_output
     let metadata_output = array![
         0, 0x99, 1, 18, PROCESS_MESSAGES_PROGRAM_HASH, 0, 16, PUBLIC_OUTPUT_MAGIC,
         NATIVE_PUBLIC_OUTPUT_VERSION, PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
-        STARKNET_POSEIDON_HASH_SCHEME, 2, 1, 5, 0x301, 0x302, 0x303, 0x304,
-        STATE_COMMITMENT, STATE_AFTER_MESSAGES + 1, INITIAL_DEACTIVATE_COMMITMENT, 0x305, 0x306,
+        STARKNET_POSEIDON_HASH_SCHEME, 2, 1, 5, 0x301, 0x302, 0x303, 0x304, STATE_COMMITMENT,
+        STATE_AFTER_MESSAGES + 1, INITIAL_DEACTIVATE_COMMITMENT, 0x305, 0x306,
     ];
     let fact_hash = wrapper
         .get_expected_atlantic_metadata_fact_hash(
@@ -420,9 +418,7 @@ fn submit_process_deactivate_fact_accepts_mock_integrity_fact() {
             fact_hash,
         );
 
-    assert(
-        wrapper.get_deactivate_commitment() == DEACTIVATE_AFTER_PROCESS, 'DEACT_NOT_UPDATED',
-    );
+    assert(wrapper.get_deactivate_commitment() == DEACTIVATE_AFTER_PROCESS, 'DEACT_NOT_UPDATED');
     assert(wrapper.get_deactivate_batches_processed() == 1, 'DEACT_COUNT_BAD');
 }
 
@@ -452,9 +448,7 @@ fn submit_process_deactivate_atlantic_metadata_fact_accepts_mock_integrity_fact(
             fact_hash,
         );
 
-    assert(
-        wrapper.get_deactivate_commitment() == DEACTIVATE_AFTER_PROCESS, 'DEACT_NOT_UPDATED',
-    );
+    assert(wrapper.get_deactivate_commitment() == DEACTIVATE_AFTER_PROCESS, 'DEACT_NOT_UPDATED');
     assert(wrapper.get_deactivate_batches_processed() == 1, 'DEACT_COUNT_BAD');
 }
 
@@ -467,8 +461,7 @@ fn submit_process_deactivate_atlantic_metadata_fact_rejects_wrong_state_output()
         0, 0x99, 1, 18, PROCESS_DEACTIVATE_PROGRAM_HASH, 0, 16, PUBLIC_OUTPUT_MAGIC,
         NATIVE_PUBLIC_OUTPUT_VERSION, PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
         STARKNET_POSEIDON_HASH_SCHEME, 2, 4, 5, 0x401, 0x402, 0x403, 0x404,
-        INITIAL_DEACTIVATE_COMMITMENT, DEACTIVATE_AFTER_PROCESS, STATE_COMMITMENT + 1, 0x406,
-        0x407,
+        INITIAL_DEACTIVATE_COMMITMENT, DEACTIVATE_AFTER_PROCESS, STATE_COMMITMENT + 1, 0x406, 0x407,
     ];
     let fact_hash = wrapper
         .get_expected_atlantic_metadata_fact_hash(

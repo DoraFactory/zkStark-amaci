@@ -3,9 +3,7 @@ pub trait IProcessMessagesStarkWrapper<TContractState> {
     fn get_state_commitment(self: @TContractState) -> felt252;
     fn get_deactivate_commitment(self: @TContractState) -> felt252;
     fn get_message_batches_processed(self: @TContractState) -> felt252;
-    fn get_expected_plain_fact_hash(
-        self: @TContractState, public_output_hash: felt252,
-    ) -> felt252;
+    fn get_expected_plain_fact_hash(self: @TContractState, public_output_hash: felt252) -> felt252;
     fn get_expected_atlantic_metadata_fact_hash(
         self: @TContractState, metadata_program_hash: felt252, metadata_output: Span<felt252>,
     ) -> felt252;
@@ -124,18 +122,14 @@ pub mod ProcessMessagesStarkWrapper {
         }
 
         fn get_expected_atlantic_metadata_fact_hash(
-            self: @ContractState,
-            metadata_program_hash: felt252,
-            metadata_output: Span<felt252>,
+            self: @ContractState, metadata_program_hash: felt252, metadata_output: Span<felt252>,
         ) -> felt252 {
             bootloaded_fact_hash_for_output(
                 SHARP_BOOTLOADER_PROGRAM_HASH, metadata_program_hash, metadata_output,
             )
         }
 
-        fn get_expected_verification_hash(
-            self: @ContractState, fact_hash: felt252,
-        ) -> felt252 {
+        fn get_expected_verification_hash(self: @ContractState, fact_hash: felt252) -> felt252 {
             verification_hash(
                 fact_hash, self.verifier_config_hash.read(), self.min_security_bits.read(),
             )
@@ -233,8 +227,7 @@ pub mod ProcessMessagesStarkWrapper {
     ) -> felt252 {
         assert(metadata_output.len() > 4, 'METADATA_OUTPUT_SHORT');
         assert(
-            *metadata_output.at(4) == self.process_messages_program_hash.read(),
-            'PROGRAM_MISMATCH',
+            *metadata_output.at(4) == self.process_messages_program_hash.read(), 'PROGRAM_MISMATCH',
         );
         let expected_fact_hash = bootloaded_fact_hash_for_output(
             SHARP_BOOTLOADER_PROGRAM_HASH, metadata_program_hash, metadata_output,
@@ -243,9 +236,7 @@ pub mod ProcessMessagesStarkWrapper {
         validate_registered_fact(self, provided_fact_hash)
     }
 
-    fn validate_registered_fact(
-        self: @ContractState, provided_fact_hash: felt252,
-    ) -> felt252 {
+    fn validate_registered_fact(self: @ContractState, provided_fact_hash: felt252) -> felt252 {
         let verifier_config_hash = self.verifier_config_hash.read();
         let min_security_bits = self.min_security_bits.read();
         let expected_verification_hash = verification_hash(

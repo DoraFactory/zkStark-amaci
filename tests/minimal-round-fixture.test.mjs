@@ -9,6 +9,7 @@ import {
 } from '../src/deactivate/native-process-deactivate-messages.mjs';
 import { evaluateNativeProcessMessagesBoundary } from '../src/msg/native-process-messages.mjs';
 import { evaluateNativeTallyVotes } from '../src/tally/native-tally-votes.mjs';
+import { starkVerifyCommandSignature } from '../src/stark-native-crypto.mjs';
 
 test('minimal native round fixture links process messages into tally', () => {
   const fixture = buildSmallNativeRoundFixture();
@@ -33,8 +34,19 @@ test('lifecycle native round fixture links deactivate, process messages, and tal
   const processMessages = evaluateNativeProcessMessagesBoundary(fixture.processMessages);
   const tally = evaluateNativeTallyVotes(fixture.tally);
 
-  assert.equal(fixture.chain.params.signupCount, 1);
+  assert.equal(fixture.chain.params.signupCount, 3);
+  assert.equal(fixture.chain.params.newKeyStateIndex, 3);
   assert.equal(fixture.chain.params.messageBatchSize, 3);
+  assert.deepEqual(fixture.chain.flow, [
+    'signup',
+    'deactivate',
+    'processDeactivate',
+    'addNewKey',
+    'vote',
+    'processMessages',
+    'tally',
+  ]);
+  assert.equal(fixture.addNewKey.deactivateRoot, deactivate.publicFields.newDeactivateRoot.toString());
   assert.equal(
     deactivate.publicFields.newDeactivateCommitment,
     processMessages.publicFields.deactivateCommitment,
@@ -45,4 +57,22 @@ test('lifecycle native round fixture links deactivate, process messages, and tal
   );
   assert.equal(fixture.chain.links.deactivateToProcessMessages, true);
   assert.equal(fixture.chain.links.processMessagesToTallyState, true);
+});
+
+test('lifecycle vote commands are signed by the current rotating MACI key', () => {
+  const fixture = buildSmallNativeLifecycleRoundFixture();
+
+  for (const [index, witness] of fixture.processMessages.processOneWitnesses.entries()) {
+    const signatureValid = starkVerifyCommandSignature(
+      [witness.stateLeaf[0], witness.stateLeaf[1]],
+      { rPoint: witness.cmdSigR8, s: witness.cmdSigS },
+      witness.packedCommand,
+      witness.cmdSalt,
+    );
+    assert.equal(
+      signatureValid.toString(),
+      witness.isSignatureValid,
+      `message ${index} signature validity should match witness`,
+    );
+  }
 });

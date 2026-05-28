@@ -110,6 +110,7 @@ export class AmaciStarkFactBindingModel {
 export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
   constructor({
     stateCommitment,
+    deactivateRoot,
     deactivateCommitment,
     currentTallyCommitment = 0n,
     currentStateRoot,
@@ -117,15 +118,18 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
     keysAdded = 0n,
     messageBatchesProcessed = 0n,
     deactivateBatchesProcessed = 0n,
+    strictLifecycle = false,
     ...base
   }) {
     super(base);
     this.stateCommitment = parseOptional(stateCommitment, 'stateCommitment');
+    this.deactivateRoot = parseOptional(deactivateRoot, 'deactivateRoot');
     this.deactivateCommitment = parseOptional(deactivateCommitment, 'deactivateCommitment');
     this.currentTallyCommitment = parseBigInt(currentTallyCommitment, 'currentTallyCommitment');
     this.currentStateRoot = parseOptional(currentStateRoot, 'currentStateRoot');
     this.keysAdded = parseBigInt(keysAdded, 'keysAdded');
     this.messageBatchesProcessed = parseBigInt(messageBatchesProcessed, 'messageBatchesProcessed');
+    this.strictLifecycle = strictLifecycle;
     this.deactivateBatchesProcessed = parseBigInt(
       deactivateBatchesProcessed,
       'deactivateBatchesProcessed',
@@ -136,6 +140,9 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
   }
 
   submitTally({ fields, params, factHash, verificationHash }) {
+    if (this.strictLifecycle && this.messageBatchesProcessed === 0n) {
+      throw new Error('MESSAGES_NOT_PROCESSED');
+    }
     if (
       this.stateCommitment !== undefined &&
       parseBigInt(fields.stateCommitment, 'stateCommitment') !== this.stateCommitment
@@ -154,6 +161,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
   }
 
   submitProcessMessages({ fields, params, factHash, verificationHash }) {
+    if (this.strictLifecycle && this.keysAdded === 0n) {
+      throw new Error('KEY_NOT_ADDED');
+    }
+    if (this.strictLifecycle && this.deactivateBatchesProcessed === 0n) {
+      throw new Error('DEACTIVATE_NOT_PROCESSED');
+    }
     if (
       this.stateCommitment !== undefined &&
       parseBigInt(fields.currentStateCommitment, 'currentStateCommitment') !==
@@ -182,6 +195,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
   }
 
   submitAddNewKey({ fields, params, factHash, verificationHash }) {
+    if (this.strictLifecycle && this.deactivateBatchesProcessed === 0n) {
+      throw new Error('DEACTIVATE_NOT_PROCESSED');
+    }
+    if (this.strictLifecycle && this.messageBatchesProcessed !== 0n) {
+      throw new Error('MESSAGES_ALREADY_PROCESSED');
+    }
     const nullifier = parseBigInt(fields.nullifier, 'nullifier').toString();
     if (this.seenNullifiers.has(nullifier)) {
       throw new Error('NULLIFIER_ALREADY_USED');
@@ -193,6 +212,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
         this.stateCommitment
     ) {
       throw new Error('CURRENT_STATE_COMMITMENT_MISMATCH');
+    }
+    if (
+      this.deactivateRoot !== undefined &&
+      parseBigInt(fields.deactivateRootHash, 'deactivateRootHash') !== this.deactivateRoot
+    ) {
+      throw new Error('DEACTIVATE_ROOT_MISMATCH');
     }
     const fact = this.assertValidFact('addNewKey', fields, params, { factHash, verificationHash });
     this.seenNullifiers.add(nullifier);
@@ -209,6 +234,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
   }
 
   submitProcessDeactivate({ fields, params, factHash, verificationHash }) {
+    if (this.strictLifecycle && this.keysAdded !== 0n) {
+      throw new Error('KEYS_ALREADY_ADDED');
+    }
+    if (this.strictLifecycle && this.messageBatchesProcessed !== 0n) {
+      throw new Error('MESSAGES_ALREADY_PROCESSED');
+    }
     if (
       this.deactivateCommitment !== undefined &&
       parseBigInt(fields.currentDeactivateCommitment, 'currentDeactivateCommitment') !==
@@ -234,10 +265,12 @@ export class AmaciStateWrapperModel extends AmaciStarkFactBindingModel {
       factHash,
       verificationHash,
     });
+    this.deactivateRoot = parseBigInt(fields.newDeactivateRoot, 'newDeactivateRoot');
     this.deactivateCommitment = parseBigInt(fields.newDeactivateCommitment, 'newDeactivateCommitment');
     this.deactivateBatchesProcessed += 1n;
     return {
       factHash: fact.factHash,
+      deactivateRoot: this.deactivateRoot,
       deactivateCommitment: this.deactivateCommitment,
       deactivateBatchesProcessed: this.deactivateBatchesProcessed,
     };

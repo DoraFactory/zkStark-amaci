@@ -2,8 +2,8 @@ use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
 use crate::native_stark_crypto::{
     STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN, STARK_NATIVE_DEACTIVATE_STREAM_DOMAIN,
-    assert_stark_point_equals, assert_stark_poseidon_decrypt7,
-    stark_elgamal_decrypt_point_is_odd, stark_scalar_mul, stark_verify_command_signature,
+    assert_stark_point_equals, assert_stark_poseidon_decrypt7, stark_elgamal_decrypt_point_is_odd,
+    stark_scalar_mul, stark_verify_command_signature,
 };
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
@@ -29,10 +29,11 @@ const NATIVE_DEACTIVATE_COMMAND_PLAINTEXT_DOMAIN: felt252 =
     0x414d4143495f44454143545f434d445f504c41494e;
 const NATIVE_DEACTIVATE_COORD_KEY_BINDING_DOMAIN: felt252 =
     0x414d4143495f44454143545f434f4f52445f42494e44;
-const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 =
-    0x414d4143495f44454143545f534841524544;
+const NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN: felt252 = 0x414d4143495f44454143545f534841524544;
 const NATIVE_DEACTIVATE_DECRYPT_BINDING_DOMAIN: felt252 =
     0x414d4143495f44454143545f4445435f42494e44;
+const ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN: felt252 =
+    0x414d4143495f4144445f4b45595f44454143545f4c454146;
 const PROCESS_DEACTIVATE_MESSAGE_BATCH_SIZE: felt252 = 3;
 const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 const U128_TWO_POW_32: u128 = 0x100000000;
@@ -404,13 +405,7 @@ fn native_hash_values_6(
 }
 
 fn native_hash_values_7(
-    v0: felt252,
-    v1: felt252,
-    v2: felt252,
-    v3: felt252,
-    v4: felt252,
-    v5: felt252,
-    v6: felt252,
+    v0: felt252, v1: felt252, v2: felt252, v3: felt252, v4: felt252, v5: felt252, v6: felt252,
 ) -> felt252 {
     let mut state = PoseidonTrait::new();
     state = state.update(v0);
@@ -504,10 +499,7 @@ fn native_deactivate_coord_key_binding_hash(
 }
 
 fn native_deactivate_shared_key_binding_hash(
-    ecdh_kind: felt252,
-    coord_priv_key_hash: felt252,
-    base_hash: felt252,
-    shared_key_hash: felt252,
+    ecdh_kind: felt252, coord_priv_key_hash: felt252, base_hash: felt252, shared_key_hash: felt252,
 ) -> felt252 {
     native_hash_values_5(
         NATIVE_DEACTIVATE_SHARED_KEY_DOMAIN,
@@ -730,12 +722,7 @@ fn native_quinary_root_depth_2(
 }
 
 fn native_quinary_root_depth_4(
-    leaf: felt252,
-    path_0: U256x4,
-    path_1: U256x4,
-    path_2: U256x4,
-    path_3: U256x4,
-    index: u256,
+    leaf: felt252, path_0: U256x4, path_1: U256x4, path_2: U256x4, path_3: U256x4, index: u256,
 ) -> felt252 {
     let level_0_index = index.low % 5;
     let level_1_index = (index.low / 5) % 5;
@@ -748,12 +735,7 @@ fn native_quinary_root_depth_4(
 }
 
 fn assert_valid_deactivate_message_index(message_index: felt252) {
-    assert(
-        message_index == 0
-            || message_index == 1
-            || message_index == 2,
-        'BAD_DEACT_MSG_INDEX',
-    );
+    assert(message_index == 0 || message_index == 1 || message_index == 2, 'BAD_DEACT_MSG_INDEX');
 }
 
 fn assert_valid_deactivate_ecdh_kind(ecdh_kind: felt252) {
@@ -776,7 +758,8 @@ fn assert_bool_felt(value: felt252) {
 }
 
 fn verify_native_process_deactivate_coord_key(
-    fields: NativeProcessDeactivateCoordKeyPublicFields, witness: NativeProcessDeactivateCoordKeyWitness,
+    fields: NativeProcessDeactivateCoordKeyPublicFields,
+    witness: NativeProcessDeactivateCoordKeyWitness,
 ) {
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(
@@ -786,7 +769,8 @@ fn verify_native_process_deactivate_coord_key(
     assert(
         native_deactivate_coord_key_binding_hash(
             fields.coord_pub_key_hash, fields.coord_priv_key_hash,
-        ) == fields.coord_key_binding_hash,
+        ) == fields
+            .coord_key_binding_hash,
         'N_COORD_BIND',
     );
 }
@@ -804,17 +788,16 @@ fn verify_native_process_deactivate_ecdh(
     assert(native_hash_u256x2(witness.shared_key) == fields.shared_key_hash, 'N_SHARED_KEY');
     assert(
         native_deactivate_shared_key_binding_hash(
-            fields.ecdh_kind,
-            fields.coord_priv_key_hash,
-            fields.base_hash,
-            fields.shared_key_hash,
-        ) == fields.shared_key_binding_hash,
+            fields.ecdh_kind, fields.coord_priv_key_hash, fields.base_hash, fields.shared_key_hash,
+        ) == fields
+            .shared_key_binding_hash,
         'N_SHARED_BIND',
     );
 }
 
 fn verify_native_process_deactivate_signature(
-    fields: NativeProcessDeactivateSignaturePublicFields, witness: NativeProcessDeactivateSignatureWitness,
+    fields: NativeProcessDeactivateSignaturePublicFields,
+    witness: NativeProcessDeactivateSignatureWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     assert_bool_felt(fields.signature_valid);
@@ -830,13 +813,15 @@ fn verify_native_process_deactivate_signature(
             fields.cmd_sig_s_hash,
             witness.cmd_salt,
             fields.signature_valid,
-        ) == fields.command_auth_hash,
+        ) == fields
+            .command_auth_hash,
         'N_CMD_AUTH',
     );
 }
 
 fn verify_native_process_deactivate_decrypt(
-    fields: NativeProcessDeactivateDecryptPublicFields, witness: NativeProcessDeactivateDecryptWitness,
+    fields: NativeProcessDeactivateDecryptPublicFields,
+    witness: NativeProcessDeactivateDecryptWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     assert_valid_deactivate_decrypt_kind(fields.decrypt_kind);
@@ -854,7 +839,8 @@ fn verify_native_process_deactivate_decrypt(
             fields.c1_hash,
             fields.c2_hash,
             fields.decrypt_is_odd,
-        ) == fields.decrypt_binding_hash,
+        ) == fields
+            .decrypt_binding_hash,
         'N_DECRYPT_BIND',
     );
 }
@@ -936,7 +922,8 @@ fn build_native_process_deactivate_signature_public_output(
 
 #[executable]
 pub fn process_deactivate_signature_native_main(
-    fields: NativeProcessDeactivateSignaturePublicFields, witness: NativeProcessDeactivateSignatureWitness,
+    fields: NativeProcessDeactivateSignaturePublicFields,
+    witness: NativeProcessDeactivateSignatureWitness,
 ) -> NativeProcessDeactivateSignaturePublicOutput {
     verify_native_process_deactivate_signature(fields, witness);
     build_native_process_deactivate_signature_public_output(fields)
@@ -965,14 +952,16 @@ fn build_native_process_deactivate_decrypt_public_output(
 
 #[executable]
 pub fn process_deactivate_decrypt_native_main(
-    fields: NativeProcessDeactivateDecryptPublicFields, witness: NativeProcessDeactivateDecryptWitness,
+    fields: NativeProcessDeactivateDecryptPublicFields,
+    witness: NativeProcessDeactivateDecryptWitness,
 ) -> NativeProcessDeactivateDecryptPublicOutput {
     verify_native_process_deactivate_decrypt(fields, witness);
     build_native_process_deactivate_decrypt_public_output(fields)
 }
 
 fn verify_native_process_deactivate_step_core(
-    fields: NativeProcessDeactivateStepCorePublicFields, witness: NativeProcessDeactivateStepCoreWitness,
+    fields: NativeProcessDeactivateStepCorePublicFields,
+    witness: NativeProcessDeactivateStepCoreWitness,
 ) {
     assert_valid_deactivate_message_index(fields.message_index);
     let deactivate_index = small_felt_to_u256(fields.deactivate_index);
@@ -1007,16 +996,16 @@ fn verify_native_process_deactivate_step_core(
     );
     assert(
         native_deactivate_shared_key_binding_hash(
-            0,
-            fields.coord_priv_key_hash,
-            fields.enc_pub_key_hash,
-            fields.command_shared_key_hash,
-        ) == fields.command_shared_key_binding_hash,
+            0, fields.coord_priv_key_hash, fields.enc_pub_key_hash, fields.command_shared_key_hash,
+        ) == fields
+            .command_shared_key_binding_hash,
         'N_CMD_BIND',
     );
     assert(
-        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
-            == fields.signature_pub_key_hash,
+        native_hash_u256x2(
+            U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 },
+        ) == fields
+            .signature_pub_key_hash,
         'N_SIG_PUB',
     );
     assert(native_hash_u256x2(witness.cmd_sig_r8) == fields.signature_r8_hash, 'N_R8');
@@ -1043,7 +1032,8 @@ fn verify_native_process_deactivate_step_core(
             fields.cmd_sig_s_hash,
             witness.decrypted_command.v3,
             fields.signature_valid,
-        ) == fields.command_auth_hash,
+        ) == fields
+            .command_auth_hash,
         'N_CMD_AUTH',
     );
     assert(
@@ -1055,7 +1045,8 @@ fn verify_native_process_deactivate_step_core(
             fields.signature_r8_hash,
             fields.cmd_sig_s_hash,
             fields.command_auth_hash,
-        ) == fields.command_plaintext_binding_hash,
+        ) == fields
+            .command_plaintext_binding_hash,
         'N_CMD_PLAIN',
     );
     assert_stark_poseidon_decrypt7(
@@ -1084,13 +1075,17 @@ fn verify_native_process_deactivate_step_core(
     assert(witness.signature_valid.high == 0, 'SIG_BOOL_HIGH');
     assert(felt_from_u128(witness.signature_valid.low) == fields.signature_valid, 'SIG_VALID');
     assert(
-        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v5, v1: witness.state_leaf.v6 })
-            == fields.current_state_ciphertext_c1_hash,
+        native_hash_u256x2(
+            U256x2 { v0: witness.state_leaf.v5, v1: witness.state_leaf.v6 },
+        ) == fields
+            .current_state_ciphertext_c1_hash,
         'N_CUR_C1',
     );
     assert(
-        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v7, v1: witness.state_leaf.v8 })
-            == fields.current_state_ciphertext_c2_hash,
+        native_hash_u256x2(
+            U256x2 { v0: witness.state_leaf.v7, v1: witness.state_leaf.v8 },
+        ) == fields
+            .current_state_ciphertext_c2_hash,
         'N_CUR_C2',
     );
     let current_decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
@@ -1115,20 +1110,25 @@ fn verify_native_process_deactivate_step_core(
             fields.current_state_ciphertext_c1_hash,
             fields.current_state_ciphertext_c2_hash,
             fields.current_decrypt_is_odd,
-        ) == fields.current_decrypt_binding_hash,
+        ) == fields
+            .current_decrypt_binding_hash,
         'N_CUR_DEC_BIND',
     );
     assert(native_hash_u256x2(witness.c1) == fields.new_state_ciphertext_c1_hash, 'N_NEW_C1');
     assert(native_hash_u256x2(witness.c2) == fields.new_state_ciphertext_c2_hash, 'N_NEW_C2');
     let new_decrypt_is_odd = stark_elgamal_decrypt_point_is_odd(
-        witness.coord_priv_key, witness.c1.v0, witness.c1.v1, witness.c2.v0, witness.c2.v1,
-        witness.new_decrypted_point.v0, witness.new_decrypted_point.v1,
+        witness.coord_priv_key,
+        witness.c1.v0,
+        witness.c1.v1,
+        witness.c2.v0,
+        witness.c2.v1,
+        witness.new_decrypted_point.v0,
+        witness.new_decrypted_point.v1,
     );
     assert(new_decrypt_is_odd == fields.new_decrypt_is_odd, 'N_NEW_DEC_ODD');
     assert(witness.new_decrypt_is_odd.high == 0, 'NEW_DEC_HIGH');
     assert(
-        felt_from_u128(witness.new_decrypt_is_odd.low) == fields.new_decrypt_is_odd,
-        'NEW_DEC_ODD',
+        felt_from_u128(witness.new_decrypt_is_odd.low) == fields.new_decrypt_is_odd, 'NEW_DEC_ODD',
     );
     assert(
         native_deactivate_decrypt_binding_hash(
@@ -1137,12 +1137,15 @@ fn verify_native_process_deactivate_step_core(
             fields.new_state_ciphertext_c1_hash,
             fields.new_state_ciphertext_c2_hash,
             fields.new_decrypt_is_odd,
-        ) == fields.new_decrypt_binding_hash,
+        ) == fields
+            .new_decrypt_binding_hash,
         'N_NEW_DEC_BIND',
     );
     assert(
-        native_hash_u256x2(U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 })
-            == fields.deactivate_pub_key_hash,
+        native_hash_u256x2(
+            U256x2 { v0: witness.state_leaf.v0, v1: witness.state_leaf.v1 },
+        ) == fields
+            .deactivate_pub_key_hash,
         'N_DEACT_PUB',
     );
     let (deactivate_shared_key_x, deactivate_shared_key_y) = stark_scalar_mul(
@@ -1166,7 +1169,8 @@ fn verify_native_process_deactivate_step_core(
             fields.coord_priv_key_hash,
             fields.deactivate_pub_key_hash,
             fields.deactivate_shared_key_hash,
-        ) == fields.deactivate_shared_key_binding_hash,
+        ) == fields
+            .deactivate_shared_key_binding_hash,
         'N_DEACT_BIND',
     );
 
@@ -1212,7 +1216,9 @@ fn verify_native_process_deactivate_step_core(
         state_index,
     );
     assert(current_active_state_root == fields.current_active_state_root_hash, 'N_CUR_ACTIVE');
-    let active_state_leaf = select_u256(valid, witness.current_active_state, witness.new_active_state);
+    let active_state_leaf = select_u256(
+        valid, witness.current_active_state, witness.new_active_state,
+    );
     let new_active_state_root = native_quinary_root_depth_2(
         felt_from_u256(active_state_leaf),
         witness.active_state_leaf_path_0,
@@ -1221,11 +1227,10 @@ fn verify_native_process_deactivate_step_core(
     );
     assert(new_active_state_root == fields.new_active_state_root_hash, 'N_NEW_ACTIVE');
 
-    let deactivate_leaf = native_hash5_values(
-        felt_from_u256(witness.c1.v0),
-        felt_from_u256(witness.c1.v1),
-        felt_from_u256(witness.c2.v0),
-        felt_from_u256(witness.c2.v1),
+    let deactivate_leaf = native_hash_values_4(
+        ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+        fields.new_state_ciphertext_c1_hash,
+        fields.new_state_ciphertext_c2_hash,
         fields.deactivate_shared_key_hash,
     );
     let current_deactivate_root = native_quinary_root_depth_4(
@@ -1256,14 +1261,10 @@ fn verify_native_process_deactivate_step_core(
         current_active_state_root, current_deactivate_root,
     );
     assert(
-        current_deactivate_commitment == fields.current_deactivate_commitment_hash,
-        'N_CUR_COMMIT',
+        current_deactivate_commitment == fields.current_deactivate_commitment_hash, 'N_CUR_COMMIT',
     );
     let new_deactivate_commitment = native_commitment(new_active_state_root, new_deactivate_root);
-    assert(
-        new_deactivate_commitment == fields.new_deactivate_commitment_hash,
-        'N_NEW_COMMIT',
-    );
+    assert(new_deactivate_commitment == fields.new_deactivate_commitment_hash, 'N_NEW_COMMIT');
 }
 
 fn build_native_process_deactivate_step_core_public_output(
@@ -1316,7 +1317,8 @@ fn build_native_process_deactivate_step_core_public_output(
 
 #[executable]
 pub fn process_deactivate_step_core_native_main(
-    fields: NativeProcessDeactivateStepCorePublicFields, witness: NativeProcessDeactivateStepCoreWitness,
+    fields: NativeProcessDeactivateStepCorePublicFields,
+    witness: NativeProcessDeactivateStepCoreWitness,
 ) -> NativeProcessDeactivateStepCorePublicOutput {
     verify_native_process_deactivate_step_core(fields, witness);
     build_native_process_deactivate_step_core_public_output(fields)
