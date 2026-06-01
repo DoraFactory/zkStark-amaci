@@ -4,7 +4,15 @@ pub trait IMockAmaciRound<TContractState> {
     fn is_program_hash_allowed(self: @TContractState, program_hash: felt252) -> bool;
     fn get_state_commitment(self: @TContractState) -> felt252;
     fn get_deactivate_commitment(self: @TContractState) -> felt252;
+    fn get_deactivate_root(self: @TContractState) -> felt252;
     fn get_tally_commitment(self: @TContractState) -> felt252;
+    fn get_num_signups(self: @TContractState) -> u32;
+    fn get_message_chain_length(self: @TContractState) -> u32;
+    fn get_deactivate_message_chain_length(self: @TContractState) -> u32;
+    fn get_processed_message_count(self: @TContractState) -> u32;
+    fn get_processed_deactivate_message_count(self: @TContractState) -> u32;
+    fn get_message_hash(self: @TContractState, index: u32) -> felt252;
+    fn get_deactivate_message_hash(self: @TContractState, index: u32) -> felt252;
     fn get_keys_added(self: @TContractState) -> felt252;
     fn get_message_batches_processed(self: @TContractState) -> felt252;
     fn get_deactivate_batches_processed(self: @TContractState) -> felt252;
@@ -36,6 +44,24 @@ pub trait IMockAmaciRound<TContractState> {
         program_hash: felt252,
         public_output_hash: felt252,
         fact_hash: felt252,
+    );
+    fn sign_up(
+        ref self: TContractState,
+        pub_key_x: felt252,
+        pub_key_y: felt252,
+        voice_credit_balance: felt252,
+    );
+    fn publish_deactivate_message(
+        ref self: TContractState,
+        message: Span<felt252>,
+        enc_pub_key_x: felt252,
+        enc_pub_key_y: felt252,
+    );
+    fn publish_message(
+        ref self: TContractState,
+        message: Span<felt252>,
+        enc_pub_key_x: felt252,
+        enc_pub_key_y: felt252,
     );
     fn submit_add_new_key_fact(
         ref self: TContractState,
@@ -171,6 +197,8 @@ pub mod MockAmaciRound {
     const ADD_NEW_KEY_NATIVE_OUTPUT_LEN: usize = 19;
     const PROCESS_MESSAGES_NATIVE_OUTPUT_LEN: usize = 16;
     const PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN: usize = 16;
+    const MESSAGE_BATCH_SIZE: u32 = 3;
+    const MAX_SIGNUPS: u32 = 25;
 
     #[storage]
     struct Storage {
@@ -186,9 +214,20 @@ pub mod MockAmaciRound {
         tally_program_hash: felt252,
         allowed_program_hashes: Map<felt252, bool>,
         used_key_nullifiers: Map<felt252, bool>,
+        registered_pub_keys: Map<felt252, bool>,
+        used_enc_pub_keys: Map<felt252, bool>,
+        used_deactivate_enc_pub_keys: Map<felt252, bool>,
         state_commitment: felt252,
+        deactivate_root: felt252,
         deactivate_commitment: felt252,
         tally_commitment: felt252,
+        num_signups: u32,
+        message_hashes: Map<u32, felt252>,
+        deactivate_message_hashes: Map<u32, felt252>,
+        message_chain_length: u32,
+        deactivate_message_chain_length: u32,
+        processed_message_count: u32,
+        processed_deactivate_message_count: u32,
         keys_added: felt252,
         message_batches_processed: felt252,
         deactivate_batches_processed: felt252,
@@ -201,6 +240,9 @@ pub mod MockAmaciRound {
     enum Event {
         ProgramHashAllowedSet: ProgramHashAllowedSet,
         OperationFactAccepted: OperationFactAccepted,
+        SignUp: SignUp,
+        MessagePublished: MessagePublished,
+        DeactivateMessagePublished: DeactivateMessagePublished,
         AddNewKeyFactAccepted: AddNewKeyFactAccepted,
         ProcessMessagesFactAccepted: ProcessMessagesFactAccepted,
         ProcessDeactivateFactAccepted: ProcessDeactivateFactAccepted,
@@ -220,6 +262,27 @@ pub mod MockAmaciRound {
         public_output_hash: felt252,
         fact_hash: felt252,
         verification_hash: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SignUp {
+        pub_key_hash: felt252,
+        state_index: u32,
+        voice_credit_balance: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct MessagePublished {
+        chain_index: u32,
+        message_hash: felt252,
+        enc_pub_key_hash: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct DeactivateMessagePublished {
+        chain_index: u32,
+        message_hash: felt252,
+        enc_pub_key_hash: felt252,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -293,8 +356,16 @@ pub mod MockAmaciRound {
         self.allowed_program_hashes.write(process_deactivate_program_hash, true);
         self.allowed_program_hashes.write(tally_program_hash, true);
         self.state_commitment.write(initial_state_commitment);
+        self.deactivate_root.write(0);
         self.deactivate_commitment.write(initial_deactivate_commitment);
         self.tally_commitment.write(initial_tally_commitment);
+        self.num_signups.write(0);
+        self.message_hashes.write(0, 0);
+        self.deactivate_message_hashes.write(0, 0);
+        self.message_chain_length.write(0);
+        self.deactivate_message_chain_length.write(0);
+        self.processed_message_count.write(0);
+        self.processed_deactivate_message_count.write(0);
         self.keys_added.write(0);
         self.message_batches_processed.write(0);
         self.deactivate_batches_processed.write(0);
@@ -322,8 +393,40 @@ pub mod MockAmaciRound {
             self.deactivate_commitment.read()
         }
 
+        fn get_deactivate_root(self: @ContractState) -> felt252 {
+            self.deactivate_root.read()
+        }
+
         fn get_tally_commitment(self: @ContractState) -> felt252 {
             self.tally_commitment.read()
+        }
+
+        fn get_num_signups(self: @ContractState) -> u32 {
+            self.num_signups.read()
+        }
+
+        fn get_message_chain_length(self: @ContractState) -> u32 {
+            self.message_chain_length.read()
+        }
+
+        fn get_deactivate_message_chain_length(self: @ContractState) -> u32 {
+            self.deactivate_message_chain_length.read()
+        }
+
+        fn get_processed_message_count(self: @ContractState) -> u32 {
+            self.processed_message_count.read()
+        }
+
+        fn get_processed_deactivate_message_count(self: @ContractState) -> u32 {
+            self.processed_deactivate_message_count.read()
+        }
+
+        fn get_message_hash(self: @ContractState, index: u32) -> felt252 {
+            self.message_hashes.read(index)
+        }
+
+        fn get_deactivate_message_hash(self: @ContractState, index: u32) -> felt252 {
+            self.deactivate_message_hashes.read(index)
         }
 
         fn get_keys_added(self: @ContractState) -> felt252 {
@@ -410,6 +513,44 @@ pub mod MockAmaciRound {
                 );
         }
 
+        fn sign_up(
+            ref self: ContractState,
+            pub_key_x: felt252,
+            pub_key_y: felt252,
+            voice_credit_balance: felt252,
+        ) {
+            assert_can_sign_up(@self);
+            assert(voice_credit_balance != 0, 'VC_ZERO');
+            let pub_key_hash = poseidon_pair_hash(pub_key_x, pub_key_y);
+            assert(pub_key_hash != 0, 'PUB_KEY_ZERO');
+            assert(self.registered_pub_keys.read(pub_key_hash) == false, 'PUB_KEY_REGISTERED');
+            let state_index = self.num_signups.read();
+            assert(state_index < MAX_SIGNUPS, 'STATE_TREE_FULL');
+            self.registered_pub_keys.write(pub_key_hash, true);
+            self.num_signups.write(state_index + 1);
+            self.emit(SignUp { pub_key_hash, state_index, voice_credit_balance });
+        }
+
+        fn publish_deactivate_message(
+            ref self: ContractState,
+            message: Span<felt252>,
+            enc_pub_key_x: felt252,
+            enc_pub_key_y: felt252,
+        ) {
+            assert_can_publish_deactivate(@self);
+            append_message(ref self, message, enc_pub_key_x, enc_pub_key_y, true);
+        }
+
+        fn publish_message(
+            ref self: ContractState,
+            message: Span<felt252>,
+            enc_pub_key_x: felt252,
+            enc_pub_key_y: felt252,
+        ) {
+            assert_can_publish_vote(@self);
+            append_message(ref self, message, enc_pub_key_x, enc_pub_key_y, false);
+        }
+
         fn submit_add_new_key_fact(
             ref self: ContractState,
             key_nullifier: felt252,
@@ -417,6 +558,7 @@ pub mod MockAmaciRound {
             public_output_hash: felt252,
             fact_hash: felt252,
         ) {
+            assert_can_add_new_key(@self);
             assert(self.used_key_nullifiers.read(key_nullifier) == false, 'KEY_NULLIFIER_USED');
             let verification_hash = validate_fact(
                 @self, self.add_new_key_program_hash.read(), public_output_hash, fact_hash,
@@ -445,6 +587,7 @@ pub mod MockAmaciRound {
             metadata_output: Span<felt252>,
             fact_hash: felt252,
         ) {
+            assert_can_add_new_key(@self);
             assert(self.used_key_nullifiers.read(key_nullifier) == false, 'KEY_NULLIFIER_USED');
             let verification_hash = validate_atlantic_metadata_fact(
                 @self,
@@ -458,6 +601,10 @@ pub mod MockAmaciRound {
             );
             assert_native_output_header_at(
                 metadata_output, output_start, ADD_NEW_KEY_NATIVE_CIRCUIT_ID,
+            );
+            assert(
+                *metadata_output.at(output_start + 6) == self.deactivate_root.read(),
+                'DEACT_ROOT_BAD',
             );
             assert(*metadata_output.at(output_start + 8) == key_nullifier, 'KEY_NULLIFIER_BAD');
             let public_output_hash = poseidon_hash_output_at(
@@ -487,6 +634,7 @@ pub mod MockAmaciRound {
             public_output_hash: felt252,
             fact_hash: felt252,
         ) {
+            assert_can_process_messages(@self);
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             assert(
                 self.deactivate_commitment.read() == current_deactivate_commitment,
@@ -496,6 +644,7 @@ pub mod MockAmaciRound {
                 @self, self.process_messages_program_hash.read(), public_output_hash, fact_hash,
             );
             self.state_commitment.write(new_state_commitment);
+            self.processed_message_count.write(self.message_chain_length.read());
             self.message_batches_processed.write(self.message_batches_processed.read() + 1);
             self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
             self
@@ -520,6 +669,7 @@ pub mod MockAmaciRound {
             metadata_output: Span<felt252>,
             fact_hash: felt252,
         ) {
+            assert_can_process_messages(@self);
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             assert(
                 self.deactivate_commitment.read() == current_deactivate_commitment,
@@ -537,8 +687,17 @@ pub mod MockAmaciRound {
                 PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
                 PROCESS_MESSAGES_NATIVE_OUTPUT_LEN,
             );
+            let (batch_start, batch_end) = current_message_batch(@self);
             assert_native_output_header_at(
                 metadata_output, output_start, PROCESS_MESSAGES_NATIVE_CIRCUIT_ID,
+            );
+            assert(
+                *metadata_output.at(output_start + 9) == self.message_hashes.read(batch_start),
+                'MSG_START_BAD',
+            );
+            assert(
+                *metadata_output.at(output_start + 10) == self.message_hashes.read(batch_end),
+                'MSG_END_BAD',
             );
             assert(
                 *metadata_output.at(output_start + 11) == current_state_commitment,
@@ -553,6 +712,7 @@ pub mod MockAmaciRound {
                 metadata_output, output_start, PROCESS_MESSAGES_NATIVE_OUTPUT_LEN,
             );
             self.state_commitment.write(new_state_commitment);
+            self.processed_message_count.write(batch_end);
             self.message_batches_processed.write(self.message_batches_processed.read() + 1);
             self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
             self
@@ -576,6 +736,7 @@ pub mod MockAmaciRound {
             public_output_hash: felt252,
             fact_hash: felt252,
         ) {
+            assert_can_process_deactivate(@self);
             assert(
                 self.deactivate_commitment.read() == current_deactivate_commitment,
                 'DEACT_MISMATCH',
@@ -585,6 +746,9 @@ pub mod MockAmaciRound {
                 @self, self.process_deactivate_program_hash.read(), public_output_hash, fact_hash,
             );
             self.deactivate_commitment.write(new_deactivate_commitment);
+            self
+                .processed_deactivate_message_count
+                .write(self.deactivate_message_chain_length.read());
             self.deactivate_batches_processed.write(self.deactivate_batches_processed.read() + 1);
             self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
             self
@@ -609,6 +773,7 @@ pub mod MockAmaciRound {
             metadata_output: Span<felt252>,
             fact_hash: felt252,
         ) {
+            assert_can_process_deactivate(@self);
             assert(
                 self.deactivate_commitment.read() == current_deactivate_commitment,
                 'DEACT_MISMATCH',
@@ -626,8 +791,23 @@ pub mod MockAmaciRound {
                 PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
                 PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN,
             );
+            let (batch_start, batch_end) = current_deactivate_batch(@self);
             assert_native_output_header_at(
                 metadata_output, output_start, PROCESS_DEACTIVATE_NATIVE_CIRCUIT_ID,
+            );
+            assert(
+                *metadata_output
+                    .at(output_start + 9) == self
+                    .deactivate_message_hashes
+                    .read(batch_start),
+                'DMSG_START_BAD',
+            );
+            assert(
+                *metadata_output
+                    .at(output_start + 10) == self
+                    .deactivate_message_hashes
+                    .read(batch_end),
+                'DMSG_END_BAD',
             );
             assert(
                 *metadata_output.at(output_start + 11) == current_deactivate_commitment,
@@ -640,7 +820,10 @@ pub mod MockAmaciRound {
             let public_output_hash = poseidon_hash_output_at(
                 metadata_output, output_start, PROCESS_DEACTIVATE_NATIVE_OUTPUT_LEN,
             );
+            let new_deactivate_root = *metadata_output.at(output_start + 7);
+            self.deactivate_root.write(new_deactivate_root);
             self.deactivate_commitment.write(new_deactivate_commitment);
+            self.processed_deactivate_message_count.write(batch_end);
             self.deactivate_batches_processed.write(self.deactivate_batches_processed.read() + 1);
             self.total_facts_accepted.write(self.total_facts_accepted.read() + 1);
             self
@@ -689,7 +872,7 @@ pub mod MockAmaciRound {
             public_output_hash: felt252,
             fact_hash: felt252,
         ) {
-            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert_can_tally(@self);
             assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             let verification_hash = validate_fact(
@@ -719,7 +902,7 @@ pub mod MockAmaciRound {
             child_output: Span<felt252>,
             fact_hash: felt252,
         ) {
-            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert_can_tally(@self);
             assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             let expected_fact_hash = plain_fact_hash_for_output(
@@ -747,7 +930,7 @@ pub mod MockAmaciRound {
             child_output: Span<felt252>,
             fact_hash: felt252,
         ) {
-            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert_can_tally(@self);
             assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             let expected_fact_hash = bootloaded_fact_hash_for_output(
@@ -776,7 +959,7 @@ pub mod MockAmaciRound {
             child_output: Span<felt252>,
             fact_hash: felt252,
         ) {
-            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert_can_tally(@self);
             assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             let expected_fact_hash = wrapped_bootloaded_fact_hash_for_output(
@@ -807,7 +990,7 @@ pub mod MockAmaciRound {
             metadata_output: Span<felt252>,
             fact_hash: felt252,
         ) {
-            assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+            assert_can_tally(@self);
             assert(self.tally_commitment.read() == current_tally_commitment, 'TALLY_MISMATCH');
             assert(self.state_commitment.read() == current_state_commitment, 'STATE_MISMATCH');
             assert(metadata_output.len() > 4, 'METADATA_OUTPUT_SHORT');
@@ -947,6 +1130,139 @@ pub mod MockAmaciRound {
             );
     }
 
+    fn assert_can_sign_up(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.deactivate_message_chain_length.read() == 0, 'DEACT_STARTED');
+        assert(self.keys_added.read() == 0, 'KEYS_ALREADY_ADDED');
+        assert(self.message_chain_length.read() == 0, 'MSG_STARTED');
+    }
+
+    fn assert_can_publish_deactivate(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.num_signups.read() != 0, 'SIGNUP_REQUIRED');
+        assert(self.keys_added.read() == 0, 'KEYS_ALREADY_ADDED');
+        assert(self.message_chain_length.read() == 0, 'MSG_STARTED');
+        assert(self.deactivate_batches_processed.read() == 0, 'DEACT_ALREADY_PROCESSED');
+    }
+
+    fn assert_can_publish_vote(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.keys_added.read() != 0, 'KEY_REQUIRED');
+        assert(self.processed_message_count.read() == 0, 'MSG_ALREADY_PROCESSED');
+    }
+
+    fn assert_can_process_deactivate(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.num_signups.read() != 0, 'SIGNUP_REQUIRED');
+        assert(self.deactivate_message_chain_length.read() != 0, 'DMSG_REQUIRED');
+        assert(
+            self
+                .processed_deactivate_message_count
+                .read() < self
+                .deactivate_message_chain_length
+                .read(),
+            'ALL_DMSG_DONE',
+        );
+        assert(self.keys_added.read() == 0, 'KEYS_ALREADY_ADDED');
+        assert(self.message_batches_processed.read() == 0, 'MSG_ALREADY_PROCESSED');
+    }
+
+    fn assert_can_add_new_key(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.num_signups.read() != 0, 'SIGNUP_REQUIRED');
+        assert(self.deactivate_message_chain_length.read() != 0, 'DMSG_REQUIRED');
+        assert(self.deactivate_batches_processed.read() != 0, 'DEACT_REQUIRED');
+        assert(
+            self
+                .processed_deactivate_message_count
+                .read() == self
+                .deactivate_message_chain_length
+                .read(),
+            'DMSG_LEFT',
+        );
+        assert(self.message_batches_processed.read() == 0, 'MSG_ALREADY_PROCESSED');
+        assert(self.message_chain_length.read() == 0, 'MSG_STARTED');
+    }
+
+    fn assert_can_process_messages(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.deactivate_batches_processed.read() != 0, 'DEACT_REQUIRED');
+        assert(self.keys_added.read() != 0, 'KEY_REQUIRED');
+        assert(self.message_chain_length.read() != 0, 'MSG_REQUIRED');
+        assert(
+            self.processed_message_count.read() < self.message_chain_length.read(), 'ALL_MSG_DONE',
+        );
+    }
+
+    fn assert_can_tally(self: @ContractState) {
+        assert(self.tally_submitted.read() == false, 'TALLY_ALREADY_DONE');
+        assert(self.keys_added.read() != 0, 'KEY_REQUIRED');
+        assert(self.message_batches_processed.read() != 0, 'MSG_REQUIRED');
+        assert(self.processed_message_count.read() == self.message_chain_length.read(), 'MSG_LEFT');
+    }
+
+    fn append_message(
+        ref self: ContractState,
+        message: Span<felt252>,
+        enc_pub_key_x: felt252,
+        enc_pub_key_y: felt252,
+        is_deactivate: bool,
+    ) {
+        assert(message.len() == 10, 'BAD_MESSAGE_LEN');
+        let enc_pub_key_hash = poseidon_pair_hash(enc_pub_key_x, enc_pub_key_y);
+        assert(enc_pub_key_hash != 0, 'ENC_KEY_ZERO');
+        if is_deactivate {
+            assert(
+                self.used_deactivate_enc_pub_keys.read(enc_pub_key_hash) == false, 'ENC_KEY_USED',
+            );
+            self.used_deactivate_enc_pub_keys.write(enc_pub_key_hash, true);
+            let index = self.deactivate_message_chain_length.read();
+            let previous_hash = self.deactivate_message_hashes.read(index);
+            let new_hash = message_hash(message, enc_pub_key_x, enc_pub_key_y, previous_hash);
+            self.deactivate_message_hashes.write(index + 1, new_hash);
+            self.deactivate_message_chain_length.write(index + 1);
+            self
+                .emit(
+                    DeactivateMessagePublished {
+                        chain_index: index, message_hash: new_hash, enc_pub_key_hash,
+                    },
+                );
+        } else {
+            assert(self.used_enc_pub_keys.read(enc_pub_key_hash) == false, 'ENC_KEY_USED');
+            self.used_enc_pub_keys.write(enc_pub_key_hash, true);
+            let index = self.message_chain_length.read();
+            let previous_hash = self.message_hashes.read(index);
+            let new_hash = message_hash(message, enc_pub_key_x, enc_pub_key_y, previous_hash);
+            self.message_hashes.write(index + 1, new_hash);
+            self.message_chain_length.write(index + 1);
+            self
+                .emit(
+                    MessagePublished {
+                        chain_index: index, message_hash: new_hash, enc_pub_key_hash,
+                    },
+                );
+        }
+    }
+
+    fn current_message_batch(self: @ContractState) -> (u32, u32) {
+        current_batch(self.processed_message_count.read(), self.message_chain_length.read())
+    }
+
+    fn current_deactivate_batch(self: @ContractState) -> (u32, u32) {
+        current_batch(
+            self.processed_deactivate_message_count.read(),
+            self.deactivate_message_chain_length.read(),
+        )
+    }
+
+    fn current_batch(processed: u32, total: u32) -> (u32, u32) {
+        let mut end = processed + MESSAGE_BATCH_SIZE;
+        if end > total {
+            end = total;
+        }
+        (processed, end)
+    }
+
     fn assert_admin(self: @ContractState) {
         assert(get_caller_address() == self.admin.read(), 'ONLY_ADMIN');
     }
@@ -1069,6 +1385,21 @@ pub mod MockAmaciRound {
             output_hash = output_hash.update(*x);
         }
         output_hash.finalize()
+    }
+
+    fn message_hash(
+        message: Span<felt252>,
+        enc_pub_key_x: felt252,
+        enc_pub_key_y: felt252,
+        previous_hash: felt252,
+    ) -> felt252 {
+        let mut state = PoseidonTrait::new();
+        let mut i: usize = 0;
+        while i < 10 {
+            state = state.update(*message.at(i));
+            i += 1;
+        }
+        state.update(enc_pub_key_x).update(enc_pub_key_y).update(previous_hash).finalize()
     }
 
     fn poseidon_pair_hash(left: felt252, right: felt252) -> felt252 {

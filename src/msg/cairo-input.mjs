@@ -465,9 +465,6 @@ export function buildNativeCairoProcessMessageDecryptInput(rawInput, messageInde
 
 export function buildNativeCairoProcessMessageSignatureInput(rawInput, messageIndex, evaluated) {
   assertMessageIndex(messageIndex);
-  if (isEmptyMessage(rawInput, messageIndex)) {
-    throw new Error('cannot build native signature proof for an empty message slot');
-  }
   const result = evaluated ?? evaluateProcessMessagesStateful(rawInput);
   const transition = result.state.transitions[messageIndex];
   const pubKey = [transition.input.stateLeaf[0], transition.input.stateLeaf[1]];

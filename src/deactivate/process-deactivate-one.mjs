@@ -1,4 +1,8 @@
-import { SMALL_PROCESS_DEACTIVATE_PARAMS, TREE_ARITY } from '../constants.mjs';
+import {
+  ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+  SMALL_PROCESS_DEACTIVATE_PARAMS,
+  TREE_ARITY,
+} from '../constants.mjs';
 import { deepMapBigInt, parseBigInt } from '../encoding.mjs';
 import {
   STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN,
@@ -7,7 +11,7 @@ import {
   starkVerifyCommandSignature,
 } from '../stark-native-crypto.mjs';
 import {
-  nativeHash5,
+  nativeHashFelts,
   nativeHash10,
   nativeHashPoint,
   nativeQuinaryInclusionRoot,
@@ -169,7 +173,12 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
 
   const sharedKey = starkScalarMul(input.stateLeaf.slice(0, 2), input.coordPrivKey);
   const sharedKeyHash = nativeHashPoint(sharedKey, 'deactivateSharedKey');
-  const deactivateLeaf = nativeHash5([...input.c1, ...input.c2, sharedKeyHash], 'deactivateLeaf');
+  const c1Hash = nativeHashPoint(input.c1, 'deactivateC1');
+  const c2Hash = nativeHashPoint(input.c2, 'deactivateC2');
+  const deactivateLeaf = nativeHashFelts(
+    [ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN, c1Hash, c2Hash, sharedKeyHash],
+    'deactivateLeaf',
+  );
   const newDeactivateLeaf = input.isEmptyMsg === 1n ? 0n : deactivateLeaf;
   const newDeactivateRoot = nativeQuinaryInclusionRoot(
     newDeactivateLeaf,
@@ -194,6 +203,8 @@ export function evaluateProcessDeactivateOne(rawInput, params = SMALL_PROCESS_DE
       stateLeafHash,
       sharedKey,
       sharedKeyHash,
+      c1Hash,
+      c2Hash,
       deactivateLeaf,
       newActiveStateLeaf,
       newActiveStateRoot,

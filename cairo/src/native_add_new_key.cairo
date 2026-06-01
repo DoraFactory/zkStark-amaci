@@ -1,15 +1,15 @@
 use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
 use crate::native_stark_crypto::{
-    assert_stark_point_equals, assert_stark_point_valid, stark_elgamal_rerandomize, stark_scalar_mul,
+    assert_stark_point_equals, assert_stark_point_valid, stark_elgamal_rerandomize,
+    stark_scalar_mul,
 };
 
 const PUBLIC_OUTPUT_MAGIC: felt252 = 0x4d414349535441524b;
 const DEACTIVATE_TREE_DEPTH: felt252 = 4;
 const DEACTIVATE_TREE_LEAVES: u128 = 625;
 const NATIVE_PUBLIC_OUTPUT_VERSION: felt252 = 2;
-const ADD_NEW_KEY_NATIVE_CIRCUIT_ID: felt252 =
-    0x414d4143495f4144445f4b45595f4e4154495645;
+const ADD_NEW_KEY_NATIVE_CIRCUIT_ID: felt252 = 0x414d4143495f4144445f4b45595f4e4154495645;
 const STARKNET_POSEIDON_HASH_SCHEME: felt252 = 0x535441524b4e45545f504f534549444f4e;
 const ADD_NEW_KEY_NATIVE_INPUT_HASH_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e41544956455f494e505554;
@@ -17,8 +17,7 @@ const ADD_NEW_KEY_NATIVE_NULLIFIER_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f4e554c4c4946494552;
 const ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN: felt252 =
     0x414d4143495f4144445f4b45595f44454143545f4c454146;
-const ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN: felt252 =
-    0x414d4143495f4144445f4b45595f524552414e44;
+const ADD_NEW_KEY_NATIVE_RERANDOMIZE_DOMAIN: felt252 = 0x414d4143495f4144445f4b45595f524552414e44;
 const FELT_TWO_POW_128: felt252 = 0x100000000000000000000000000000000;
 
 #[derive(Copy, Drop, Serde)]
@@ -249,21 +248,31 @@ fn verify_native_add_new_key(fields: NativeAddNewKeyPublicFields, witness: Nativ
 
     assert(native_hash_u256x2(witness.coord_pub_key) == fields.coord_pub_key_hash, 'N_COORD_KEY');
     assert(native_hash_u256x2(witness.new_pub_key) == fields.new_pub_key_hash, 'N_NEW_KEY');
-    assert(native_nullifier(witness.old_private_key, witness.poll_id) == fields.nullifier, 'N_NULLIFIER');
+    assert(
+        native_nullifier(witness.old_private_key, witness.poll_id) == fields.nullifier,
+        'N_NULLIFIER',
+    );
     assert(native_hash_u256x2(witness.c1) == fields.c1_hash, 'N_C1');
     assert(native_hash_u256x2(witness.c2) == fields.c2_hash, 'N_C2');
     assert(native_hash_u256x2(witness.shared_key) == fields.shared_key_hash, 'N_SHARED');
     assert(
-        native_deactivate_leaf_hash(fields.c1_hash, fields.c2_hash, fields.shared_key_hash)
-            == fields.deactivate_leaf_hash,
+        native_deactivate_leaf_hash(
+            fields.c1_hash, fields.c2_hash, fields.shared_key_hash,
+        ) == fields
+            .deactivate_leaf_hash,
         'N_DEACT_LEAF',
     );
     assert(native_hash_u256x2(witness.d1) == fields.d1_hash, 'N_D1');
     assert(native_hash_u256x2(witness.d2) == fields.d2_hash, 'N_D2');
     assert(
         native_rerandomize_binding_hash(
-            fields.coord_pub_key_hash, fields.c1_hash, fields.c2_hash, fields.d1_hash, fields.d2_hash,
-        ) == fields.rerandomize_binding_hash,
+            fields.coord_pub_key_hash,
+            fields.c1_hash,
+            fields.c2_hash,
+            fields.d1_hash,
+            fields.d2_hash,
+        ) == fields
+            .rerandomize_binding_hash,
         'N_RERAND_BIND',
     );
     assert(witness.poll_id.high == 0, 'N_POLL_HIGH');

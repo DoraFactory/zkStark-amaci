@@ -3,9 +3,7 @@ pub trait IAddNewKeyStarkWrapper<TContractState> {
     fn get_state_commitment(self: @TContractState) -> felt252;
     fn get_keys_added(self: @TContractState) -> felt252;
     fn is_key_nullifier_used(self: @TContractState, key_nullifier: felt252) -> bool;
-    fn get_expected_plain_fact_hash(
-        self: @TContractState, public_output_hash: felt252,
-    ) -> felt252;
+    fn get_expected_plain_fact_hash(self: @TContractState, public_output_hash: felt252) -> felt252;
     fn get_expected_atlantic_metadata_fact_hash(
         self: @TContractState, metadata_program_hash: felt252, metadata_output: Span<felt252>,
     ) -> felt252;
@@ -111,9 +109,7 @@ pub mod AddNewKeyStarkWrapper {
             self.keys_added.read()
         }
 
-        fn is_key_nullifier_used(
-            self: @ContractState, key_nullifier: felt252,
-        ) -> bool {
+        fn is_key_nullifier_used(self: @ContractState, key_nullifier: felt252) -> bool {
             self.used_key_nullifiers.read(key_nullifier)
         }
 
@@ -124,18 +120,14 @@ pub mod AddNewKeyStarkWrapper {
         }
 
         fn get_expected_atlantic_metadata_fact_hash(
-            self: @ContractState,
-            metadata_program_hash: felt252,
-            metadata_output: Span<felt252>,
+            self: @ContractState, metadata_program_hash: felt252, metadata_output: Span<felt252>,
         ) -> felt252 {
             bootloaded_fact_hash_for_output(
                 SHARP_BOOTLOADER_PROGRAM_HASH, metadata_program_hash, metadata_output,
             )
         }
 
-        fn get_expected_verification_hash(
-            self: @ContractState, fact_hash: felt252,
-        ) -> felt252 {
+        fn get_expected_verification_hash(self: @ContractState, fact_hash: felt252) -> felt252 {
             verification_hash(
                 fact_hash, self.verifier_config_hash.read(), self.min_security_bits.read(),
             )
@@ -196,7 +188,9 @@ pub mod AddNewKeyStarkWrapper {
     fn validate_plain_fact(
         self: @ContractState, public_output_hash: felt252, provided_fact_hash: felt252,
     ) -> felt252 {
-        let expected_fact_hash = fact_hash(self.add_new_key_program_hash.read(), public_output_hash);
+        let expected_fact_hash = fact_hash(
+            self.add_new_key_program_hash.read(), public_output_hash,
+        );
         assert(provided_fact_hash == expected_fact_hash, 'FACT_BINDING_MISMATCH');
         validate_registered_fact(self, provided_fact_hash)
     }
@@ -216,9 +210,7 @@ pub mod AddNewKeyStarkWrapper {
         validate_registered_fact(self, provided_fact_hash)
     }
 
-    fn validate_registered_fact(
-        self: @ContractState, provided_fact_hash: felt252,
-    ) -> felt252 {
+    fn validate_registered_fact(self: @ContractState, provided_fact_hash: felt252) -> felt252 {
         let verifier_config_hash = self.verifier_config_hash.read();
         let min_security_bits = self.min_security_bits.read();
         let expected_verification_hash = verification_hash(

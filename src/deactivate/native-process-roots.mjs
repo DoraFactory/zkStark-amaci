@@ -1,4 +1,4 @@
-import { TREE_ARITY } from '../constants.mjs';
+import { ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN, TREE_ARITY } from '../constants.mjs';
 import { parseBigInt } from '../encoding.mjs';
 import { poseidonManyFelts } from '../integrity/hashes.mjs';
 import { nativeHash5, nativeHash10 } from '../msg/native-process-roots.mjs';
@@ -118,11 +118,10 @@ function initializeFullNativeLeafMap(nodeMap, leaves, depth, label) {
 }
 
 function nativeDeactivateLeaf(input, sharedKeyHash) {
-  return nativeHash5([
-    input.c1[0],
-    input.c1[1],
-    input.c2[0],
-    input.c2[1],
+  return poseidonManyFelts([
+    ADD_NEW_KEY_NATIVE_DEACTIVATE_LEAF_DOMAIN,
+    nativeHashPoint(input.c1, 'deactivateC1'),
+    nativeHashPoint(input.c2, 'deactivateC2'),
     sharedKeyHash,
   ], 'deactivateLeaf');
 }

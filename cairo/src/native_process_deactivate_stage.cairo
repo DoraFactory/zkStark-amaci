@@ -17,8 +17,7 @@ use crate::native_process_deactivate_components::{
 };
 use crate::native_process_deactivate_step_core::{
     NativeProcessDeactivateStepCorePublicFields as CoreFields,
-    NativeProcessDeactivateStepCoreWitness as CoreWitness,
-    process_deactivate_step_core_native_main,
+    NativeProcessDeactivateStepCoreWitness as CoreWitness, process_deactivate_step_core_native_main,
 };
 
 fn verify_deactivate_message_links(
@@ -49,33 +48,28 @@ fn verify_deactivate_message_links(
         'D_CK_CMD_ECDH',
     );
     assert(
-        coord_fields.coord_priv_key_hash == leaf_ecdh_fields.coord_priv_key_hash,
-        'D_CK_LEAF_ECDH',
+        coord_fields.coord_priv_key_hash == leaf_ecdh_fields.coord_priv_key_hash, 'D_CK_LEAF_ECDH',
     );
     assert(
         coord_fields.coord_priv_key_hash == current_decrypt_fields.coord_priv_key_hash,
         'D_CK_CUR_DEC',
     );
     assert(
-        coord_fields.coord_priv_key_hash == new_decrypt_fields.coord_priv_key_hash,
-        'D_CK_NEW_DEC',
+        coord_fields.coord_priv_key_hash == new_decrypt_fields.coord_priv_key_hash, 'D_CK_NEW_DEC',
     );
     assert(coord_fields.coord_priv_key_hash == core_fields.coord_priv_key_hash, 'D_CK_CORE');
 
     assert(command_ecdh_fields.base_hash == core_fields.enc_pub_key_hash, 'D_CMD_BASE');
     assert(
-        command_ecdh_fields.shared_key_hash == core_fields.command_shared_key_hash,
-        'D_CMD_SHARED',
+        command_ecdh_fields.shared_key_hash == core_fields.command_shared_key_hash, 'D_CMD_SHARED',
     );
     assert(
-        command_ecdh_fields.shared_key_binding_hash
-            == core_fields.command_shared_key_binding_hash,
+        command_ecdh_fields.shared_key_binding_hash == core_fields.command_shared_key_binding_hash,
         'D_CMD_BIND',
     );
     assert(leaf_ecdh_fields.base_hash == core_fields.deactivate_pub_key_hash, 'D_LEAF_BASE');
     assert(
-        leaf_ecdh_fields.shared_key_hash == core_fields.deactivate_shared_key_hash,
-        'D_LEAF_SHARED',
+        leaf_ecdh_fields.shared_key_hash == core_fields.deactivate_shared_key_hash, 'D_LEAF_SHARED',
     );
     assert(
         leaf_ecdh_fields.shared_key_binding_hash == core_fields.deactivate_shared_key_binding_hash,
@@ -90,30 +84,21 @@ fn verify_deactivate_message_links(
     assert(signature_fields.signature_valid == core_fields.signature_valid, 'D_SIG_VALID');
 
     assert(
-        current_decrypt_fields.c1_hash == core_fields.current_state_ciphertext_c1_hash,
-        'D_CUR_C1',
+        current_decrypt_fields.c1_hash == core_fields.current_state_ciphertext_c1_hash, 'D_CUR_C1',
     );
     assert(
-        current_decrypt_fields.c2_hash == core_fields.current_state_ciphertext_c2_hash,
-        'D_CUR_C2',
+        current_decrypt_fields.c2_hash == core_fields.current_state_ciphertext_c2_hash, 'D_CUR_C2',
     );
     assert(
-        current_decrypt_fields.decrypt_is_odd == core_fields.current_decrypt_is_odd,
-        'D_CUR_ODD',
+        current_decrypt_fields.decrypt_is_odd == core_fields.current_decrypt_is_odd, 'D_CUR_ODD',
     );
     assert(
         current_decrypt_fields.decrypt_binding_hash == core_fields.current_decrypt_binding_hash,
         'D_CUR_BIND',
     );
-    assert(
-        new_decrypt_fields.c1_hash == core_fields.new_state_ciphertext_c1_hash, 'D_NEW_C1',
-    );
-    assert(
-        new_decrypt_fields.c2_hash == core_fields.new_state_ciphertext_c2_hash, 'D_NEW_C2',
-    );
-    assert(
-        new_decrypt_fields.decrypt_is_odd == core_fields.new_decrypt_is_odd, 'D_NEW_ODD',
-    );
+    assert(new_decrypt_fields.c1_hash == core_fields.new_state_ciphertext_c1_hash, 'D_NEW_C1');
+    assert(new_decrypt_fields.c2_hash == core_fields.new_state_ciphertext_c2_hash, 'D_NEW_C2');
+    assert(new_decrypt_fields.decrypt_is_odd == core_fields.new_decrypt_is_odd, 'D_NEW_ODD');
     assert(
         new_decrypt_fields.decrypt_binding_hash == core_fields.new_decrypt_binding_hash,
         'D_NEW_BIND',
@@ -188,8 +173,9 @@ fn verify_stage_links(
     assert(core_2_fields.next_message_hash == boundary_fields.batch_end_hash, 'D_MSG_END');
 
     assert(
-        core_0_fields.current_deactivate_commitment_hash
-            == boundary_fields.current_deactivate_commitment,
+        core_0_fields
+            .current_deactivate_commitment_hash == boundary_fields
+            .current_deactivate_commitment,
         'D_CUR_COM',
     );
     assert(
@@ -201,13 +187,11 @@ fn verify_stage_links(
         'D_NEW_DEACT_ROOT',
     );
     assert(
-        core_0_fields.current_active_state_root_hash
-            == boundary_witness.current_active_state_root,
+        core_0_fields.current_active_state_root_hash == boundary_witness.current_active_state_root,
         'D_CUR_ACTIVE',
     );
     assert(
-        core_0_fields.current_deactivate_root_hash
-            == boundary_witness.current_deactivate_root,
+        core_0_fields.current_deactivate_root_hash == boundary_witness.current_deactivate_root,
         'D_CUR_DEACT',
     );
     assert(
@@ -232,13 +216,15 @@ fn verify_stage_links(
         'D_DEACT_12',
     );
     assert(
-        core_0_fields.new_deactivate_commitment_hash
-            == core_1_fields.current_deactivate_commitment_hash,
+        core_0_fields
+            .new_deactivate_commitment_hash == core_1_fields
+            .current_deactivate_commitment_hash,
         'D_COM_01',
     );
     assert(
-        core_1_fields.new_deactivate_commitment_hash
-            == core_2_fields.current_deactivate_commitment_hash,
+        core_1_fields
+            .new_deactivate_commitment_hash == core_2_fields
+            .current_deactivate_commitment_hash,
         'D_COM_12',
     );
 }
@@ -303,9 +289,7 @@ pub fn process_deactivate_stage_native_main(
     let _new_decrypt_0_output = process_deactivate_decrypt_native_main(
         new_decrypt_0_fields, new_decrypt_0_witness,
     );
-    let _core_0_output = process_deactivate_step_core_native_main(
-        core_0_fields, core_0_witness,
-    );
+    let _core_0_output = process_deactivate_step_core_native_main(core_0_fields, core_0_witness);
 
     let _command_ecdh_1_output = process_deactivate_ecdh_native_main(
         command_ecdh_1_fields, command_ecdh_1_witness,
@@ -322,9 +306,7 @@ pub fn process_deactivate_stage_native_main(
     let _new_decrypt_1_output = process_deactivate_decrypt_native_main(
         new_decrypt_1_fields, new_decrypt_1_witness,
     );
-    let _core_1_output = process_deactivate_step_core_native_main(
-        core_1_fields, core_1_witness,
-    );
+    let _core_1_output = process_deactivate_step_core_native_main(core_1_fields, core_1_witness);
 
     let _command_ecdh_2_output = process_deactivate_ecdh_native_main(
         command_ecdh_2_fields, command_ecdh_2_witness,
@@ -341,9 +323,7 @@ pub fn process_deactivate_stage_native_main(
     let _new_decrypt_2_output = process_deactivate_decrypt_native_main(
         new_decrypt_2_fields, new_decrypt_2_witness,
     );
-    let _core_2_output = process_deactivate_step_core_native_main(
-        core_2_fields, core_2_witness,
-    );
+    let _core_2_output = process_deactivate_step_core_native_main(core_2_fields, core_2_witness);
 
     verify_stage_links(
         boundary_fields,

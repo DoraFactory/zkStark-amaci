@@ -4,7 +4,7 @@
 
 本文档描述 AMACI（Anonymous Minimal Anti-Collusion Infrastructure，匿名最小化反串谋基础设施）在 Starknet 上的架构与实现。系统使用 Cairo 程序生成 zkSTARK 证明，实现链上隐私投票：投票内容不会以明文出现在链上，投票处理和计票结果的正确性由零知识证明保证，并且无需可信设置（Trusted Setup）。
 
-当前 `zkStark-amaci` 主路径是 **Starknet-native AMACI**：它不再追求和 Circom/BabyJubJub 版本逐字节等价，而是将 AMACI 的协议语义迁移到 Starknet 更适合的密码学原语上。当前 Cairo 程序使用 Starknet STARK curve、STARK ECDSA、STARK curve ECDH / ElGamal-style point encryption，以及 Starknet Poseidon 的 domain-separated hash/KDF。
+当前 `zkStark-amaci` 将 AMACI 的协议语义迁移到 Starknet 更适合的密码学原语上。当前 Cairo 程序使用 Starknet STARK curve、STARK ECDSA、STARK curve ECDH / ElGamal-style point encryption，以及 Starknet Poseidon 的 domain-separated hash/KDF。
 
 需要先明确两个边界：
 
@@ -48,13 +48,13 @@
 | Hash / KDF | Starknet Poseidon，并通过 domain separation 区分 public input hash、message hash、nullifier hash、signature hash、encryption stream 和各类 commitment |
 | 公共输出 | 使用 native public output header，包括 magic、version、circuit id、hash scheme 等字段，供链上 wrapper 合约识别和绑定 |
 
-因此，当前 Cairo 程序不是 Circom 电路的逐约束翻译。它保留 AMACI 的状态机语义和承诺链设计，但密码学原语已经从 BabyJubJub/EdDSA/Circom Poseidon 路线切换为 Starknet-native 路线。
+因此，当前 Cairo 程序保留 AMACI 的状态机语义和承诺链设计，但密码学原语使用 Starknet-native 路线。
 
 ## 第一部分：amaci Cairo 电路架构
 
 ### 什么是 Cairo 电路
 
-在本系统中，"电路"指的是可被证明执行的 Cairo 程序。这个叫法是为了和传统 ZK 系统中的 circuit 概念对齐；实际实现上，它们是 Cairo 源码和编译后的 Sierra JSON。每个程序接收私有见证数据（witness）作为输入，执行密码学验证逻辑，并输出一组公开承诺值（commitment）。程序通过 `scarb build` 编译为 Sierra JSON，STARK 证明器基于程序的执行轨迹生成证明。
+在本系统中，"电路"指的是可被证明执行的 Cairo 程序，实际实现上，它们是 Cairo 源码和编译后的 Sierra JSON。每个程序接收私有见证数据（witness）作为输入，执行密码学验证逻辑，并输出一组公开承诺值（commitment）。程序通过 `scarb build` 编译为 Sierra JSON，STARK 证明器基于程序的执行轨迹生成证明。
 
 ![02-cairo-circuit](./docs/diagrams/excalidraw/02-cairo-circuit.png)
 
@@ -71,23 +71,11 @@
 
 ### 电路族
 
-系统由四个电路族组成，分别负责 AMACI 轮次的一个阶段：
+系统由四个电路族组成，分别负责 AMACI 轮次中的可证明状态转换。下面的顺序是模块说明顺序，不是 round 生命周期顺序；标准生命周期见后文 `signup -> deactivate -> processDeactivate -> addNewKey -> vote -> processMessages -> tally`。
 
 ![03-circuit-families](./docs/diagrams/excalidraw/03-circuit-families.png)
 
-#### 1. 添加新密钥（`add_new_key_native`）
-
-![04-add-new-key](./docs/diagrams/excalidraw/04-add-new-key.png)
-
-证明一次用户侧密钥更新 / 重新授权被正确处理。电路验证：
-
-- **旧密钥授权**：旧私钥和旧公钥关系正确，nullifier 由旧私钥和 poll id 派生，防止重复注册。
-- **新密钥绑定**：新 STARK curve 公钥被纳入新的 state commitment。
-- **停用证明**：旧 key 对应的 deactivate leaf 和 Merkle path 正确，说明旧 key 已进入停用集合。
-- **重随机化**：旧密钥相关的密文在 STARK curve 上完成 ElGamal-style rerandomization 绑定。
-- **承诺更新**：输出新的 state commitment，并绑定 input hash 和 native public output header。
-
-#### 2. 处理停用消息（`process_deactivate_stage_native`）
+#### 1. 处理停用消息（`process_deactivate_stage_native`）
 
 证明一批 3 条停用消息被正确处理。对每条消息，电路验证：
 
@@ -113,6 +101,19 @@
 ![05-process-deactivate-stage](./docs/diagrams/excalidraw/05-process-deactivate-stage.png)
 
 
+#### 2. 添加新密钥（`add_new_key_native`）
+
+![04-add-new-key](./docs/diagrams/excalidraw/04-add-new-key.png)
+
+证明一次用户侧密钥更新 / 重新授权被正确处理。电路验证：
+
+- **旧密钥授权 / nullifier**：旧私钥和 poll id 派生 nullifier，防止同一旧 key 在同一 poll 中重复注册；旧私钥还会与协调者公钥派生 shared key，并和 deactivate leaf 绑定。
+- **新密钥绑定**：新 STARK curve 公钥不会与旧 key 混用；电路输出 `new_pub_key_hash` 并把它纳入 input hash / native public output，供合约消费 fact 时绑定。
+- **停用证明**：旧 key 对应的 deactivate leaf 和 Merkle path 正确，说明旧 key 已进入停用集合。
+- **重随机化**：旧密钥相关的密文在 STARK curve 上完成 ElGamal-style rerandomization 绑定。
+- **公开输出绑定**：当前 `add_new_key_native` 输出 `deactivate_root_hash`、`coord_pub_key_hash`、`nullifier`、`new_pub_key_hash`、`rerandomize_binding_hash`、`poll_id` 和 `input_hash` 等公开字段；生产合约据此消费 nullifier、登记新 key 并推进业务状态。
+
+
 #### 3. 处理投票消息（`process_messages_stage_native`）
 
 证明一批 3 条投票消息被正确处理。对每条消息：
@@ -120,7 +121,7 @@
 - **ECDH**：在 STARK curve 上派生投票者消息公钥与协调者私钥之间的共享点
 - **解密**：在 Cairo 内验证 STARK curve decrypt point relation，并用 Starknet Poseidon stream 约束 encrypted command 的明文字段
 - **签名**：STARK ECDSA 签名验证，Cairo 约束 `s * R == H(command) * G + r * PubKey`
-- **状态转换**：投票权重、余额、nonce 更新正确
+- **状态转换**：检查 stateIndex、active/deactivate 标记、pollId 和 nonce；合法消息更新投票权重、余额、nonce，已停用旧 key 的消息不改变结果
 
 **公开输出**：当前/新状态承诺、停用承诺、消息哈希链。
 
@@ -156,7 +157,7 @@
 
 **关键设计要点：**
 
-- 计票按每批 5 个投票者处理（由 `intStateTreeDepth = 1` 决定，5^1 = 5）。在 2-1-1-3 参数下只有 1 个 signup，因此只需要 batch 0。
+- 计票按每批 5 个状态叶子处理（由 `intStateTreeDepth = 1` 决定，5^1 = 5）。如果本轮占用超过 5 个 stateIndex，需要多批 tally；
 - Tally 输出中的 `stateCommitment` 必须等于 Process Messages 的 `newStateCommitment`——这就是承诺链连接两个阶段的方式。
 - 实际投票总数（明文）永远不会存储到链上。链上只存储 `newTallyCommitment`。正确性由证明保证。
 
@@ -338,42 +339,6 @@ used_key_nullifiers           已消费的 nullifier 集合（防重放）
 
 本轮 E2E 使用 JS fixture 模拟用户端和 operator 端的数据生成。它不是前端钱包真实提交，也不是生产环境下的最终产品交互流程；它的目标是用确定性测试数据把协议级路径跑通：用户密钥和投票消息在本地生成，operator 将每个阶段的 Cairo input 提交给 Atlantic，Atlantic 在 Starknet 上验证 proof 并注册 fact，最后真实部署在 Starknet Sepolia 上的 `MockAmaciRound` 消费这些 fact 并推进链上状态。
 
-本轮实际校验记录位于：
-
-```text
-/Users/bun/DoraFactory/maci/zkStark-amaci/target/e2e-round-flow-stark-native-atlantic-postfix2-20260525-223633
-```
-
-完整记录见：
-
-```text
-/Users/bun/DoraFactory/maci/zkStark-amaci/e2e-round-2113-resubmit.md
-```
-
-实际部署和 Atlantic query：
-
-| 项目 | 值 |
-| --- | --- |
-| MockAmaciRound | `0x0158434ad2308bf2ab25aa05044b326278a137aec2bef092176d56e493a5df1c` |
-| deploy tx | `0x05bfa958164907b5c7c2c7e67546c936a98fd214cebeaa5b0b71b8a638d5b122` |
-| addNewKey query | `01KSFS206SC3MN3QMD12R08CPM` |
-| processDeactivate query | `01KSFS27AJDWWWGQWRKGH6N8XT` |
-| processMessages query | `01KSFS2FSSYBNDT57ZD39Y8XWK` |
-| tally query | `01KSFS2PTWSP9GGQEDB5Q09H3G` |
-| wrapper submits | `4/4 SUCCEEDED` |
-| final on-chain state check | `state/deactivate/tally commitments and counters all matched fixture` |
-
-**角色划分**：
-
-| 阶段 | 业务角色 | 链上提交方 | 合约看到的内容 |
-| --- | --- | --- | --- |
-| addNewKey | 用户侧密钥更新/重新授权 | operator 或 relayer 可代交 | 已注册的 add-new-key fact、nullifier、新 state commitment |
-| processDeactivate | operator 批处理停用消息 | operator | 已注册的 deactivate fact、旧/新 deactivate commitment |
-| processMessages | operator 批处理投票消息 | operator | 已注册的 process-message fact、旧/新 state commitment |
-| tally | operator 计票 | operator | 已注册的 tally fact、旧/新 tally commitment |
-
-当前 E2E 中，链上 `sncast` 交易统一由测试账户提交；这只是测试执行方式，不改变协议角色。真实系统里，用户负责生成/授权自己的密钥和投票消息，operator 负责收集消息、生成证明、提交 fact 和推进 round。
-
 **完整流程**：
 
 ![12-e2e-round-flow](./docs/diagrams/excalidraw/12-e2e-round-flow.png)
@@ -407,12 +372,19 @@ used_key_nullifiers           已消费的 nullifier 集合（防重放）
 | 证明大小 | ~128 字节 | 较大；由 Atlantic 提交到 Integrity 验证，业务合约不直接接收完整 proof |
 | 可组合性 | 有限 | 原生支持递归组合 |
 
+### TBD：当前电路与协议仍需确认的生产化边界
+
+当前 Starknet-native AMACI 已经把 ECDH、解密、签名验证、ElGamal-style rerandomize、nullifier、message hash、commitment 链等关键关系放进 Cairo 程序中约束，不再依赖 operator 传入的有效性 flag；但它已经是一个新的 Starknet-native AMACI 协议口径，而不是 BabyJubJub/Circom 版本的逐约束迁移。因此在进入生产前，还需要补齐以下确认项：
+
+- **密码学审计**：重点审计 Stark curve 标量范围、签名 `r/s/R` 的 canonical 约束、签名等式、ECDH shared point、ElGamal-style decrypt/rerandomize 绑定、Poseidon stream 的 nonce/domain separation，以及 `poll_id` / nullifier / new public key 是否在所有路径中完整绑定。
+- **协议兼容边界**：明确 Starknet-native key、message、signature、ciphertext 与旧 BabyJubJub/Circom 数据完全不兼容；前端、operator、witness 生成器和合约调用链必须全部切换到同一套 Starknet-native 格式。
+- **Prover 信任边界**：如果使用 Atlantic，proof correctness 仍由 STARK proof + Integrity FactRegistry + 合约绑定检查保证，但 witness 会进入 Atlantic 的执行环境；如果生产环境不能接受第三方看到 witness，应切换到自托管 Stone prover 并自行提交 Integrity verification。
+- **参数泛化**：当前完整 E2E 使用 2-1-1-3 参数集，需要在更大规模参数集上补齐 Cairo program、operator fixture、Atlantic/Stone proving 和链上 fact 消费测试。
+
 ### 总结
 
-这次 Starknet-native AMACI 的实现证明了一条可行路径：把 AMACI 的核心状态转换和关键密码学关系拆解为可证明执行的 Cairo 程序，再由 Starknet 上的业务合约消费 Integrity FactRegistry 中已经验证过的 fact。链上合约不重放私有计算，也不保存投票明文；它只检查 fact 是否有效、program hash 是否匹配、metadata output 是否绑定正确、公开输出中的 commitment 是否与当前链上状态连续。这样，复杂的投票处理、ECDH、解密、签名验证和计票逻辑都保留在可证明的链下执行中，链上只承担状态机和验证入口的职责。
+Starknet-native AMACI 的实现证明了一条可行路径：把 AMACI 的核心状态转换和关键密码学关系拆解为可证明执行的 Cairo 程序，再由 Starknet 上的业务合约消费 Integrity FactRegistry 中已经验证过的 fact。链上合约不重放私有计算，也不保存投票明文；它只检查 fact 是否有效、program hash 是否匹配、metadata output 是否绑定正确、公开输出中的 commitment 是否与当前链上状态连续。这样，复杂的投票处理、ECDH、解密、签名验证和计票逻辑都保留在可证明的链下执行中，链上只承担状态机和验证入口的职责。
 
-更重要的是，当前实现已经切换到 Starknet 原生曲线体系：用户公钥、协调者公钥、ECDH 共享点、ElGamal-style 密文点关系和 STARK ECDSA 签名都建立在 Starknet STARK curve 上，hash/KDF/encryption stream 则统一使用 Starknet Poseidon 并做 domain separation。也就是说，Cairo 程序不再依赖 BabyJubJub / EdDSA / BN254 兼容路径，也不再信任 operator 传入的签名或解密有效性 flag；这些密码学关系会在 Cairo 执行中重新计算或约束，证明失败就无法产生可被链上合约接受的 fact。
-
-在本轮 2-1-1-3 E2E 测试中，`signup -> vote -> deactivate -> vote -> processMsg -> tally` 的完整生命周期已经跑通：JS fixture 生成确定性业务数据和 witness，Atlantic 生成并验证 STARK proof，在 Starknet Sepolia 注册 fact，`MockAmaciRound` 依次消费 `addNewKey`、`processDeactivate`、`processMessages`、`tally` 四个 fact，并最终得到与本地 fixture 一致的链上 commitment 状态。这说明当前 Cairo 程序、Atlantic proof 路径、Integrity fact 注册、以及 AMACI wrapper 合约之间的协议连接是成立的。
+当前实现已经切换到 Starknet 原生曲线体系：用户公钥、协调者公钥、ECDH 共享点、ElGamal-style 密文点关系和 STARK ECDSA 签名都建立在 Starknet STARK curve 上，hash/KDF/encryption stream 则统一使用 Starknet Poseidon 并做 domain separation。也就是说，Cairo 程序不再依赖 BabyJubJub / EdDSA / BN254 兼容路径，这些密码学关系会在 Cairo 执行中重新计算或约束，证明失败就无法产生可被链上合约接受的 fact。
 
 当前实现仍然是协议级和合约级验证，而不是最终产品形态。使用 Atlantic 可以快速验证证明链路和成本模型，但 witness 会进入第三方执行环境；后续如果需要更强的执行边界，可以切换到自托管 Stone prover，并自行提交 Integrity 验证交易。接下来的优化重点，是进一步减少每轮需要消费的 fact 数量、优化 batch/递归聚合策略，并把当前 mock round 状态机演进为面向生产的 AMACI round 合约。

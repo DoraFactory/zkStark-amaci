@@ -3,8 +3,7 @@ use core::hash::HashStateTrait;
 use core::poseidon::PoseidonTrait;
 use core::traits::{Into, TryInto};
 
-pub const STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN: felt252 =
-    0x414d4143495f535441524b5f434d445f534947;
+pub const STARK_NATIVE_COMMAND_SIGNATURE_DOMAIN: felt252 = 0x414d4143495f535441524b5f434d445f534947;
 pub const STARK_NATIVE_DEACTIVATE_SIGNATURE_DOMAIN: felt252 =
     0x414d4143495f535441524b5f44454143545f534947;
 pub const STARK_NATIVE_COMMAND_STREAM_DOMAIN: felt252 =
@@ -58,7 +57,9 @@ pub fn assert_stark_point_valid(x: u256, y: u256) {
     let _point = point_from_u256(x, y);
 }
 
-pub fn stark_point_add(left_x: u256, left_y: u256, right_x: u256, right_y: u256) -> (felt252, felt252) {
+pub fn stark_point_add(
+    left_x: u256, left_y: u256, right_x: u256, right_y: u256,
+) -> (felt252, felt252) {
     let left: EcPoint = point_from_u256(left_x, left_y).into();
     let right: EcPoint = point_from_u256(right_x, right_y).into();
     let result = left + right;
@@ -76,14 +77,24 @@ pub fn stark_elgamal_rerandomize(
     random_val: u256,
 ) -> (felt252, felt252, felt252, felt252) {
     let (random_base_x, random_base_y) = stark_generator_mul(random_val);
-    let (random_coord_x, random_coord_y) = stark_scalar_mul(coord_pub_key_x, coord_pub_key_y, random_val);
-    let (d1_x, d1_y) = stark_point_add(c1_x, c1_y, u256_from_felt(random_base_x), u256_from_felt(random_base_y));
-    let (d2_x, d2_y) = stark_point_add(c2_x, c2_y, u256_from_felt(random_coord_x), u256_from_felt(random_coord_y));
+    let (random_coord_x, random_coord_y) = stark_scalar_mul(
+        coord_pub_key_x, coord_pub_key_y, random_val,
+    );
+    let (d1_x, d1_y) = stark_point_add(
+        c1_x, c1_y, u256_from_felt(random_base_x), u256_from_felt(random_base_y),
+    );
+    let (d2_x, d2_y) = stark_point_add(
+        c2_x, c2_y, u256_from_felt(random_coord_x), u256_from_felt(random_coord_y),
+    );
     (d1_x, d1_y, d2_x, d2_y)
 }
 
 pub fn assert_stark_point_equals(
-    actual_x: felt252, actual_y: felt252, expected_x: u256, expected_y: u256, err_x: felt252,
+    actual_x: felt252,
+    actual_y: felt252,
+    expected_x: u256,
+    expected_y: u256,
+    err_x: felt252,
     err_y: felt252,
 ) {
     assert(actual_x == felt_from_u256_checked(expected_x), err_x);
@@ -101,10 +112,7 @@ pub fn stark_elgamal_decrypt_point_is_odd(
 ) -> felt252 {
     let (shared_x, shared_y) = stark_scalar_mul(c1_x, c1_y, private_key);
     let (recomposed_x, recomposed_y) = stark_point_add(
-        decrypted_x,
-        decrypted_y,
-        u256_from_felt(shared_x),
-        u256_from_felt(shared_y),
+        decrypted_x, decrypted_y, u256_from_felt(shared_x), u256_from_felt(shared_y),
     );
     assert(recomposed_x == felt_from_u256_checked(c2_x), 'N_DEC_C2_X');
     assert(recomposed_y == felt_from_u256_checked(c2_y), 'N_DEC_C2_Y');
@@ -139,8 +147,13 @@ fn stark_poseidon_stream_value(
     state.finalize()
 }
 
-fn assert_decrypted_value(ciphertext: u256, stream: felt252, expected_plaintext: u256, err: felt252) {
-    assert(felt_from_u256_checked(ciphertext) - stream == felt_from_u256_checked(expected_plaintext), err);
+fn assert_decrypted_value(
+    ciphertext: u256, stream: felt252, expected_plaintext: u256, err: felt252,
+) {
+    assert(
+        felt_from_u256_checked(ciphertext) - stream == felt_from_u256_checked(expected_plaintext),
+        err,
+    );
 }
 
 pub fn assert_stark_poseidon_decrypt7(
@@ -166,23 +179,56 @@ pub fn assert_stark_poseidon_decrypt7(
     plain_5: u256,
     plain_6: u256,
 ) {
-    assert_decrypted_value(msg_0, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 0), plain_0, 'N_CMD_DEC_0');
-    assert_decrypted_value(msg_1, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 1), plain_1, 'N_CMD_DEC_1');
-    assert_decrypted_value(msg_2, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 2), plain_2, 'N_CMD_DEC_2');
-    assert_decrypted_value(msg_3, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 3), plain_3, 'N_CMD_DEC_3');
-    assert_decrypted_value(msg_4, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 4), plain_4, 'N_CMD_DEC_4');
-    assert_decrypted_value(msg_5, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 5), plain_5, 'N_CMD_DEC_5');
-    assert_decrypted_value(msg_6, stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 6), plain_6, 'N_CMD_DEC_6');
+    assert_decrypted_value(
+        msg_0,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 0),
+        plain_0,
+        'N_CMD_DEC_0',
+    );
+    assert_decrypted_value(
+        msg_1,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 1),
+        plain_1,
+        'N_CMD_DEC_1',
+    );
+    assert_decrypted_value(
+        msg_2,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 2),
+        plain_2,
+        'N_CMD_DEC_2',
+    );
+    assert_decrypted_value(
+        msg_3,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 3),
+        plain_3,
+        'N_CMD_DEC_3',
+    );
+    assert_decrypted_value(
+        msg_4,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 4),
+        plain_4,
+        'N_CMD_DEC_4',
+    );
+    assert_decrypted_value(
+        msg_5,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 5),
+        plain_5,
+        'N_CMD_DEC_5',
+    );
+    assert_decrypted_value(
+        msg_6,
+        stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 6),
+        plain_6,
+        'N_CMD_DEC_6',
+    );
     assert(
         felt_from_u256_checked(msg_7)
-            - stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 7)
-            == 0,
+            - stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 7) == 0,
         'N_CMD_PAD_7',
     );
     assert(
         felt_from_u256_checked(msg_8)
-            - stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 8)
-            == 0,
+            - stark_poseidon_stream_value(domain, shared_key_x, shared_key_y, nonce, 8) == 0,
         'N_CMD_PAD_8',
     );
     assert(felt_from_u256_checked(msg_9) == 0, 'N_CMD_PAD_9');

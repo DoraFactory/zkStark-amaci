@@ -102,9 +102,7 @@ fn message_hash(message: Felt10, enc_pub_key: Felt2, previous_hash: felt252) -> 
     state.finalize()
 }
 
-fn message_hash_or_empty(
-    message: Felt10, enc_pub_key: Felt2, previous_hash: felt252,
-) -> felt252 {
+fn message_hash_or_empty(message: Felt10, enc_pub_key: Felt2, previous_hash: felt252) -> felt252 {
     if message.v0 == 0 {
         previous_hash
     } else {
@@ -135,9 +133,7 @@ fn verify_process_deactivate_native_boundary(
     let current_deactivate_commitment = hash2(
         witness.current_active_state_root, witness.current_deactivate_root,
     );
-    assert(
-        current_deactivate_commitment == fields.current_deactivate_commitment, 'CURRENT_DEACT',
-    );
+    assert(current_deactivate_commitment == fields.current_deactivate_commitment, 'CURRENT_DEACT');
 
     let new_deactivate_commitment = hash2(
         witness.new_active_state_root, fields.new_deactivate_root,

@@ -78,9 +78,19 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
   const chain = fixture.chain;
 
   assertEqual(
+    addNewKey.publicFields.deactivateRootHash,
+    processDeactivate.publicFields.newDeactivateRoot,
+    'processDeactivate -> addNewKey deactivate root',
+  );
+  assertEqual(
     processDeactivate.publicFields.newDeactivateCommitment,
     processMessages.publicFields.deactivateCommitment,
     'deactivate -> processMessages commitment',
+  );
+  assertEqual(
+    chain.addNewKey.newStateCommitment,
+    processMessages.publicFields.currentStateCommitment,
+    'addNewKey -> processMessages state commitment',
   );
   assertEqual(
     processMessages.publicFields.newStateCommitment,
@@ -106,37 +116,27 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
     integrity,
     programHashes,
     minSecurityBits,
-    stateCommitment: initialStateCommitment,
+      stateCommitment: initialStateCommitment,
     deactivateCommitment: initialDeactivateCommitment,
     currentTallyCommitment: initialTallyCommitment,
+    strictLifecycle: true,
   });
 
+  const lifecycle = [
+    {
+      stage: 'signup',
+      actor: 'voter',
+      contractAction: 'sign_up(pubKey, voiceCredits)',
+      effect: 'initial StateTree leaf exists before deactivate',
+    },
+    {
+      stage: 'deactivate',
+      actor: 'voter',
+      contractAction: 'publish_deactivate_message(encryptedCommand, encPubKey)',
+      effect: 'deactivate message hash chain is extended',
+    },
+  ];
   const accepted = [];
-  accepted.push(
-    acceptFact({
-      wrapper,
-      integrity,
-      circuit: 'addNewKey',
-      fields: {
-        ...addNewKey.publicFields,
-        currentStateCommitment: initialStateCommitment,
-        newStateCommitment: initialStateCommitment,
-      },
-      params: addNewKey.params,
-      registeredSecurityBits,
-      submit: (fact) =>
-        wrapper.submitAddNewKey({
-          fields: {
-            ...addNewKey.publicFields,
-            currentStateCommitment: initialStateCommitment,
-            newStateCommitment: initialStateCommitment,
-          },
-          params: addNewKey.params,
-          factHash: fact.factHash,
-        }),
-    }),
-  );
-
   accepted.push(
     acceptFact({
       wrapper,
@@ -159,6 +159,51 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
         }),
     }),
   );
+  lifecycle.push({
+    stage: 'processDeactivate',
+    actor: 'operator',
+    contractAction: 'submit_process_deactivate_atlantic_metadata_fact(...)',
+    effect: 'deactivateRoot/deactivateCommitment advance from the published deactivate chain',
+  });
+
+  accepted.push(
+    acceptFact({
+      wrapper,
+      integrity,
+      circuit: 'addNewKey',
+      fields: {
+        ...addNewKey.publicFields,
+        currentStateCommitment: initialStateCommitment,
+        newStateCommitment: chain.addNewKey.newStateCommitment,
+      },
+      params: addNewKey.params,
+      registeredSecurityBits,
+      submit: (fact) =>
+        wrapper.submitAddNewKey({
+          fields: {
+            ...addNewKey.publicFields,
+            currentStateCommitment: initialStateCommitment,
+            newStateCommitment: chain.addNewKey.newStateCommitment,
+          },
+          params: addNewKey.params,
+          factHash: fact.factHash,
+        }),
+    }),
+  );
+  lifecycle.push(
+    {
+      stage: 'addNewKey',
+      actor: 'voter',
+      contractAction: 'submit_add_new_key_atlantic_metadata_fact(nullifier, newStateCommitment, ...)',
+      effect: 'nullifier is consumed and the new voting key becomes the active StateTree leaf',
+    },
+    {
+      stage: 'vote',
+      actor: 'voter',
+      contractAction: 'publish_message(encryptedCommand, encPubKey)',
+      effect: 'vote message hash chain is extended after addNewKey',
+    },
+  );
 
   accepted.push(
     acceptFact({
@@ -176,6 +221,12 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
         }),
     }),
   );
+  lifecycle.push({
+    stage: 'processMessages',
+    actor: 'operator',
+    contractAction: 'submit_process_messages_atlantic_metadata_fact(...)',
+    effect: 'vote messages are applied to the new key state leaf',
+  });
 
   accepted.push(
     acceptFact({
@@ -193,6 +244,12 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
         }),
     }),
   );
+  lifecycle.push({
+    stage: 'tally',
+    actor: 'operator',
+    contractAction: 'submit_tally_atlantic_metadata_fact(...)',
+    effect: 'final tally commitment is produced and can be opened with results',
+  });
 
   assertEqual(wrapper.stateCommitment, chain.tally.stateCommitment, 'final wrapper state commitment');
   assertEqual(
@@ -215,6 +272,7 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
       Object.entries(programHashes).map(([key, value]) => [key, decimalize(value)]),
     ),
     accepted,
+    lifecycle,
     finalState: {
       stateCommitment: decimalize(wrapper.stateCommitment),
       deactivateCommitment: decimalize(wrapper.deactivateCommitment),
@@ -227,6 +285,12 @@ export function simulateNativeRoundWrapperFlow(fixture, options = {}) {
       deactivateToProcessMessages:
         parseBigInt(processDeactivate.publicFields.newDeactivateCommitment, 'deactivateCommitment') ===
         parseBigInt(processMessages.publicFields.deactivateCommitment, 'processMessagesDeactivateCommitment'),
+      processDeactivateToAddNewKey:
+        parseBigInt(processDeactivate.publicFields.newDeactivateRoot, 'processDeactivateNewRoot') ===
+        parseBigInt(addNewKey.publicFields.deactivateRootHash, 'addNewKeyDeactivateRoot'),
+      addNewKeyToProcessMessages:
+        parseBigInt(chain.addNewKey.newStateCommitment, 'addNewKeyNewState') ===
+        parseBigInt(processMessages.publicFields.currentStateCommitment, 'processMessagesCurrentState'),
       processMessagesToTallyState:
         parseBigInt(processMessages.publicFields.newStateCommitment, 'processMessagesNewState') ===
         parseBigInt(tally.publicFields.stateCommitment, 'tallyStateCommitment'),

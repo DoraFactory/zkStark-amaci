@@ -3,29 +3,39 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { simulateNativeRoundWrapperFlowFromDir } from '../src/wrapper/native-round-flow-model.mjs';
+import {
+  buildVoterRoundTransactionsFromDir,
+  voterFixtureExists,
+  writeVoterRoundTransactionFiles,
+} from '../src/round/voter-transactions.mjs';
+import {
+  buildOperatorRoundTransactionsFromDir,
+  operatorFixtureExists,
+  writeOperatorRoundTransactionFiles,
+} from '../src/round/operator-transactions.mjs';
 
 const FLOW_STAGES = Object.freeze([
   {
-    id: 'addNewKey',
-    title: 'Add new key',
-    businessStep: 'signup -> add a deactivate key commitment',
-    circuit: 'add-new-key-native',
-    fixtureFile: 'add-new-key-native.json',
-    operation: 'add-new-key',
-    wrapperStateArgs: ['--new-state-commitment', '<NEW_STATE_COMMITMENT>'],
-    explains:
-      'The JS fixture creates the key/nullifier/deactivate-leaf witness. Atlantic proves the Cairo program. The wrapper consumes the registered fact and records the key nullifier / state commitment.',
-  },
-  {
     id: 'processDeactivate',
     title: 'Process deactivate',
-    businessStep: 'deactivate',
+    businessStep: 'signup -> publish deactivate messages -> process deactivate batch',
     circuit: 'process-deactivate-stage-native',
     fixtureFile: 'process-deactivate-stage-native.json',
     operation: 'process-deactivate',
     wrapperStateArgs: ['--state-commitment', '<CURRENT_STATE_COMMITMENT>'],
     explains:
       'The stage program proves the full 3-message deactivate batch: boundary, coord key, command ECDH, leaf ECDH, signature, decrypt, and core transition links.',
+  },
+  {
+    id: 'addNewKey',
+    title: 'Add new key',
+    businessStep: 'prove deactivate credential -> register new MACI key',
+    circuit: 'add-new-key-native',
+    fixtureFile: 'add-new-key-native.json',
+    operation: 'add-new-key',
+    wrapperStateArgs: ['--new-state-commitment', '<NEW_STATE_COMMITMENT>'],
+    explains:
+      'The JS fixture creates the key/nullifier/deactivate-leaf witness from the processed deactivate tree. Atlantic proves the Cairo program. The wrapper consumes the registered fact and records the key nullifier / state commitment.',
   },
   {
     id: 'processMessages',
@@ -72,7 +82,8 @@ Options:
   --help                    Show this help.
 
 Default mode is documentation/dry-run: it writes flow-manifest.json only and
-does not submit to Atlantic or Starknet.
+does not submit to Atlantic or Starknet. When fixture files exist it also
+writes voter-transactions.json and operator-transactions.json.
 `;
 }
 
@@ -252,14 +263,12 @@ function stagePaths({ outDir, fixtureDir }, stage) {
 }
 
 function wrapperArgsForStage(stage, chain) {
-  const stateCommitment =
-    chain?.processMessages?.currentStateCommitment ?? chain?.signup?.initialStateCommitment;
   if (stage.id === 'addNewKey') {
     return [
       '--operation',
       stage.operation,
       '--new-state-commitment',
-      stateCommitment ?? '<NEW_STATE_COMMITMENT>',
+      chain?.addNewKey?.newStateCommitment ?? '<NEW_STATE_COMMITMENT>',
     ];
   }
   if (stage.id === 'processDeactivate') {
@@ -267,7 +276,7 @@ function wrapperArgsForStage(stage, chain) {
       '--operation',
       stage.operation,
       '--state-commitment',
-      stateCommitment ?? '<CURRENT_STATE_COMMITMENT>',
+      chain?.signup?.initialStateCommitment ?? '<CURRENT_STATE_COMMITMENT>',
     ];
   }
   return ['--operation', stage.operation];
@@ -462,6 +471,67 @@ function exportWrapperCallForStage(context, stage, paths, queryId) {
   return { skipped: false };
 }
 
+function roleTransactionPaths(outDir) {
+  return {
+    voterJson: resolve(outDir, 'voter-transactions.json'),
+    voterScript: resolve(outDir, 'voter-transactions.sh'),
+    operatorJson: resolve(outDir, 'operator-transactions.json'),
+    operatorScript: resolve(outDir, 'operator-transactions.sh'),
+  };
+}
+
+function readWrapperCallsForStages(context) {
+  const calls = {};
+  const paths = {};
+  for (const stage of FLOW_STAGES) {
+    const stagePath = stagePaths(context, stage).wrapperCall;
+    paths[stage.id] = stagePath;
+    if (existsSync(stagePath)) {
+      calls[stage.id] = readJson(stagePath);
+    }
+  }
+  return { calls, paths };
+}
+
+function exportRoleTransactions(context) {
+  const missing = [];
+  if (!voterFixtureExists(context.fixtureDir)) {
+    missing.push('voter fixture files');
+  }
+  if (!operatorFixtureExists(context.fixtureDir)) {
+    missing.push('operator fixture files');
+  }
+  if (missing.length > 0) {
+    return { skipped: true, reason: `missing ${missing.join(' and ')}` };
+  }
+
+  const paths = roleTransactionPaths(context.outDir);
+  const wrapper = readWrapperCallsForStages(context);
+  const baseOptions = {
+    fixtureDir: context.fixtureDir,
+    wrapperAddress: context.wrapperAddress ?? '<WRAPPER_ADDRESS>',
+    profile: context.profile,
+    wrapperCalls: wrapper.calls,
+    wrapperCallPaths: wrapper.paths,
+  };
+  const voter = buildVoterRoundTransactionsFromDir(baseOptions);
+  const operator = buildOperatorRoundTransactionsFromDir(baseOptions);
+  writeVoterRoundTransactionFiles(voter, {
+    jsonPath: paths.voterJson,
+    scriptPath: paths.voterScript,
+  });
+  writeOperatorRoundTransactionFiles(operator, {
+    jsonPath: paths.operatorJson,
+    scriptPath: paths.operatorScript,
+  });
+  return {
+    skipped: false,
+    files: paths,
+    voterTransactions: voter.transactions.length,
+    operatorTransactions: operator.transactions.length,
+  };
+}
+
 function runStageAction(stage, action, callback) {
   try {
     return { stage: typeof stage === 'string' ? stage : stage.id, action, result: callback() };
@@ -484,7 +554,7 @@ function textReport(manifest) {
     `Fixture dir: ${manifest.files.fixtureDir}`,
     '',
     'Business flow:',
-    '  signup -> vote -> deactivate -> vote -> processMsg -> tally',
+    `  ${manifest.businessFlow.join(' -> ')}`,
     '',
     'Proof/wrapper stages:',
   ];
@@ -498,6 +568,10 @@ function textReport(manifest) {
       lines.push(`  - ${entry.action}: ok`);
       if (entry.result.summary) {
         lines.push(`    ${entry.result.summary}`);
+      }
+      if (entry.result.files) {
+        lines.push(`    voter tx file: ${entry.result.files.voterJson}`);
+        lines.push(`    operator tx file: ${entry.result.files.operatorJson}`);
       }
     }
   }
@@ -601,6 +675,10 @@ for (const stage of FLOW_STAGES) {
   }
 }
 
+execution.push(runStageAction('fullRound', 'exportRoleTransactions', () =>
+  exportRoleTransactions(context),
+));
+
 const stages = FLOW_STAGES.map((stage) => buildStagePlan(context, stage, effectiveQueryMap[stage.id]));
 const manifest = {
   schema: 'zkstark-amaci.e2e-round-flow.v1',
@@ -614,12 +692,15 @@ const manifest = {
   files: {
     manifest: manifestPath,
     fixtureDir,
+    roleTransactions: roleTransactionPaths(outDir),
     queryMap: args.queryMapPath ? resolve(args.queryMapPath) : undefined,
     envFile: loadedEnvFile,
   },
-  businessFlow: ['signup', 'vote', 'deactivate', 'vote', 'processMsg', 'tally'],
+  businessFlow: ['signup', 'deactivate', 'processDeactivate', 'addNewKey', 'vote', 'processMessages', 'tally'],
   highLevelDataFlow: [
     'JS creates deterministic round fixture JSON files.',
+    'Voter-side transactions publish signup, deactivate, addNewKey, and vote actions.',
+    'Operator-side transactions submit processDeactivate, processMessages, and tally proofs.',
     'Each fixture JSON is serialized into Cairo executable arguments.',
     'Stone/Atlantic packaging turns each Cairo program and input into programFile/inputFile.',
     'Atlantic proves and verifies on L2, then returns query status and metadata artifacts.',
